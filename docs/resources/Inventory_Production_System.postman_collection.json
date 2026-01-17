@@ -1,0 +1,978 @@
+{
+    "info": {
+        "_postman_id": "ips-collection-2026",
+        "name": "Inventory & Production System API",
+        "description": "Complete API collection for Paul & Sons Plastics Inventory & Production Management System.\n\nIncludes:\n- Machines CRUD\n- Products CRUD\n- Machine-Product Mapping (Die Configuration)\n- Production Entry with Business Logic\n- Inventory Workflows (Pack, Bundle)\n- Customers CRUD\n- Sales Orders with Stock Reservation\n\nBase URL: http://localhost:4000/api",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Machines",
+            "item": [
+                {
+                    "name": "Create Machine",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"EXT-01\",\n  \"type\": \"extruder\",\n  \"category\": \"small\",\n  \"daily_running_cost\": 7000,\n  \"max_die_weight\": 50,\n  \"status\": \"active\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/machines",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machines"
+                            ]
+                        },
+                        "description": "Create a new machine. Type must be one of: extruder, cutting, printing, packing."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List All Machines",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machines",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machines"
+                            ]
+                        },
+                        "description": "Get all machines ordered by name."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Machine by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machines/{{machine_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machines",
+                                "{{machine_id}}"
+                            ]
+                        },
+                        "description": "Get a specific machine by ID."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Machine",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"daily_running_cost\": 7500,\n  \"status\": \"inactive\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/machines/{{machine_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machines",
+                                "{{machine_id}}"
+                            ]
+                        },
+                        "description": "Update machine details. All fields are optional."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Machine",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machines/{{machine_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machines",
+                                "{{machine_id}}"
+                            ]
+                        },
+                        "description": "Delete a machine. Will fail if machine has production history."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Machine Master CRUD operations"
+        },
+        {
+            "name": "2. Products",
+            "item": [
+                {
+                    "name": "Create Product",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Bottle 100ml White\",\n  \"sku\": \"BTL-100-WHT\",\n  \"size\": \"100ml\",\n  \"color\": \"White\",\n  \"weight_grams\": 15.5,\n  \"selling_price\": 2.5,\n  \"items_per_packet\": 100,\n  \"packets_per_bundle\": 50\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "products"
+                            ]
+                        },
+                        "description": "Create a new product with packing configuration."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List All Products",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "products"
+                            ]
+                        },
+                        "description": "Get all products ordered by name."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Product by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/products/{{product_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "products",
+                                "{{product_id}}"
+                            ]
+                        },
+                        "description": "Get a specific product by ID."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Product",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"selling_price\": 2.75,\n  \"items_per_packet\": 120\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/products/{{product_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "products",
+                                "{{product_id}}"
+                            ]
+                        },
+                        "description": "Update product details. All fields are optional."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Product",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/products/{{product_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "products",
+                                "{{product_id}}"
+                            ]
+                        },
+                        "description": "Delete a product. Will fail if product has production history."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Product Master CRUD operations"
+        },
+        {
+            "name": "3. Machine-Product Mapping",
+            "item": [
+                {
+                    "name": "Create Mapping (Die Config)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"machine_id\": \"{{machine_id}}\",\n  \"product_id\": \"{{product_id}}\",\n  \"cycle_time_seconds\": 13.5,\n  \"capacity_restriction\": \"Max 5000 per day\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/machine-products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products"
+                            ]
+                        },
+                        "description": "Define which machine can make which product and its cycle time. Required before production entry."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List All Mappings",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machine-products",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products"
+                            ]
+                        },
+                        "description": "Get all machine-product mappings with relationship data."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List Mappings by Machine",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machine-products?machine_id={{machine_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products"
+                            ],
+                            "query": [
+                                {
+                                    "key": "machine_id",
+                                    "value": "{{machine_id}}"
+                                }
+                            ]
+                        },
+                        "description": "Get all products that a specific machine can produce."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List Mappings by Product",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machine-products?product_id={{product_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products"
+                            ],
+                            "query": [
+                                {
+                                    "key": "product_id",
+                                    "value": "{{product_id}}"
+                                }
+                            ]
+                        },
+                        "description": "Get all machines that can produce a specific product."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Mapping by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machine-products/{{mapping_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products",
+                                "{{mapping_id}}"
+                            ]
+                        },
+                        "description": "Get a specific mapping by ID."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Mapping",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"cycle_time_seconds\": 12.8\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/machine-products/{{mapping_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products",
+                                "{{mapping_id}}"
+                            ]
+                        },
+                        "description": "Update mapping details (usually cycle time adjustments)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Mapping",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/machine-products/{{mapping_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "machine-products",
+                                "{{mapping_id}}"
+                            ]
+                        },
+                        "description": "Delete a mapping. Will fail if production history exists."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Die configuration - defines which machines can make which products"
+        },
+        {
+            "name": "4. Production Entry",
+            "item": [
+                {
+                    "name": "Submit Production",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"date\": \"2026-01-15\",\n  \"machine_id\": \"{{machine_id}}\",\n  \"product_id\": \"{{product_id}}\",\n  \"actual_quantity\": 5000,\n  \"waste_weight_grams\": 500\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/production/submit",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "production",
+                                "submit"
+                            ]
+                        },
+                        "description": "Submit daily production. Automatically calculates:\n- Theoretical quantity (23 hours rule)\n- Efficiency %\n- Cost recovery (production value vs daily cost)\n- Deducts raw materials\n- Adds to semi-finished inventory"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List All Production Logs",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/production",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "production"
+                            ]
+                        },
+                        "description": "Get all production logs with machine and product details."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Filter by Machine",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/production?machine_id={{machine_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "production"
+                            ],
+                            "query": [
+                                {
+                                    "key": "machine_id",
+                                    "value": "{{machine_id}}"
+                                }
+                            ]
+                        },
+                        "description": "Get production logs for a specific machine."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Filter by Product",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/production?product_id={{product_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "production"
+                            ],
+                            "query": [
+                                {
+                                    "key": "product_id",
+                                    "value": "{{product_id}}"
+                                }
+                            ]
+                        },
+                        "description": "Get production logs for a specific product."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Filter by Date Range",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/production?start_date=2026-01-01&end_date=2026-01-31",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "production"
+                            ],
+                            "query": [
+                                {
+                                    "key": "start_date",
+                                    "value": "2026-01-01"
+                                },
+                                {
+                                    "key": "end_date",
+                                    "value": "2026-01-31"
+                                }
+                            ]
+                        },
+                        "description": "Get production logs within a date range."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Daily Production",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/production/daily/2026-01-15",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "production",
+                                "daily",
+                                "2026-01-15"
+                            ]
+                        },
+                        "description": "Get all production entries for a specific date."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Production entry with automatic business logic calculations"
+        },
+        {
+            "name": "5. Inventory Workflows",
+            "item": [
+                {
+                    "name": "Pack Items (Semi → Packed)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"packets_created\": 50\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/inventory/pack",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "inventory",
+                                "pack"
+                            ]
+                        },
+                        "description": "Pack loose items into packets. Calculates required semi-finished stock based on items_per_packet."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Bundle Packets (Packed → Finished)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"bundles_created\": 1\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/inventory/bundle",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "inventory",
+                                "bundle"
+                            ]
+                        },
+                        "description": "Bundle packets into finished goods. Calculates required packed stock based on packets_per_bundle."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get All Stock (Dashboard)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/inventory/stock",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "inventory",
+                                "stock"
+                            ]
+                        },
+                        "description": "Get complete inventory dashboard showing all products and their stock in each state."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Product Stock",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/inventory/stock/{{product_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "inventory",
+                                "stock",
+                                "{{product_id}}"
+                            ]
+                        },
+                        "description": "Get stock balances for a specific product across all states."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Inventory state transitions (pack and bundle workflows)"
+        },
+        {
+            "name": "6. Customers",
+            "item": [
+                {
+                    "name": "Create Customer",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"ABC Trading Co.\",\n  \"phone\": \"9876543210\",\n  \"type\": \"permanent\",\n  \"notes\": \"Main distributor for North region\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/customers",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers"
+                            ]
+                        },
+                        "description": "Create a new customer. Types: permanent, seasonal, other."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List All Customers",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/customers",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers"
+                            ]
+                        },
+                        "description": "Get all customers ordered by name."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Search Customers",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/customers?search=ABC",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers"
+                            ],
+                            "query": [
+                                {
+                                    "key": "search",
+                                    "value": "ABC"
+                                }
+                            ]
+                        },
+                        "description": "Search customers by name (case-insensitive partial match)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Customer by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/customers/{{customer_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers",
+                                "{{customer_id}}"
+                            ]
+                        },
+                        "description": "Get a specific customer by ID."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Update Customer",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"type\": \"seasonal\",\n  \"notes\": \"Festival season orders only\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/customers/{{customer_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers",
+                                "{{customer_id}}"
+                            ]
+                        },
+                        "description": "Update customer details. All fields are optional."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Customer",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/customers/{{customer_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "customers",
+                                "{{customer_id}}"
+                            ]
+                        },
+                        "description": "Delete a customer. Will fail if customer has existing orders."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Customer Master CRUD operations"
+        },
+        {
+            "name": "7. Sales Orders",
+            "item": [
+                {
+                    "name": "Create Order (Reserves Stock)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"items\": [\n    {\n      \"product_id\": \"{{product_id}}\",\n      \"quantity_bundles\": 5\n    }\n  ],\n  \"notes\": \"Deliver by Friday\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/sales-orders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales-orders"
+                            ]
+                        },
+                        "description": "Create a sales order. Automatically:\n- Checks finished stock availability\n- Reserves stock (Finished → Reserved)\n- Creates order with status 'reserved'\n- Fails if insufficient stock"
+                    },
+                    "response": []
+                },
+                {
+                    "name": "List All Orders",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/sales-orders",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales-orders"
+                            ]
+                        },
+                        "description": "Get all sales orders with customer and item details."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Get Order by ID",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/sales-orders/{{order_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales-orders",
+                                "{{order_id}}"
+                            ]
+                        },
+                        "description": "Get a specific order with full details."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Mark as Delivered",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"delivered\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/sales-orders/{{order_id}}/status",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales-orders",
+                                "{{order_id}}",
+                                "status"
+                            ]
+                        },
+                        "description": "Mark order as delivered. Permanently deducts reserved stock (sold)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Cancel Order",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"cancelled\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/sales-orders/{{order_id}}/status",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales-orders",
+                                "{{order_id}}",
+                                "status"
+                            ]
+                        },
+                        "description": "Cancel order. Returns reserved stock to finished (unreserves)."
+                    },
+                    "response": []
+                },
+                {
+                    "name": "Delete Order",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [],
+                        "url": {
+                            "raw": "{{base_url}}/sales-orders/{{order_id}}",
+                            "host": [
+                                "{{base_url}}"
+                            ],
+                            "path": [
+                                "sales-orders",
+                                "{{order_id}}"
+                            ]
+                        },
+                        "description": "Delete order. Only works for reserved or cancelled orders. Unreserves stock if needed."
+                    },
+                    "response": []
+                }
+            ],
+            "description": "Sales order management with automatic stock reservation"
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://localhost:4000/api",
+            "type": "string"
+        },
+        {
+            "key": "machine_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "product_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "mapping_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "customer_id",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "order_id",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

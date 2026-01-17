@@ -1,0 +1,114 @@
+import { supabase } from '../../config/supabase';
+
+export interface CreateMachineProductDTO {
+    machine_id: string;
+    product_id: string;
+    cycle_time_seconds: number;
+    capacity_restriction?: string;
+}
+
+export class MachineProductService {
+    async createMapping(data: CreateMachineProductDTO) {
+        // Check if mapping already exists
+        const { data: existing } = await supabase
+            .from('machine_products')
+            .select('id')
+            .eq('machine_id', data.machine_id)
+            .eq('product_id', data.product_id)
+            .single();
+
+        if (existing) {
+            throw new Error('This machine-product mapping already exists. Use update instead.');
+        }
+
+        const { data: mapping, error } = await supabase
+            .from('machine_products')
+            .insert(data)
+            .select()
+            .single();
+
+        if (error) throw new Error(error.message);
+        return mapping;
+    }
+
+    async getAllMappings() {
+        const { data, error } = await supabase
+            .from('machine_products')
+            .select(`
+                *,
+                machines(id, name, code, type, category),
+                products(id, name, size, color, weight_grams)
+            `)
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
+    async getMappingsByMachine(machineId: string) {
+        const { data, error } = await supabase
+            .from('machine_products')
+            .select(`
+                *,
+                products(id, name, size, color, weight_grams, selling_price)
+            `)
+            .eq('machine_id', machineId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
+    async getMappingsByProduct(productId: string) {
+        const { data, error } = await supabase
+            .from('machine_products')
+            .select(`
+                *,
+                machines(id, name, code, type, category)
+            `)
+            .eq('product_id', productId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
+    async getMappingById(id: string) {
+        const { data, error } = await supabase
+            .from('machine_products')
+            .select(`
+                *,
+                machines(id, name, code, type, category),
+                products(id, name, size, color, weight_grams)
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
+    async updateMapping(id: string, data: Partial<CreateMachineProductDTO>) {
+        const { data: mapping, error } = await supabase
+            .from('machine_products')
+            .update(data)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw new Error(error.message);
+        return mapping;
+    }
+
+    async deleteMapping(id: string) {
+        const { error } = await supabase
+            .from('machine_products')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw new Error(error.message);
+        return { message: 'Machine-product mapping deleted successfully' };
+    }
+}
+
+export const machineProductService = new MachineProductService();
