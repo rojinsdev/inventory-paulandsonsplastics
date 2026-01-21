@@ -79,9 +79,9 @@ const menuSections = [
                     { label: 'Production Reports', href: '/reports/production' },
                     { label: 'Inventory Reports', href: '/reports/inventory' },
                     { label: 'Sales Reports', href: '/reports/sales' },
+                    { label: 'Analytics', href: '/reports/analytics' },
                 ],
             },
-            { label: 'Analytics', href: '/analytics', icon: PieChart },
             {
                 label: 'System',
                 icon: Settings,
