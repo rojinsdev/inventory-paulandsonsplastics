@@ -4,11 +4,23 @@ import { authenticate, requireRole } from '../../middleware/auth';
 
 const router = Router();
 
-// Production endpoints accessible by both admin (web) and production_manager (mobile)
-router.use(authenticate, requireRole('admin', 'production_manager'));
+// POST /submit - Production Manager only (mobile app, factory floor)
+router.post('/submit',
+    authenticate,
+    requireRole('production_manager'),
+    productionController.submit
+);
 
-router.post('/submit', productionController.submit);
-router.get('/', productionController.list);
-router.get('/daily/:date', productionController.getDailyProduction);
+// GET routes - Both admin (web) and production_manager (mobile) can view
+router.get('/',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    productionController.list
+);
+router.get('/daily/:date',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    productionController.getDailyProduction
+);
 
 export default router;
