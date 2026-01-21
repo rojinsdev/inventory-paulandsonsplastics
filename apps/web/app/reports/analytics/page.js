@@ -14,7 +14,7 @@ import {
     RefreshCw,
     X,
 } from 'lucide-react';
-import { PieChart } from '@/x-charts/PieChart';
+import { PieChart } from '@mui/x-charts/PieChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 import styles from './analytics.module.css';
