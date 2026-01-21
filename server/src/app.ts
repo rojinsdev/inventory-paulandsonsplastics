@@ -14,6 +14,7 @@ import authRoutes from './modules/auth/auth.routes';
 import settingsRoutes from './modules/settings/settings.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
+import analyticsRoutes from './modules/analytics/analytics.routes';
 
 
 dotenv.config();
@@ -47,5 +48,7 @@ app.use('/api/orders', salesOrderRoutes); // Note: frontend uses /orders, backen
 app.use('/api/settings', settingsRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 export default app;
+
