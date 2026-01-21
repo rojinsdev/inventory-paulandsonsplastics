@@ -1,0 +1,142 @@
+.alertsCard {
+    background: var(--surface);
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    padding: 1.5rem;
+}
+
+:root[class~="dark"] .alertsCard {
+    box-shadow: 0 2px 12px rgba(139, 92, 246, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.cardHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.cardTitle {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.alertCount {
+    background: var(--error-bg, #fee2e2);
+    color: var(--error-text, #dc2626);
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+:root[class~="dark"] .alertCount {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+}
+
+.emptyAlerts {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.alertsList {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.alertSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sectionHeader {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sectionIcon {
+    color: var(--text-muted);
+}
+
+.sectionTitle {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.alertItems {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.alertItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--slate-50);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+:root[class~="dark"] .alertItem {
+    background: var(--surface-elevated);
+}
+
+.alertItem:hover {
+    background: var(--surface);
+    border-color: var(--primary);
+    transform: translateX(4px);
+}
+
+.alertContent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+}
+
+.alertText {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.alertDetail {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.alertArrow {
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.moreAlerts {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    padding: 0.5rem 0.75rem;
+    text-align: center;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .alertsCard {
+        padding: 1rem;
+    }
+}

@@ -1,0 +1,156 @@
+.flowContainer {
+    padding: 0.5rem 0;
+    overflow-x: auto;
+}
+
+.flowDiagram {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 900px;
+    padding: 0.5rem;
+}
+
+.flowWrapper {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+.flowStep {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1.25rem 1rem;
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+    background: var(--background);
+    flex: 1;
+    min-width: 160px;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.flowStep:hover {
+    border-color: var(--primary);
+    background: var(--surface);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.1);
+}
+
+.flowIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.flowContent {
+    text-align: center;
+}
+
+.flowValue {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.25rem;
+}
+
+.unit {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.flowLabel {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-top: 0.125rem;
+}
+
+.quickActionBtn {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    border-radius: 0.5rem;
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    justify-content: center;
+}
+
+.quickActionBtn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.flowArrow {
+    display: flex;
+    align-items: center;
+    flex: 0.5;
+    justify-content: center;
+    padding: 0 0.5rem;
+}
+
+.arrowLine {
+    height: 2px;
+    background: var(--border);
+    flex: 1;
+    position: relative;
+}
+
+.arrowHead {
+    width: 8px;
+    height: 8px;
+    border-top: 2px solid var(--border);
+    border-right: 2px solid var(--border);
+    transform: rotate(45deg);
+    margin-left: -4px;
+}
+
+@media (max-width: 1024px) {
+    .flowDiagram {
+        justify-content: flex-start;
+        gap: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .flowDiagram {
+        flex-direction: column;
+        min-width: auto;
+        gap: 1.5rem;
+    }
+
+    .flowWrapper {
+        flex-direction: column;
+        width: 100%;
+        gap: 1rem;
+    }
+
+    .flowArrow {
+        transform: rotate(90deg);
+        flex: none;
+        height: 20px;
+    }
+
+    .flowStep {
+        width: 100%;
+    }
+}

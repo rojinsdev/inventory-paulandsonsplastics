@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../features/auth/providers/auth_provider.dart';
 import '../data/inventory_repository.dart';
+import 'raw_material_model.dart';
 
 final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -18,6 +19,12 @@ final inventoryStockProvider =
     FutureProvider<List<InventoryStock>>((ref) async {
   final repository = ref.watch(inventoryRepositoryProvider);
   return repository.getStock();
+});
+
+final rawMaterialsProvider =
+    FutureProvider.autoDispose<List<RawMaterial>>((ref) async {
+  final repository = ref.watch(inventoryRepositoryProvider);
+  return repository.getRawMaterials();
 });
 
 class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
@@ -40,6 +47,18 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       await _repository.bundle(productId: productId, bundlesCreated: quantity);
+      state = const AsyncValue.data(null);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> adjustRawMaterial(
+      String id, double quantity, String reason) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repository.adjustRawMaterial(
+          id: id, quantityKg: quantity, reason: reason);
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);

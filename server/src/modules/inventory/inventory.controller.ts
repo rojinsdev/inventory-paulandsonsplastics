@@ -59,6 +59,46 @@ export class InventoryController {
             res.status(500).json({ error: error.message });
         }
     }
+
+    // Raw Materials
+    async getRawMaterials(req: Request, res: Response) {
+        try {
+            const materials = await inventoryService.getRawMaterials();
+            res.json(materials);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async adjustRawMaterial(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const { quantity_kg, reason } = req.body;
+            const result = await inventoryService.adjustRawMaterial(id, quantity_kg, reason);
+            res.json(result);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async createRawMaterial(req: Request, res: Response) {
+        try {
+            const { name, stock_weight_kg } = z.object({
+                name: z.string().min(1),
+                stock_weight_kg: z.number().min(0)
+            }).parse(req.body);
+
+            const result = await inventoryService.createRawMaterial(name, stock_weight_kg);
+            res.status(201).json(result);
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: error.issues });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
 }
 
 export const inventoryController = new InventoryController();
+

@@ -36,17 +36,34 @@ The Inventory feature enables the floor management of stock flow. It supports th
 2.  Submits `POST /inventory/bundle`.
 3.  **Effect:** Decreases Packed stock, Increases Finished stock.
 
+### 4. Raw Materials Screen (`RawMaterialsScreen`)
+**Location:** `lib/features/inventory/screens/raw_materials_screen.dart`
+**Route:** `/inventory/raw-materials`
+
+**UI Components:**
+*   List of Raw Materials (Name, Current Stock).
+*   **Adjust Button:** Opens modal to Add or Consume stock.
+
+**Workflow:**
+1.  User views list.
+2.  Taps "Adjust".
+3.  Selects "Add Stock" or "Consume".
+4.  Submits `POST /inventory/raw-materials/:id/adjust`.
+
 ## Data Layer
 
 ### Providers
 *   `inventoryStockProvider`: (FutureProvider) Fetches the read-only stock summary.
 *   `inventoryOperationNotifier`: Manages the state and logic for Packing and Bundling actions.
+*   `rawMaterialsProvider`: (FutureProvider) Fetches list of raw materials.
 
 ### Repository (`InventoryRepository`)
 *   **Methods:**
     *   `getStock()`: `GET /inventory/stock`. Returns `InventoryStock` object.
     *   `pack(data)`: `POST /inventory/pack`.
     *   `bundle(data)`: `POST /inventory/bundle`.
+    *   `getRawMaterials()`: `GET /inventory/raw-materials`.
+    *   `adjustRawMaterial(id, qty, reason)`: `POST /inventory/raw-materials/:id/adjust`.
 
 ### Models
 *   `InventoryStock`:

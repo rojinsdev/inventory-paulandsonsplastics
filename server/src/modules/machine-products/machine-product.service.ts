@@ -4,7 +4,8 @@ export interface CreateMachineProductDTO {
     machine_id: string;
     product_id: string;
     cycle_time_seconds: number;
-    capacity_restriction?: string;
+    capacity_restriction?: number | null;
+    enabled?: boolean;
 }
 
 export class MachineProductService {
@@ -36,7 +37,7 @@ export class MachineProductService {
             .from('machine_products')
             .select(`
                 *,
-                machines(id, name, code, type, category),
+                machines(id, name, type, category),
                 products(id, name, size, color, weight_grams)
             `)
             .order('created_at', { ascending: false });
@@ -64,7 +65,7 @@ export class MachineProductService {
             .from('machine_products')
             .select(`
                 *,
-                machines(id, name, code, type, category)
+                machines(id, name, type, category)
             `)
             .eq('product_id', productId)
             .order('created_at', { ascending: false });
@@ -78,7 +79,7 @@ export class MachineProductService {
             .from('machine_products')
             .select(`
                 *,
-                machines(id, name, code, type, category),
+                machines(id, name, type, category),
                 products(id, name, size, color, weight_grams)
             `)
             .eq('id', id)

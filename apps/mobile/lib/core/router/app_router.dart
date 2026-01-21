@@ -6,7 +6,9 @@ import '../../features/inventory/screens/inventory_hub_screen.dart';
 import '../../features/settings/screens/more_screen.dart';
 import '../../features/production/screens/production_entry_screen.dart';
 import '../../features/inventory/screens/packing_screen.dart';
+
 import '../../features/inventory/screens/bundling_screen.dart';
+import '../../features/inventory/screens/raw_materials_screen.dart';
 import '../../core/navigation/main_navigation.dart';
 
 class AppRouter {
@@ -70,6 +72,11 @@ class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/inventory/bundle',
         builder: (context, state) => const BundlingScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/inventory/raw-materials',
+        builder: (context, state) => const RawMaterialsScreen(),
       ),
     ],
   );

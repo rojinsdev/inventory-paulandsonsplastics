@@ -84,6 +84,15 @@ class InventoryHubScreen extends ConsumerWidget {
                       containerColor: colorScheme.tertiaryContainer,
                       onTap: () => context.push('/inventory/bundle'),
                     ),
+                    const SizedBox(height: 16),
+
+                    _InventoryActionCard(
+                      title: 'Raw Materials',
+                      subtitle: 'Check stock & report consumption',
+                      icon: Icons.grain_outlined,
+                      containerColor: colorScheme.primaryContainer,
+                      onTap: () => context.push('/inventory/raw-materials'),
+                    ),
                     const SizedBox(height: 80),
                   ],
                 ),

@@ -1,20 +1,27 @@
 import { Request, Response } from 'express';
 import { productionService } from './production.service';
 import { z } from 'zod';
+import { AuthRequest } from '../../middleware/auth';
 
 const submitProductionSchema = z.object({
     date: z.string().optional(),
     machine_id: z.string().uuid(),
     product_id: z.string().uuid(),
-    actual_quantity: z.number().int().nonnegative(),
+    actual_quantity: z.number().int().positive(), // Changed: Must be > 0, not >= 0
     waste_weight_grams: z.number().nonnegative().optional(),
 });
 
 export class ProductionController {
-    async submit(req: Request, res: Response) {
+    async submit(req: AuthRequest, res: Response) {
         try {
             const validatedData = submitProductionSchema.parse(req.body);
-            const log = await productionService.submitProduction(validatedData);
+
+            // Pass user_id from authenticated request
+            const log = await productionService.submitProduction({
+                ...validatedData,
+                user_id: req.user!.id, // User is guaranteed by authenticate middleware
+            });
+
             res.status(201).json(log);
         } catch (error: any) {
             if (error instanceof z.ZodError) {

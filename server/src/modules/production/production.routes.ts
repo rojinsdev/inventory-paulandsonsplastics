@@ -4,8 +4,8 @@ import { authenticate, requireRole } from '../../middleware/auth';
 
 const router = Router();
 
-// All production endpoints require production_manager role (Mobile only)
-router.use(authenticate, requireRole('production_manager'));
+// Production endpoints accessible by both admin (web) and production_manager (mobile)
+router.use(authenticate, requireRole('admin', 'production_manager'));
 
 router.post('/submit', productionController.submit);
 router.get('/', productionController.list);

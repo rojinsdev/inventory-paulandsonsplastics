@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { supabase } from '../../config/supabase';
 import { z } from 'zod';
 import { authenticate, requireRole } from '../../middleware/auth';
+import { AuditService } from '../audit/audit.service';
+
+const auditService = new AuditService();
 
 const router = Router();
 
@@ -32,7 +35,7 @@ router.post('/login', async (req, res) => {
         console.log('🔍 Fetching profile for user ID:', data.user.id);
         const { data: profile, error: profileError } = await supabase
             .from('user_profiles')
-            .select('id, email, role, active')
+            .select('id, email, name, role, active')
             .eq('id', data.user.id)
             .single();
 
@@ -58,6 +61,7 @@ router.post('/login', async (req, res) => {
             user: {
                 id: profile.id,
                 email: profile.email,
+                name: profile.name,
                 role: profile.role,
             },
             session: {
@@ -66,6 +70,16 @@ router.post('/login', async (req, res) => {
                 expires_at: data.session.expires_at,
             },
         });
+
+        // Log login action
+        await auditService.logAction(
+            profile.id,
+            'login',
+            'user',
+            profile.id,
+            { email: profile.email },
+            req.ip
+        );
     } catch (error: any) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.issues });
@@ -82,35 +96,81 @@ router.get('/me', authenticate, async (req: any, res) => {
     });
 });
 
+// Refresh Token
+router.post('/refresh', async (req, res) => {
+    try {
+        const { refresh_token } = req.body;
+
+        if (!refresh_token) {
+            return res.status(400).json({ error: 'Refresh token is required' });
+        }
+
+        const { data, error } = await supabase.auth.refreshSession({
+            refresh_token,
+        });
+
+        if (error) {
+            return res.status(401).json({
+                error: 'Token refresh failed',
+                message: error.message
+            });
+        }
+
+        res.json({
+            session: {
+                access_token: data.session?.access_token,
+                refresh_token: data.session?.refresh_token,
+                expires_at: data.session?.expires_at,
+            },
+        });
+    } catch (error: any) {
+        console.error('Refresh error:', error);
+        res.status(500).json({ error: 'Refresh failed' });
+    }
+});
+
 // Logout
 router.post('/logout', authenticate, async (req, res) => {
     try {
         await supabase.auth.signOut();
+
+        // Log logout action
+        if ((req as any).user && (req as any).user.id) {
+            await auditService.logAction(
+                (req as any).user.id,
+                'logout',
+                'user',
+                (req as any).user.id,
+                { email: (req as any).user.email },
+                req.ip
+            );
+        }
+
         res.json({ message: 'Logged out successfully' });
     } catch (error: any) {
         res.status(500).json({ error: 'Logout failed' });
     }
 });
 
-// Create user (Admin only) - TEMPORARILY DISABLED
-// You need to add SUPABASE_SERVICE_ROLE_KEY to .env first
-// Then uncomment this endpoint
-/*
+// ==================== USER MANAGEMENT (Admin Only) ====================
+
 const createUserSchema = z.object({
     email: z.string().email(),
-    password: z.string().min(8),
-    role: z.enum(['admin', 'production_manager']),
+    password: z.string().min(8, 'Password must be at least 8 characters'),
+    name: z.string().min(2, 'Name is required'),
+    role: z.enum(['admin', 'production_manager']).default('production_manager'),
 });
 
+// Create user (Admin only)
 router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
     try {
-        const { email, password, role } = createUserSchema.parse(req.body);
+        const { email, password, name, role } = createUserSchema.parse(req.body);
 
-        // Create auth user
+        // Create auth user using Supabase Admin API
         const { data, error } = await supabase.auth.admin.createUser({
             email,
             password,
-            email_confirm: true,
+            email_confirm: true, // Auto-confirm email
         });
 
         if (error) {
@@ -126,6 +186,7 @@ router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
             .insert({
                 id: data.user.id,
                 email,
+                name,
                 role,
                 active: true,
             })
@@ -133,7 +194,7 @@ router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
             .single();
 
         if (profileError) {
-            // Rollback: delete auth user
+            // Rollback: delete auth user if profile creation fails
             await supabase.auth.admin.deleteUser(data.user.id);
             return res.status(400).json({
                 error: 'Profile creation failed',
@@ -141,12 +202,24 @@ router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
             });
         }
 
+        // Log creation
+        await auditService.logAction(
+            (req as any).user.id,
+            'create',
+            'user',
+            profile.id,
+            { email, role, name },
+            req.ip
+        );
+
         res.status(201).json({
             user: {
                 id: profile.id,
                 email: profile.email,
+                name: profile.name,
                 role: profile.role,
                 active: profile.active,
+                created_at: profile.created_at,
             },
         });
     } catch (error: any) {
@@ -157,14 +230,13 @@ router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
         res.status(500).json({ error: 'User creation failed' });
     }
 });
-*/
 
 // List users (Admin only)
 router.get('/users', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('user_profiles')
-            .select('id, email, role, active, created_at')
+            .select('id, email, name, role, active, created_at, updated_at')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -175,10 +247,34 @@ router.get('/users', authenticate, requireRole('admin'), async (req, res) => {
     }
 });
 
-// Deactivate user (Admin only)
-router.patch('/users/:id/deactivate', authenticate, requireRole('admin'), async (req, res) => {
+// Get single user (Admin only)
+router.get('/users/:id', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .select('id, email, name, role, active, created_at, updated_at')
+            .eq('id', id)
+            .single();
+
+        if (error) throw error;
+
+        res.json(data);
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to fetch user' });
+    }
+});
+
+// Deactivate user (Admin only)
+router.patch('/users/:id/deactivate', authenticate, requireRole('admin'), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+
+        // Prevent self-deactivation
+        if (id === req.user.id) {
+            return res.status(400).json({ error: 'Cannot deactivate your own account' });
+        }
 
         const { data, error } = await supabase
             .from('user_profiles')
@@ -190,8 +286,86 @@ router.patch('/users/:id/deactivate', authenticate, requireRole('admin'), async 
         if (error) throw error;
 
         res.json(data);
+
+        // Log deactivation
+        await auditService.logAction(
+            (req as any).user.id,
+            'update',
+            'user',
+            id,
+            { action: 'deactivate', active: false },
+            req.ip
+        );
     } catch (error: any) {
         res.status(500).json({ error: 'Failed to deactivate user' });
+    }
+});
+
+// Activate user (Admin only)
+router.patch('/users/:id/activate', authenticate, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .update({ active: true })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json(data);
+
+        // Log activation
+        await auditService.logAction(
+            (req as any).user.id,
+            'update',
+            'user',
+            id,
+            { action: 'activate', active: true },
+            req.ip
+        );
+    } catch (error: any) {
+        res.status(500).json({ error: 'Failed to activate user' });
+    }
+});
+
+// Update user (Admin only) - for name changes
+const updateUserSchema = z.object({
+    name: z.string().min(2).optional(),
+});
+
+router.patch('/users/:id', authenticate, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = updateUserSchema.parse(req.body);
+
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .update(updates)
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        res.json(data);
+
+        // Log update
+        await auditService.logAction(
+            (req as any).user.id,
+            'update',
+            'user',
+            id,
+            updates,
+            req.ip
+        );
+    } catch (error: any) {
+        if (error instanceof z.ZodError) {
+            return res.status(400).json({ error: error.issues });
+        }
+        res.status(500).json({ error: 'Failed to update user' });
     }
 });
 

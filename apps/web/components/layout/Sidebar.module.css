@@ -1,0 +1,231 @@
+.sidebar {
+    width: 280px;
+    background-color: var(--surface);
+    border-radius: 1rem;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 1.5rem);
+    position: sticky;
+    top: 0.75rem;
+    transition: all var(--transition-base);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+:root[class~="dark"] .sidebar {
+    box-shadow: 0 4px 24px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.header {
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.logoBadge {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--purple-600), var(--purple-700));
+    border-radius: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 4px 12px -2px rgba(139, 92, 246, 0.3);
+}
+
+.logoIcon {
+    color: #fff;
+}
+
+.orgInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.orgName {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.orgRole {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.nav {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.menuSection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.sectionHeader {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.menuGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.menuItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: all var(--transition-base);
+    background: none;
+    border: none;
+    width: 100%;
+    cursor: pointer;
+    text-align: left;
+}
+
+.menuItem:hover {
+    background-color: var(--slate-100);
+    color: var(--text-main);
+}
+
+:root[class~="dark"] .menuItem:hover {
+    background-color: var(--surface-hover);
+}
+
+.menuItem.active,
+.menuItem.activeParent {
+    background: linear-gradient(135deg, var(--purple-600), var(--purple-700));
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 4px 12px -2px rgba(139, 92, 246, 0.3);
+}
+
+.menuItem.active .menuIcon,
+.menuItem.activeParent .menuIcon {
+    opacity: 1;
+}
+
+.menuItemContent {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.menuIcon {
+    color: inherit;
+    opacity: 0.8;
+}
+
+.menuLabel {
+    font-size: 0.9rem;
+}
+
+.expandIcon {
+    display: flex;
+    align-items: center;
+    color: #94a3b8;
+}
+
+.submenu {
+    display: flex;
+    margin-top: 0.125rem;
+    margin-bottom: 0.5rem;
+}
+
+.submenuLine {
+    width: 2px;
+    background: linear-gradient(180deg, var(--purple-200), transparent);
+    margin-left: 2rem;
+    margin-right: 0.75rem;
+    border-radius: 1px;
+}
+
+:root[class~="dark"] .submenuLine {
+    background: linear-gradient(180deg, var(--purple-800), transparent);
+}
+
+.submenuItems {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.submenuItem {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: all var(--transition-base);
+}
+
+.submenuItem:hover {
+    color: var(--text-main);
+    background-color: var(--slate-100);
+}
+
+:root[class~="dark"] .submenuItem:hover {
+    background-color: var(--surface-hover);
+}
+
+.submenuItem.active {
+    color: var(--primary);
+    background-color: var(--primary-light);
+    font-weight: 500;
+}
+
+:root[class~="dark"] .submenuItem.active {
+    color: var(--purple-300);
+    background-color: rgba(139, 92, 246, 0.15);
+}
+
+.footer {
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+}
+
+.logoutBtn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    color: var(--error);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.logoutBtn:hover {
+    background-color: var(--error-bg);
+    border-color: var(--error);
+}
+
+:root[class~="dark"] .logoutBtn:hover {
+    background-color: rgba(239, 68, 68, 0.15);
+}

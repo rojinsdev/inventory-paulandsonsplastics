@@ -8,14 +8,14 @@ class ApiClient {
   final SharedPreferences _storage;
 
   ApiClient(this._storage)
-    : _dio = Dio(
-        BaseOptions(
-          baseUrl: ApiConstants.baseUrl,
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 10),
-          headers: {'Content-Type': 'application/json'},
-        ),
-      ) {
+      : _dio = Dio(
+          BaseOptions(
+            baseUrl: ApiConstants.baseUrl,
+            connectTimeout: const Duration(seconds: 30),
+            receiveTimeout: const Duration(seconds: 30),
+            headers: {'Content-Type': 'application/json'},
+          ),
+        ) {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
@@ -25,7 +25,58 @@ class ApiClient {
           }
           return handler.next(options);
         },
-        onError: (DioException e, handler) {
+        onError: (DioException e, handler) async {
+          if (e.response?.statusCode == 401) {
+            debugPrint('⚠️ 401 Unauthorized: Attempting to refresh token...');
+
+            final refreshToken = _storage.getString('refresh_token');
+            if (refreshToken == null) {
+              return handler.next(e); // No refresh token, fail
+            }
+
+            try {
+              // Create a new Dio instance to avoid interceptor loops
+              final refreshDio = Dio(BaseOptions(
+                baseUrl: ApiConstants.baseUrl,
+                headers: {'Content-Type': 'application/json'},
+              ));
+
+              final response = await refreshDio.post(
+                '/api/auth/refresh',
+                data: {'refresh_token': refreshToken},
+              );
+
+              if (response.statusCode == 200 && response.data != null) {
+                final session = response.data['session'];
+                final newAccessToken = session?['access_token'];
+                final newRefreshToken = session?['refresh_token'];
+
+                if (newAccessToken != null) {
+                  // Save new tokens
+                  await _storage.setString('access_token', newAccessToken);
+                  if (newRefreshToken != null) {
+                    await _storage.setString('refresh_token', newRefreshToken);
+                  }
+
+                  debugPrint('✅ Token refreshed successfully');
+
+                  // Retry the original request
+                  final options = e.requestOptions;
+                  options.headers['Authorization'] = 'Bearer $newAccessToken';
+
+                  final cloneReq = await _dio.fetch(options);
+                  return handler.resolve(cloneReq);
+                }
+              }
+            } catch (refreshError) {
+              debugPrint('❌ Token refresh failed: $refreshError');
+              // Optionally clear storage here, or let UI handle the 401
+              await _storage.remove('access_token');
+              await _storage.remove('refresh_token');
+              await _storage.remove('user_data');
+            }
+          }
+
           // Log connection errors for debugging
           if (e.type == DioExceptionType.connectionTimeout ||
               e.type == DioExceptionType.receiveTimeout ||
@@ -34,7 +85,6 @@ class ApiClient {
             debugPrint('Base URL: ${ApiConstants.baseUrl}');
             debugPrint('Error Type: ${e.type}');
           }
-          // TODO: Handle 401 Unauthorized (Logout)
           return handler.next(e);
         },
       ),

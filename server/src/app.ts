@@ -12,6 +12,9 @@ import customerRoutes from './modules/customers/customer.routes';
 import salesOrderRoutes from './modules/sales-orders/sales-order.routes';
 import authRoutes from './modules/auth/auth.routes';
 import settingsRoutes from './modules/settings/settings.routes';
+import auditRoutes from './modules/audit/audit.routes';
+import dashboardRoutes from './modules/dashboard/dashboard.routes';
+
 
 dotenv.config();
 
@@ -26,6 +29,10 @@ app.get('/', (req, res) => {
     res.json({ message: 'Inventory Production System API is running' });
 });
 
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Auth routes (no authentication required)
 app.use('/api/auth', authRoutes);
 
@@ -36,7 +43,9 @@ app.use('/api/production', productionRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/machine-products', machineProductRoutes);
 app.use('/api/customers', customerRoutes);
-app.use('/api/sales-orders', salesOrderRoutes);
+app.use('/api/orders', salesOrderRoutes); // Note: frontend uses /orders, backend uses /sales-orders (consistency check needed, but kept same as current code which imports as salesOrderRoutes)
 app.use('/api/settings', settingsRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 export default app;

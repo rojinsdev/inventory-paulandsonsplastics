@@ -20,8 +20,8 @@ class ProductionRepository {
         data: {
           'machine_id': machineId,
           'product_id': productId,
-          'quantity_produced': quantity,
-          'production_date': date.toIso8601String().split('T')[0], // YYYY-MM-DD
+          'actual_quantity': quantity,
+          'date': date.toIso8601String().split('T')[0], // YYYY-MM-DD
           'shift': shift,
         },
       );

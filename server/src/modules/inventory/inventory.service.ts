@@ -144,6 +144,73 @@ export class InventoryService {
         if (error) throw new Error(error.message);
         return data;
     }
+
+    // Raw Materials Methods
+    async getRawMaterials() {
+        const { data, error } = await supabase
+            .from('raw_materials')
+            .select('*')
+            .order('name');
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
+    async adjustRawMaterial(id: string, adjustment: number, reason: string) {
+        // Get current stock
+        const { data: current, error: fetchError } = await supabase
+            .from('raw_materials')
+            .select('stock_weight_kg')
+            .eq('id', id)
+            .single();
+
+        if (fetchError || !current) throw new Error('Raw material not found');
+
+        const newQuantity = current.stock_weight_kg + adjustment;
+        if (newQuantity < 0) throw new Error('Cannot reduce below zero');
+
+        const { data, error } = await supabase
+            .from('raw_materials')
+            .update({
+                stock_weight_kg: newQuantity,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
+    async createRawMaterial(name: string, stockWeight: number) {
+        const { data, error } = await supabase
+            .from('raw_materials')
+            .insert({
+                name,
+                stock_weight_kg: stockWeight,
+                min_threshold_kg: 100, // Default for new materials
+                type: 'Granule'
+            })
+            .select()
+            .single();
+
+        if (error) {
+            if (error.code === '23505') throw new Error('Material with this name already exists');
+            throw new Error(error.message);
+        }
+
+        // Log creation
+        await supabase.from('audit_logs').insert({
+            action: 'CREATE_RAW_MATERIAL',
+            entity_type: 'raw_materials',
+            entity_id: data.id,
+            details: `Created material: ${name} with initial stock: ${stockWeight}kg`
+        });
+
+        return data;
+    }
 }
 
 export const inventoryService = new InventoryService();
+

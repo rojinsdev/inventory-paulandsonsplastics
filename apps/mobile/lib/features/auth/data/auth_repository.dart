@@ -20,15 +20,28 @@ class AuthRepository {
       return null; // No stored session
     }
 
-    // We have a stored token and user data, return the user
-    // In a production app, you'd validate the token with the server here
     try {
-      final user = User.fromJsonString(userJson);
-      debugPrint('Auto-login successful for: ${user.email}');
-      return user;
+      // 1. Validate the stored token with the server
+      debugPrint('🔄 Verifying session with server...');
+      final response = await _apiClient.client.get(ApiConstants.meEndpoint);
+
+      if (response.statusCode == 200 && response.data != null) {
+        // 2. Server confirmed validity. Update user data if needed.
+        final userData = response.data['user'];
+        final user = User.fromJson(userData);
+
+        // Update stored user data to keep it fresh
+        await _storage.setString('user_data', user.toJsonString());
+
+        debugPrint('✅ Auto-login verified: ${user.email}');
+        return user;
+      } else {
+        throw Exception('Invalid session');
+      }
     } catch (e) {
-      debugPrint('Auto-login failed: $e');
-      // Clear invalid data
+      debugPrint('⚠️ Auto-login failed or session expired: $e');
+      // 3. If verification fails (401 or connection error), clear session
+      // This forces the user to login again ensuring a valid start state
       await logout();
       return null;
     }
@@ -74,6 +87,11 @@ class AuthRepository {
       // Store token and user data for auto-login
       await _storage.setString('access_token', token);
 
+      final refreshToken = session?['refresh_token'] ?? data['refresh_token'];
+      if (refreshToken != null) {
+        await _storage.setString('refresh_token', refreshToken);
+      }
+
       final user = User.fromJson(userJson);
       await _storage.setString('user_data', user.toJsonString());
 
@@ -97,10 +115,15 @@ class AuthRepository {
 
   Future<void> logout() async {
     await _storage.remove('access_token');
+    await _storage.remove('refresh_token');
     await _storage.remove('user_data');
   }
 
   Future<String?> getToken() async {
     return _storage.getString('access_token');
+  }
+
+  Future<String?> getRefreshToken() async {
+    return _storage.getString('refresh_token');
   }
 }

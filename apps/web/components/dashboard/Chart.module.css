@@ -1,0 +1,53 @@
+.chartWrapper {
+    width: 100%;
+}
+
+.chartContainer {
+    width: 100%;
+    height: 300px;
+    padding: 1rem 0;
+}
+
+.emptyChart {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+
+.comparisons {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+
+.comparisonItem {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.comparisonLabel {
+    color: var(--text-muted);
+}
+
+.comparisonValue {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+}
+
+.comparisonValue.positive {
+    color: #10b981;
+}
+
+.comparisonValue.negative {
+    color: #ef4444;
+}

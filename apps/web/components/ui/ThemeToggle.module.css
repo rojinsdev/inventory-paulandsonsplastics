@@ -1,0 +1,41 @@
+/* Main Toggle Button */
+.toggle {
+    background: none;
+    border: 1px solid #e2e8f0;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 9999px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    width: 40px;
+    height: 40px;
+}
+
+.toggle:hover {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+.toggle:active {
+    transform: scale(0.95);
+}
+
+.iconContainer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Dark Mode Specifics */
+:global(.dark) .toggle {
+    color: #94a3b8;
+    border-color: #334155;
+}
+:global(.dark) .toggle:hover {
+    background-color: #1e293b;
+    color: #f8fafc;
+}

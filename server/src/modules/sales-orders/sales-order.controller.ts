@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { salesOrderService } from './sales-order.service';
 import { z } from 'zod';
+import { AuthRequest } from '../../middleware/auth';
 
 const createOrderSchema = z.object({
     customer_id: z.string().uuid(),
@@ -16,10 +17,13 @@ const updateStatusSchema = z.object({
 });
 
 export class SalesOrderController {
-    async create(req: Request, res: Response) {
+    async create(req: AuthRequest, res: Response) {
         try {
             const validatedData = createOrderSchema.parse(req.body);
-            const order = await salesOrderService.createOrder(validatedData);
+            const order = await salesOrderService.createOrder({
+                ...validatedData,
+                user_id: req.user!.id, // Pass user_id for audit logging
+            });
             res.status(201).json(order);
         } catch (error: any) {
             if (error instanceof z.ZodError) {
@@ -51,11 +55,11 @@ export class SalesOrderController {
         }
     }
 
-    async updateStatus(req: Request, res: Response) {
+    async updateStatus(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
             const { status } = updateStatusSchema.parse(req.body);
-            const order = await salesOrderService.updateOrderStatus(id, status);
+            const order = await salesOrderService.updateOrderStatus(id, status, req.user!.id);
             res.json(order);
         } catch (error: any) {
             if (error instanceof z.ZodError) {

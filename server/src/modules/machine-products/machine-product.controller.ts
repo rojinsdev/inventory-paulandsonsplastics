@@ -6,7 +6,8 @@ const createMappingSchema = z.object({
     machine_id: z.string().uuid(),
     product_id: z.string().uuid(),
     cycle_time_seconds: z.number().positive(),
-    capacity_restriction: z.string().optional(),
+    capacity_restriction: z.number().nullable().optional(),
+    enabled: z.boolean().optional(),
 });
 
 export class MachineProductController {

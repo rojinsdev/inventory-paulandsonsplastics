@@ -1,4 +1,7 @@
 import { supabase } from '../../config/supabase';
+import { AuditService } from '../audit/audit.service';
+
+const auditService = new AuditService();
 
 export interface CreateSalesOrderDTO {
     customer_id: string;
@@ -7,10 +10,12 @@ export interface CreateSalesOrderDTO {
         quantity_bundles: number;
     }>;
     notes?: string;
+    user_id: string; // Added: Track which admin created the order
 }
 
 export interface UpdateOrderStatusDTO {
     status: 'reserved' | 'delivered' | 'cancelled';
+    user_id: string; // Added: Track which admin updated the status
 }
 
 export class SalesOrderService {
@@ -57,7 +62,22 @@ export class SalesOrderService {
         }
 
         // Return full order with items
-        return this.getOrderById(order.id);
+        const fullOrder = await this.getOrderById(order.id);
+
+        // Audit logging for order creation
+        await auditService.logAction(
+            data.user_id,
+            'create_sales_order',
+            'sales_orders',
+            order.id,
+            {
+                customer_id: data.customer_id,
+                items: data.items,
+                total_bundles: data.items.reduce((sum, item) => sum + item.quantity_bundles, 0)
+            }
+        );
+
+        return fullOrder;
     }
 
     private async reserveStock(productId: string, quantityBundles: number) {
@@ -182,7 +202,7 @@ export class SalesOrderService {
         return data;
     }
 
-    async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled') {
+    async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled', userId: string) {
         const order = await this.getOrderById(id);
 
         if (status === 'delivered' && order.status !== 'reserved') {
@@ -206,15 +226,35 @@ export class SalesOrderService {
             }
         }
 
-        // Update order status
+        // Update order status (with delivered_at timestamp if applicable)
+        const updateData: any = { status };
+        if (status === 'delivered') {
+            updateData.delivered_at = new Date().toISOString();
+        }
+
         const { data, error } = await supabase
             .from('sales_orders')
-            .update({ status })
+            .update(updateData)
             .eq('id', id)
             .select()
             .single();
 
         if (error) throw new Error(error.message);
+
+        // Audit logging for status change
+        await auditService.logAction(
+            userId,
+            status === 'delivered' ? 'deliver_order' : 'cancel_order',
+            'sales_orders',
+            id,
+            {
+                previous_status: order.status,
+                new_status: status,
+                customer_id: order.customer_id,
+                total_bundles: order.sales_order_items.reduce((sum: number, item: any) => sum + item.quantity_bundles, 0)
+            }
+        );
+
         return this.getOrderById(id);
     }
 
