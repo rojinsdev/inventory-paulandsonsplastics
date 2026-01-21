@@ -4,6 +4,7 @@ class Product {
   final String size;
   final String color;
   final String sku;
+  final String countingMethod; // 'unit_count' or 'weight_based'
 
   Product({
     required this.id,
@@ -11,6 +12,7 @@ class Product {
     required this.size,
     required this.color,
     required this.sku,
+    this.countingMethod = 'unit_count', // Default to unit_count
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class Product {
       size: json['size'] as String,
       color: json['color'] as String,
       sku: json['sku'] as String,
+      countingMethod: json['counting_method'] as String? ?? 'unit_count',
     );
   }
 

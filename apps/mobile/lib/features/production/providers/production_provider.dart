@@ -9,36 +9,53 @@ final productionRepositoryProvider = Provider<ProductionRepository>((ref) {
 
 // State to handle form submission status
 final productionSubmissionProvider =
-    StateNotifierProvider<ProductionSubmissionNotifier, AsyncValue<void>>((
-      ref,
-    ) {
-      final repository = ref.watch(productionRepositoryProvider);
-      return ProductionSubmissionNotifier(repository);
-    });
+    StateNotifierProvider<ProductionSubmissionNotifier, AsyncValue<bool>>((
+  ref,
+) {
+  final repository = ref.watch(productionRepositoryProvider);
+  return ProductionSubmissionNotifier(repository);
+});
 
-class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<void>> {
+class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<bool>> {
   final ProductionRepository _repository;
 
   ProductionSubmissionNotifier(this._repository)
-    : super(const AsyncValue.data(null));
+      : super(const AsyncValue.data(false));
 
   Future<void> submit({
     required String machineId,
     required String productId,
-    required int quantity,
+    required int shiftNumber,
+    required String startTime,
+    required String endTime,
+    int? totalProduced,
+    int? damagedCount,
+    double? totalWeightKg,
+    required double actualCycleTimeSeconds,
+    required double actualWeightGrams,
+    int? downtimeMinutes,
+    String? downtimeReason,
     required DateTime date,
-    required String shift,
+    bool saveAndAddAnother = false,
   }) async {
     state = const AsyncValue.loading();
     try {
       await _repository.submitProduction(
         machineId: machineId,
         productId: productId,
-        quantity: quantity,
+        shiftNumber: shiftNumber,
+        startTime: startTime,
+        endTime: endTime,
+        totalProduced: totalProduced,
+        damagedCount: damagedCount,
+        totalWeightKg: totalWeightKg,
+        actualCycleTimeSeconds: actualCycleTimeSeconds,
+        actualWeightGrams: actualWeightGrams,
+        downtimeMinutes: downtimeMinutes,
+        downtimeReason: downtimeReason,
         date: date,
-        shift: shift,
       );
-      state = const AsyncValue.data(null);
+      state = AsyncValue.data(saveAndAddAnother);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
