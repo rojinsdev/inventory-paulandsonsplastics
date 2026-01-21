@@ -3,12 +3,29 @@ import { productionService } from './production.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth';
 
+// Updated schema for session-based production
 const submitProductionSchema = z.object({
     date: z.string().optional(),
     machine_id: z.string().uuid(),
     product_id: z.string().uuid(),
-    actual_quantity: z.number().int().positive(), // Changed: Must be > 0, not >= 0
-    waste_weight_grams: z.number().nonnegative().optional(),
+    shift_number: z.union([z.literal(1), z.literal(2)]), // 1 or 2
+    start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/), // HH:mm format
+    end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+
+    // For unit-count products
+    total_produced: z.number().int().positive().optional(),
+    damaged_count: z.number().int().nonnegative().optional(),
+
+    // For weight-based products (caps)
+    total_weight_kg: z.number().positive().optional(),
+
+    // Actual metrics
+    actual_cycle_time_seconds: z.number().positive(),
+    actual_weight_grams: z.number().positive(),
+
+    // Downtime
+    downtime_minutes: z.number().int().nonnegative().optional(),
+    downtime_reason: z.string().optional(),
 });
 
 export class ProductionController {
@@ -16,10 +33,9 @@ export class ProductionController {
         try {
             const validatedData = submitProductionSchema.parse(req.body);
 
-            // Pass user_id from authenticated request
             const log = await productionService.submitProduction({
                 ...validatedData,
-                user_id: req.user!.id, // User is guaranteed by authenticate middleware
+                user_id: req.user!.id,
             });
 
             res.status(201).json(log);
