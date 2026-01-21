@@ -81,6 +81,7 @@ const menuSections = [
                     { label: 'Sales Reports', href: '/reports/sales' },
                 ],
             },
+            { label: 'Analytics', href: '/analytics', icon: PieChart },
             {
                 label: 'System',
                 icon: Settings,
