@@ -13,17 +13,17 @@
     --slate-800: #1e293b;
     --slate-900: #0f172a;
 
-    /* Purple Accent Palette */
-    --purple-50: #faf5ff;
-    --purple-100: #f3e8ff;
-    --purple-200: #e9d5ff;
-    --purple-300: #d8b4fe;
-    --purple-400: #c084fc;
-    --purple-500: #a855f7;
-    --purple-600: #8b5cf6;
-    --purple-700: #7c3aed;
-    --purple-800: #6d28d9;
-    --purple-900: #5b21b6;
+    /* Indigo (Royal) Accent Palette */
+    --indigo-50: #eef2ff;
+    --indigo-100: #e0e7ff;
+    --indigo-200: #c7d2fe;
+    --indigo-300: #a5b4fc;
+    --indigo-400: #818cf8;
+    --indigo-500: #6366f1;
+    --indigo-600: #4f46e5;
+    --indigo-700: #4338ca;
+    --indigo-800: #3730a3;
+    --indigo-900: #312e81;
 
     /* Orange Accent Palette */
     --orange-50: #fff7ed;
@@ -36,9 +36,9 @@
     --orange-700: #c2410c;
 
     /* Semantics */
-    --primary: var(--purple-600);
-    --primary-hover: var(--purple-700);
-    --primary-light: var(--purple-100);
+    --primary: var(--indigo-600);
+    --primary-hover: var(--indigo-700);
+    --primary-light: var(--indigo-100);
     --accent: var(--orange-500);
     --accent-hover: var(--orange-600);
     --background: var(--slate-50);
@@ -70,37 +70,64 @@
     --transition-slow: 300ms ease;
 }
 
-/* Dark Mode Variables - Pure Black Theme */
+/* Dark Mode Variables - Premium Dark Obsidian Theme */
 :root[class~="dark"] {
+    /* The Void - Pure Black */
     --background: #000000;
-    --surface: #0a0a0a;
-    --border: #1f1f1f;
-    --text-main: #ffffff;
-    --text-muted: #a3a3a3;
-    --primary: var(--purple-500);
-    --primary-hover: var(--purple-400);
-    --primary-light: var(--purple-900);
-    --accent: var(--orange-400);
-    --accent-hover: var(--orange-300);
 
-    /* Adjusted status colors for dark mode */
+    /* The Stones (Surfaces) - Zinc Scale */
+    --surface: #09090b;
+    /* Zinc 950 - Extremely deep charcoal for cards */
+    --surface-elevated: #18181b;
+    /* Zinc 900 - Modals, Dropdowns */
+    --surface-hover: #27272a;
+    /* Zinc 800 - Interaction states */
+
+    /* Structure */
+    --border: #27272a;
+    /* Zinc 800 - Subtle definition */
+
+    /* Typography - High Contrast */
+    --text-main: #ededed;
+    /* Off-white for readability */
+    --text-muted: #a1a1aa;
+    /* Zinc 400 */
+
+    /* Electric Indigo - Neon Pop */
+    --primary: #818cf8;
+    /* Indigo 400 - Vibrancy against black */
+    --primary-hover: #6366f1;
+    /* Indigo 500 */
+    --primary-light: rgba(129, 140, 248, 0.15);
+    /* Glassy primary bg */
+
+    /* Electric Orange */
+    --accent: #fb923c;
+    /* Orange 400 */
+    --accent-hover: #f97316;
+    /* Orange 500 */
+
+    /* Glassy Status Colors */
     --success-bg: rgba(34, 197, 94, 0.15);
     --success-text: #4ade80;
-    --warning-bg: rgba(234, 179, 8, 0.15);
+    --warning-bg: rgba(251, 191, 36, 0.15);
     --warning-text: #fbbf24;
-    --error-bg: rgba(239, 68, 68, 0.15);
+    --error-bg: rgba(248, 113, 113, 0.15);
     --error-text: #f87171;
-    --info-bg: rgba(59, 130, 246, 0.15);
+    --info-bg: rgba(96, 165, 250, 0.15);
     --info-text: #60a5fa;
 
-    /* Dark mode specific backgrounds */
-    --surface-elevated: #141414;
-    --surface-hover: #1a1a1a;
-    
-    /* Additional black theme colors */
-    --slate-50: #1a1a1a;
-    --slate-100: #262626;
-    --slate-200: #333333;
+    /* Global slate overrides for consistency */
+    --slate-50: #09090b;
+    --slate-100: #18181b;
+    --slate-200: #27272a;
+    --slate-300: #3f3f46;
+    --slate-400: #52525b;
+    --slate-500: #71717a;
+    --slate-600: #a1a1aa;
+    --slate-700: #d4d4d8;
+    --slate-800: #e4e4e7;
+    --slate-900: #f4f4f5;
 }
 
 * {
@@ -176,7 +203,7 @@ h6 {
 .btn-primary:hover {
     background-color: var(--primary-hover);
     transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.3);
+    box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.3);
 }
 
 .btn-secondary {
@@ -242,14 +269,14 @@ h6 {
 .textarea:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 :root[class~="dark"] .input:focus,
 :root[class~="dark"] .select:focus,
 :root[class~="dark"] .textarea:focus {
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 /* Tables */
@@ -374,6 +401,14 @@ h6 {
     max-height: 90vh;
     overflow-y: auto;
     animation: modalSlide 0.3s ease-out;
+}
+
+.modal.modal-lg {
+    max-width: 800px;
+}
+
+.modal.modal-xl {
+    max-width: 1140px;
 }
 
 .modal-header {

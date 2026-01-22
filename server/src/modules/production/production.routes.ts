@@ -17,6 +17,11 @@ router.get('/',
     requireRole('admin', 'production_manager'),
     productionController.list
 );
+router.get('/logs',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    productionController.list
+);
 router.get('/daily/:date',
     authenticate,
     requireRole('admin', 'production_manager'),

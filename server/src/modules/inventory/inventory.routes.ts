@@ -27,6 +27,11 @@ router.get('/stock',
     requireRole('admin', 'production_manager'),
     inventoryController.listAll
 );
+router.get('/available',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    inventoryController.getAvailable
+);
 
 // Raw Materials
 router.get('/raw-materials',

@@ -5,7 +5,7 @@ import { z } from 'zod';
 const createMappingSchema = z.object({
     machine_id: z.string().uuid(),
     product_id: z.string().uuid(),
-    cycle_time_seconds: z.number().positive(),
+    ideal_cycle_time_seconds: z.number().positive(),
     capacity_restriction: z.number().nullable().optional(),
     enabled: z.boolean().optional(),
 });

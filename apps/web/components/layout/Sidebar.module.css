@@ -12,7 +12,11 @@
 }
 
 :root[class~="dark"] .sidebar {
-    box-shadow: 0 4px 24px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+:root[class~="dark"] .logoBadge {
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
 }
 
 .header {
@@ -26,13 +30,12 @@
 .logoBadge {
     width: 40px;
     height: 40px;
-    background: linear-gradient(135deg, var(--purple-600), var(--purple-700));
+    background: linear-gradient(135deg, var(--indigo-500), var(--indigo-600));
     border-radius: 0.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    box-shadow: 0 4px 12px -2px rgba(139, 92, 246, 0.3);
 }
 
 .logoIcon {
@@ -114,10 +117,9 @@
 
 .menuItem.active,
 .menuItem.activeParent {
-    background: linear-gradient(135deg, var(--purple-600), var(--purple-700));
+    background-color: var(--primary);
     color: white;
     font-weight: 600;
-    box-shadow: 0 4px 12px -2px rgba(139, 92, 246, 0.3);
 }
 
 .menuItem.active .menuIcon,
@@ -154,14 +156,15 @@
 
 .submenuLine {
     width: 2px;
-    background: linear-gradient(180deg, var(--purple-200), transparent);
+    background: linear-gradient(180deg, var(--primary-light), transparent);
     margin-left: 2rem;
     margin-right: 0.75rem;
     border-radius: 1px;
 }
 
+
 :root[class~="dark"] .submenuLine {
-    background: linear-gradient(180deg, var(--purple-800), transparent);
+    background: linear-gradient(180deg, var(--primary), transparent);
 }
 
 .submenuItems {
@@ -196,8 +199,8 @@
 }
 
 :root[class~="dark"] .submenuItem.active {
-    color: var(--purple-300);
-    background-color: rgba(139, 92, 246, 0.15);
+    color: var(--primary);
+    background-color: var(--primary-light);
 }
 
 .footer {

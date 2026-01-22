@@ -22,7 +22,7 @@ export default function MachinePerformance({ data }) {
             case 'active': return '#10b981';
             case 'maintenance': return '#f59e0b';
             case 'idle': return '#6b7280';
-            default: return '#8b5cf6';
+            default: return '#6366f1';
         }
     };
 
@@ -54,7 +54,7 @@ export default function MachinePerformance({ data }) {
                         // for horizontal bars without a bit more boilerplate or custom slots.
                         // We will use a fallback color or a custom provider if needed, 
                         // but for now we'll stick to a consistent primary color to ensure stability.
-                        color: '#8b5cf6',
+                        color: '#6366f1',
                     },
                 ]}
                 layout="horizontal"

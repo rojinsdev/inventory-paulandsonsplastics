@@ -11,6 +11,7 @@ const createProductSchema = z.object({
     selling_price: z.number().positive().optional(),
     items_per_packet: z.number().int().positive().optional(),
     packets_per_bundle: z.number().int().positive().optional(),
+    status: z.enum(['active', 'inactive']).optional(),
 });
 
 export class ProductController {

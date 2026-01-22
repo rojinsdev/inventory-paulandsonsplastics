@@ -43,13 +43,18 @@ export default function LoginPage() {
 
             {/* Right Form Section */}
             <div className={styles.formSection}>
-                <div className={styles.brandLogo}>
-                    <img src="/assets/logo.png" alt="Logo" style={{ height: '32px' }} />
-
-                </div>
-
                 <div className={styles.formContainer}>
                     <div className={styles.welcomeHeader}>
+                        <img
+                            src="/assets/logo.png"
+                            alt="Logo"
+                            style={{
+                                width: '240px',
+                                height: 'auto',
+                                marginBottom: '2rem',
+                                display: 'inline-block'
+                            }}
+                        />
                         <h2 className={styles.title}>Welcome Back</h2>
                         <p className={styles.subtitle}>Enter your email and password to access your account</p>
                     </div>

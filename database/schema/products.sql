@@ -24,6 +24,7 @@ CREATE TABLE machine_products (
     product_id UUID REFERENCES products(id) ON DELETE CASCADE,
     cycle_time_seconds NUMERIC NOT NULL, -- e.g., 13.5
     capacity_restriction NUMERIC, -- Optional constraint
+    enabled BOOLEAN DEFAULT true,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(machine_id, product_id)
 );

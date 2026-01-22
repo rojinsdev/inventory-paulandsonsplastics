@@ -4,8 +4,9 @@ export interface CreateMachineDTO {
     name: string;
     type: 'extruder' | 'cutting' | 'printing' | 'packing';
     category: 'small' | 'large' | 'other';
-    max_die_weight?: number;
+    max_die_weight?: number | null;
     daily_running_cost: number;
+    status?: 'active' | 'inactive';
 }
 
 export class MachineService {

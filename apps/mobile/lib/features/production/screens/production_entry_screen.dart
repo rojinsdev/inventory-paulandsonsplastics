@@ -93,9 +93,12 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
       final actualQuantity =
           totalProduced != null ? totalProduced - damagedCount : 0;
 
-      final actualProductionTime = actualQuantity * actualCycleTime;
+      final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+      final shiftDurationSeconds = shiftDuration * 3600;
       final downtimeMinutes =
-          ((shiftDuration * 60) - actualProductionTime) ~/ 60;
+          ((shiftDurationSeconds - actualProductionTimeSeconds) / 60)
+              .floor()
+              .clamp(0, 1440); // Cap at 0 to avoid Zod errors, max 24h
 
       ref.read(productionSubmissionProvider.notifier).submit(
             machineId: _selectedMachineId!,
@@ -136,6 +139,111 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
     }
 
     return (endMinutes - startMinutes) / 60.0; // Return hours
+  }
+
+  void _showHelpGuide() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: const EdgeInsets.fromLTRB(28, 20, 28, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Icon(Icons.help_outline,
+                    color: Theme.of(context).colorScheme.primary, size: 28),
+                const SizedBox(width: 12),
+                Text('Production Entry Guide',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        )),
+              ],
+            ),
+            const SizedBox(height: 24),
+            _buildGuideItem(
+              Icons.production_quantity_limits,
+              'Total Produced',
+              'The gross number of units the machine produced during this shift (including any damaged ones).',
+            ),
+            _buildGuideItem(
+              Icons.broken_image_outlined,
+              'Damaged Count',
+              'The number of defective units that cannot be sold. System auto-calculates "Actual Quantity" by subtracting this.',
+            ),
+            _buildGuideItem(
+              Icons.timer_outlined,
+              'Actual Cycle Time',
+              'Read the "Cycle Time" or "Speed" directly from the machine\'s display monitor.',
+            ),
+            _buildGuideItem(
+              Icons.monitor_weight_outlined,
+              'Weight per Unit',
+              'Measure one unit on the weighing scale. This helps us track raw material wastage.',
+            ),
+            _buildGuideItem(
+              Icons.report_problem_outlined,
+              'Downtime',
+              'The system automatically calculates how much time the machine was idle based on your output and speed.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGuideItem(IconData icon, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon,
+                size: 20,
+                color: Theme.of(context).colorScheme.onPrimaryContainer),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text(description,
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -190,7 +298,17 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('New Production Entry')),
+      appBar: AppBar(
+        title: const Text('New Production Entry'),
+        actions: [
+          IconButton(
+            onPressed: _showHelpGuide,
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Help Guide',
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(

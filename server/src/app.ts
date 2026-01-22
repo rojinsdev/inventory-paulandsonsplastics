@@ -15,6 +15,9 @@ import settingsRoutes from './modules/settings/settings.routes';
 import auditRoutes from './modules/audit/audit.routes';
 import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
+import planningRoutes from './modules/planning/planning.routes';
+import reportRoutes from './modules/reports/reports.routes';
+
 
 
 dotenv.config();
@@ -49,6 +52,9 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/planning', planningRoutes);
+app.use('/api/reports', reportRoutes);
+
 
 export default app;
 

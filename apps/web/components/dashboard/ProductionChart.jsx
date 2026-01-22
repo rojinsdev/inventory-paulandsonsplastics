@@ -112,7 +112,7 @@ export default function ProductionChart({ data, timePeriod }) {
                         {
                             dataKey: 'theoretical',
                             label: 'Theoretical Max',
-                            color: '#8b5cf6',
+                            color: '#6366f1',
                             valueFormatter: (value) => formatNumber(value),
                         },
                     ]}

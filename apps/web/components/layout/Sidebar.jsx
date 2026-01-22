@@ -27,6 +27,7 @@ import {
     BarChart3,
     PieChart,
     LineChart,
+    TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import styles from './Sidebar.module.css';
@@ -80,6 +81,15 @@ const menuSections = [
                     { label: 'Inventory Reports', href: '/reports/inventory' },
                     { label: 'Sales Reports', href: '/reports/sales' },
                     { label: 'Analytics', href: '/reports/analytics' },
+                ],
+            },
+            {
+                label: 'Planning',
+                icon: TrendingUp,
+                submenu: [
+                    { label: 'Demand Insights', href: '/planning/demand-insights' },
+                    { label: 'Recommendations', href: '/planning/recommendations' },
+                    { label: 'Forecasts', href: '/planning/forecasts' },
                 ],
             },
             {

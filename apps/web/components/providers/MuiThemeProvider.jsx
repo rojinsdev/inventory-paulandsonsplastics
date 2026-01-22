@@ -14,20 +14,20 @@ export default function MuiThemeProvider({ children }) {
             palette: {
                 mode: isDark ? 'dark' : 'light',
                 primary: {
-                    main: isDark ? '#a855f7' : '#8b5cf6', // Matches --purple-500/600
+                    main: isDark ? '#6366f1' : '#4f46e5', // Matches --indigo-500/600
                 },
                 secondary: {
                     main: '#f97316', // Matches --orange-500
                 },
                 background: {
-                    default: isDark ? '#000000' : '#f8fafc',
-                    paper: isDark ? '#0a0a0a' : '#ffffff',
+                    default: isDark ? '#0b0e14' : '#f8fafc',
+                    paper: isDark ? '#11141b' : '#ffffff',
                 },
                 text: {
-                    primary: isDark ? '#ffffff' : '#0f172a',
-                    secondary: isDark ? '#a3a3a3' : '#64748b',
+                    primary: isDark ? '#f8fafc' : '#0f172a',
+                    secondary: isDark ? '#94a3b8' : '#64748b',
                 },
-                divider: isDark ? '#1f1f1f' : '#e2e8f0',
+                divider: isDark ? '#1e222c' : '#e2e8f0',
             },
             typography: {
                 fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
@@ -37,20 +37,20 @@ export default function MuiThemeProvider({ children }) {
                 MuiCssBaseline: {
                     styleOverrides: {
                         body: {
-                            scrollbarColor: isDark ? '#262626 #000000' : '#cbd5e1 #f8fafc',
+                            scrollbarColor: isDark ? '#1a1d26 #0b0e14' : '#cbd5e1 #f8fafc',
                             '&::-webkit-scrollbar': {
                                 width: '8px',
                                 height: '8px',
                             },
                             '&::-webkit-scrollbar-track': {
-                                background: isDark ? '#000000' : '#f8fafc',
+                                background: isDark ? '#0b0e14' : '#f8fafc',
                             },
                             '&::-webkit-scrollbar-thumb': {
-                                background: isDark ? '#262626' : '#cbd5e1',
+                                background: isDark ? '#1a1d26' : '#cbd5e1',
                                 borderRadius: '10px',
                             },
                             '&::-webkit-scrollbar-thumb:hover': {
-                                background: isDark ? '#333333' : '#94a3b8',
+                                background: isDark ? '#1e222c' : '#94a3b8',
                             },
                         },
                     },

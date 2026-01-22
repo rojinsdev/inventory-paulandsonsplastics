@@ -1,7 +1,50 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 /**
- * Generic fetch wrapper with error handling
+ * Helper to refresh the access token
+ */
+async function refreshToken() {
+    if (typeof window === 'undefined') return null;
+
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) return null;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+
+        if (!response.ok) {
+            throw new Error('Refresh failed');
+        }
+
+        const data = await response.json();
+        const newAccessToken = data.session?.access_token;
+        const newRefreshToken = data.session?.refresh_token;
+        const newExpiresAt = data.session?.expires_at;
+
+        if (newAccessToken) {
+            localStorage.setItem('auth_token', newAccessToken);
+            if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
+            if (newExpiresAt) localStorage.setItem('expires_at', newExpiresAt);
+            return newAccessToken;
+        }
+    } catch (error) {
+        console.error('Token refresh error:', error);
+        // Clear session on fatal refresh error
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('expires_at');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    }
+    return null;
+}
+
+/**
+ * Generic fetch wrapper with error handling and auto-refresh
  * All endpoints are prefixed with /api automatically
  */
 async function fetchAPI(endpoint, options = {}) {
@@ -9,24 +52,36 @@ async function fetchAPI(endpoint, options = {}) {
     const apiEndpoint = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
     const url = `${API_BASE_URL}${apiEndpoint}`;
 
+    let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
+    const getHeaders = (t) => ({
+        'Content-Type': 'application/json',
+        ...(t ? { Authorization: `Bearer ${t}` } : {}),
+        ...options.headers,
+    });
+
     const config = {
-        headers: {
-            'Content-Type': 'application/json',
-            ...options.headers,
-        },
         ...options,
+        headers: getHeaders(token),
     };
 
-    // Add auth token if available
-    if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-    }
-
     try {
-        const response = await fetch(url, config);
+        let response = await fetch(url, config);
+
+        // Handle 401 Unauthorized - Attempt Refresh
+        if (response.status === 401) {
+            console.warn(`401 Unauthorized on ${endpoint}. Attempting token refresh...`);
+            token = await refreshToken();
+
+            if (token) {
+                // Retry request with new token
+                config.headers = getHeaders(token);
+                response = await fetch(url, config);
+            } else {
+                // Refresh failed, redirect handled in refreshToken
+                throw new Error('Session expired. Please login again.');
+            }
+        }
 
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
@@ -79,11 +134,27 @@ export const inventoryAPI = {
 
 // ============ CUSTOMERS ============
 export const customersAPI = {
+    // Basic CRUD
     getAll: () => fetchAPI('/customers'),
     getById: (id) => fetchAPI(`/customers/${id}`),
     create: (data) => fetchAPI('/customers', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => fetchAPI(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => fetchAPI(`/customers/${id}`, { method: 'DELETE' }),
+
+    // Profile & Analytics
+    getProfile: (id) => fetchAPI(`/customers/${id}/profile`),
+    getAnalytics: (id) => fetchAPI(`/customers/${id}/analytics`),
+    getPurchaseHistory: (id, params) => fetchAPI(`/customers/${id}/purchase-history${params ? '?' + new URLSearchParams(params) : ''}`),
+
+    // Interactions
+    getInteractions: (id, params) => fetchAPI(`/customers/${id}/interactions${params ? '?' + new URLSearchParams(params) : ''}`),
+    addInteraction: (id, data) => fetchAPI(`/customers/${id}/interactions`, { method: 'POST', body: JSON.stringify(data) }),
+
+    // Segmentation
+    getBySegment: (segment) => fetchAPI(`/customers/segments/${segment}`),
+    getVIP: (limit = 50) => fetchAPI(`/customers/vip/list?limit=${limit}`),
+    getAtRisk: (limit = 50) => fetchAPI(`/customers/at-risk/list?limit=${limit}`),
+    getStats: () => fetchAPI('/customers/stats/overview'),
 };
 
 // ============ ORDERS ============
@@ -105,6 +176,16 @@ export const productionAPI = {
 export const dashboardAPI = {
     getStats: () => fetchAPI('/dashboard/stats'),
     getComprehensive: (params) => fetchAPI(`/dashboard/comprehensive${params ? '?' + new URLSearchParams(params) : ''}`),
+};
+
+// ============ ANALYTICS ============
+export const analyticsAPI = {
+    getSummary: (params) => fetchAPI(`/analytics/summary${params ? '?' + new URLSearchParams(params) : ''}`),
+    getCycleTimeLoss: (params) => fetchAPI(`/analytics/cycle-time-loss${params ? '?' + new URLSearchParams(params) : ''}`),
+    getWeightWastage: (params) => fetchAPI(`/analytics/weight-wastage${params ? '?' + new URLSearchParams(params) : ''}`),
+    getDowntimeBreakdown: (params) => fetchAPI(`/analytics/downtime-breakdown${params ? '?' + new URLSearchParams(params) : ''}`),
+    getMachineEfficiency: (params) => fetchAPI(`/analytics/machine-efficiency${params ? '?' + new URLSearchParams(params) : ''}`),
+    getShiftComparison: (params) => fetchAPI(`/analytics/shift-comparison${params ? '?' + new URLSearchParams(params) : ''}`),
 };
 
 // ============ REPORTS ============

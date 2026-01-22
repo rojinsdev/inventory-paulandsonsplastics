@@ -1,14 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Sun, Moon, Monitor, Check, Factory, Activity, TrendingUp, DollarSign, Package, Boxes, AlertTriangle, ShoppingCart, Truck, Users } from 'lucide-react';
+import { X, Sun, Moon, Monitor, Check, Factory, Activity, TrendingUp, DollarSign, Package, Boxes, AlertTriangle, ShoppingCart, Truck, Users, Zap } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
+import { AVAILABLE_QUICK_ACTIONS } from '@/lib/constants';
 import styles from './SettingsModal.module.css';
 
 const TABS = [
     { id: 'appearance', label: 'Appearance' },
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'actions', label: 'Quick Actions' },
     { id: 'notifications', label: 'Notifications' },
     { id: 'about', label: 'About' },
 ];
@@ -48,6 +50,14 @@ export default function SettingsModal({ isOpen, onClose }) {
             newVisibleMetrics[m.id] = value;
         });
         updateSetting('visibleMetrics', newVisibleMetrics);
+    };
+
+    const toggleAction = (actionId) => {
+        const newQuickActions = {
+            ...settings.quickActions,
+            [actionId]: !settings.quickActions[actionId]
+        };
+        updateSetting('quickActions', newQuickActions);
     };
 
     // Close on ESC key
@@ -228,6 +238,38 @@ export default function SettingsModal({ isOpen, onClose }) {
                                         </div>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {activeTab === 'actions' && (
+                            <div className={styles.section}>
+                                <h3 className={styles.sectionTitle}>Quick Actions</h3>
+                                <p className={styles.sectionDesc}>
+                                    Select the actions to appear in the header for quick access
+                                </p>
+                                <div className={styles.metricCheckboxGroup}>
+                                    {AVAILABLE_QUICK_ACTIONS.map(action => {
+                                        const Icon = action.icon;
+                                        return (
+                                            <label key={action.id} className={styles.metricCheckbox}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={settings.quickActions?.[action.id] || false}
+                                                    onChange={() => toggleAction(action.id)}
+                                                />
+                                                <div className={styles.metricCheckboxContent}>
+                                                    <div className={styles.metricIcon}>
+                                                        <Icon size={16} />
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span className={styles.metricLabel}>{action.label}</span>
+                                                        <span className={styles.metricDesc} style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{action.subtitle}</span>
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
 

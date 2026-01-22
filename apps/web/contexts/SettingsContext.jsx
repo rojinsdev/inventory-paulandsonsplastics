@@ -22,6 +22,15 @@ const DEFAULT_SETTINGS = {
         weekRevenue: true,
         activeCustomers: true,
     },
+    quickActions: {
+        newSale: true,
+        addCustomer: true,
+        logProduction: true,
+        checkStock: true,
+        analytics: true,
+        deliveries: false,
+        products: false,
+    },
 };
 
 export function SettingsProvider({ children }) {

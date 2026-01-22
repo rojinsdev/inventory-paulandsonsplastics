@@ -28,6 +28,7 @@ export class SalesOrderService {
                 customer_id: data.customer_id,
                 status: 'reserved',
                 notes: data.notes,
+                created_by: data.user_id, // Track which admin created the order
             })
             .select()
             .single();
@@ -36,13 +37,21 @@ export class SalesOrderService {
 
         // 2. Create order items and reserve stock
         for (const item of data.items) {
+            // Fetch product price for history
+            const { data: product } = await supabase
+                .from('products')
+                .select('selling_price')
+                .eq('id', item.product_id)
+                .single();
+
             // Create order item
             const { error: itemError } = await supabase
                 .from('sales_order_items')
                 .insert({
-                    sales_order_id: order.id,
+                    order_id: order.id, // Column is order_id in DB
                     product_id: item.product_id,
                     quantity_bundles: item.quantity_bundles,
+                    unit_price: product?.selling_price || 0, // Record price at time of sale
                 });
 
             if (itemError) {
@@ -163,8 +172,8 @@ export class SalesOrderService {
         });
     }
 
-    async getAllOrders() {
-        const { data, error } = await supabase
+    async getAllOrders(filters?: { status?: string }) {
+        let query = supabase
             .from('sales_orders')
             .select(`
                 *,
@@ -175,8 +184,13 @@ export class SalesOrderService {
                     quantity_bundles,
                     products(name, size, color, selling_price)
                 )
-            `)
-            .order('order_date', { ascending: false });
+            `);
+
+        if (filters?.status) {
+            query = query.eq('status', filters.status);
+        }
+
+        const { data, error } = await query.order('order_date', { ascending: false });
 
         if (error) throw new Error(error.message);
         return data;

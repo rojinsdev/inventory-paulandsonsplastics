@@ -1,0 +1,90 @@
+/* Main Container */
+.container {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.625rem 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    width: fit-content;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: all var(--transition-base);
+}
+
+:root[class~="dark"] .container {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
+}
+
+.container:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
+}
+
+/* Date & Time Groups */
+.group {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    color: var(--text-secondary);
+}
+
+.icon {
+    color: var(--primary);
+    opacity: 0.9;
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));
+}
+
+.date {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+
+.time {
+    font-size: 1rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-main);
+    letter-spacing: -0.02em;
+}
+
+.timeWrapper {
+    min-width: 90px;
+}
+
+/* Divider */
+.divider {
+    width: 1px;
+    height: 20px;
+    background-color: var(--border);
+}
+
+:root[class~="dark"] .divider {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Shift Badge */
+.shiftBadge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    min-width: 70px;
+}
+
+:root[class~="dark"] .shiftBadge {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}

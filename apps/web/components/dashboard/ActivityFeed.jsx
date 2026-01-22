@@ -14,7 +14,7 @@ const activityIcons = {
 
 const activityColors = {
     production: '#3b82f6',
-    inventory: '#8b5cf6',
+    inventory: '#6366f1',
     sales: '#10b981',
     audit: '#6b7280'
 };

@@ -38,7 +38,10 @@ export class SalesOrderController {
 
     async list(req: Request, res: Response) {
         try {
-            const orders = await salesOrderService.getAllOrders();
+            const filters = {
+                status: req.query.status as string,
+            };
+            const orders = await salesOrderService.getAllOrders(filters);
             res.json(orders);
         } catch (error: any) {
             res.status(500).json({ error: error.message });
@@ -65,6 +68,34 @@ export class SalesOrderController {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: error.issues });
             } else if (error.message.includes('Cannot') || error.message.includes('Can only')) {
+                res.status(409).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
+
+    async deliver(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const order = await salesOrderService.updateOrderStatus(id, 'delivered', req.user!.id);
+            res.json(order);
+        } catch (error: any) {
+            if (error.message.includes('Can only')) {
+                res.status(409).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
+
+    async cancel(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const order = await salesOrderService.updateOrderStatus(id, 'cancelled', req.user!.id);
+            res.json(order);
+        } catch (error: any) {
+            if (error.message.includes('Cannot')) {
                 res.status(409).json({ error: error.message });
             } else {
                 res.status(500).json({ error: error.message });

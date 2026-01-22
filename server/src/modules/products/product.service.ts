@@ -9,6 +9,7 @@ export interface CreateProductDTO {
     selling_price?: number;
     items_per_packet?: number;
     packets_per_bundle?: number;
+    status?: 'active' | 'inactive';
 }
 
 export class ProductService {

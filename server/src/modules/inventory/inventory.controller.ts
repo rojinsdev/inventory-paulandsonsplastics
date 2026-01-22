@@ -60,6 +60,15 @@ export class InventoryController {
         }
     }
 
+    async getAvailable(req: Request, res: Response) {
+        try {
+            const stock = await inventoryService.getAvailableStock();
+            res.json(stock);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
     // Raw Materials
     async getRawMaterials(req: Request, res: Response) {
         try {

@@ -60,7 +60,7 @@ const stateConfig = {
     reserved: {
         label: 'Reserved/Sent',
         icon: Lock,
-        color: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+        color: 'linear-gradient(135deg, #6366f1, #4f46e5)',
         route: '/inventory/reserved'
     }
 };

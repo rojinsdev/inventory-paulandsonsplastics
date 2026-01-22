@@ -13,7 +13,9 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         // Check for stored auth on mount
-        const storedToken = localStorage.getItem('token');
+        const storedToken = localStorage.getItem('auth_token');
+        const storedRefreshToken = localStorage.getItem('refresh_token');
+        const storedExpiresAt = localStorage.getItem('expires_at');
         const storedUser = localStorage.getItem('user');
 
         if (storedToken && storedUser) {
@@ -24,7 +26,8 @@ export function AuthProvider({ children }) {
     }, []);
 
     const login = async (email, password) => {
-        const response = await fetch('http://localhost:4000/api/auth/login', {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+        const response = await fetch(`${baseUrl}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password }),
@@ -36,18 +39,29 @@ export function AuthProvider({ children }) {
         }
 
         const data = await response.json();
+        const accessToken = data.session?.access_token;
+        const refreshToken = data.session?.refresh_token;
+        const expiresAt = data.session?.expires_at;
 
-        localStorage.setItem('token', data.token);
+        if (!accessToken) {
+            throw new Error('Invalid response from server: Missing access token');
+        }
+
+        localStorage.setItem('auth_token', accessToken);
+        if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+        if (expiresAt) localStorage.setItem('expires_at', expiresAt);
         localStorage.setItem('user', JSON.stringify(data.user));
 
-        setToken(data.token);
+        setToken(accessToken);
         setUser(data.user);
 
         return data;
     };
 
     const logout = () => {
-        localStorage.removeItem('token');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('expires_at');
         localStorage.removeItem('user');
         setToken(null);
         setUser(null);

@@ -145,6 +145,20 @@ export class InventoryService {
         return data;
     }
 
+    async getAvailableStock() {
+        const { data, error } = await supabase
+            .from('stock_balances')
+            .select(`
+                *,
+                products(name, size, color, selling_price)
+            `)
+            .eq('state', 'finished')
+            .order('product_id');
+
+        if (error) throw new Error(error.message);
+        return data;
+    }
+
     // Raw Materials Methods
     async getRawMaterials() {
         const { data, error } = await supabase

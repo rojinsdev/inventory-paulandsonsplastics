@@ -24,7 +24,7 @@ const submitProductionSchema = z.object({
     actual_weight_grams: z.number().positive(),
 
     // Downtime
-    downtime_minutes: z.number().int().nonnegative().optional(),
+    downtime_minutes: z.number().int().optional(),
     downtime_reason: z.string().optional(),
 });
 

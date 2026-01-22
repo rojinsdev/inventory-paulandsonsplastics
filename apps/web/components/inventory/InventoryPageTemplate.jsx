@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { DashboardLayout } from '@/components/layout';
+import { useUI } from '@/contexts/UIContext';
 import InventoryStateTable from './InventoryStateTable';
 import { inventoryAPI, productsAPI } from '@/lib/api';
 import { formatNumber } from '@/lib/utils';
@@ -25,19 +25,21 @@ const stateConfig = {
     },
     reserved: {
         icon: Lock,
-        colorGradient: 'linear-gradient(135deg, #8b5cf6, #7c3aed)', // purple
+        colorGradient: 'linear-gradient(135deg, #6366f1, #4f46e5)', // indigo
     },
 };
 
 export default function InventoryPageTemplate({ title, type, description, guide }) {
+    const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
     const [data, setData] = useState([]);
 
     useEffect(() => {
+        setPageTitle(title);
         if (guide) {
             registerGuide(guide);
         }
-    }, [guide, registerGuide]);
+    }, [guide, registerGuide, setPageTitle, title]);
 
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -92,7 +94,7 @@ export default function InventoryPageTemplate({ title, type, description, guide 
     const Icon = config.icon;
 
     return (
-        <DashboardLayout title={title}>
+        <>
             {/* Enhanced Page Header */}
             <div className={styles.pageHeader}>
                 <div>
@@ -123,7 +125,7 @@ export default function InventoryPageTemplate({ title, type, description, guide 
                         </div>
                     </div>
                     <div className={styles.statCard}>
-                        <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>
+                        <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)' }}>
                             <Filter size={28} />
                         </div>
                         <div className={styles.statContent}>
@@ -188,6 +190,6 @@ export default function InventoryPageTemplate({ title, type, description, guide 
                 filters={filters}
                 products={products}
             />
-        </DashboardLayout>
+        </>
     );
 }

@@ -4,6 +4,8 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import MuiThemeProvider from '../components/providers/MuiThemeProvider';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import { GuideProvider } from '../contexts/GuideContext';
+import { UIProvider } from '../contexts/UIContext';
+import NextTopLoader from 'nextjs-toploader';
 
 
 export const metadata = {
@@ -23,12 +25,25 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body suppressHydrationWarning>
+        <NextTopLoader
+          color="#3b82f6"
+          initialPosition={0.08}
+          crawlSpeed={200}
+          height={3}
+          crawl={true}
+          showSpinner={false}
+          easing="ease"
+          speed={200}
+          shadow="0 0 10px #3b82f6,0 0 5px #3b82f6"
+        />
         <AuthProvider>
           <ThemeProvider>
             <MuiThemeProvider>
               <SettingsProvider>
                 <GuideProvider>
-                  {children}
+                  <UIProvider>
+                    {children}
+                  </UIProvider>
                 </GuideProvider>
               </SettingsProvider>
             </MuiThemeProvider>

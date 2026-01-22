@@ -118,7 +118,7 @@ export class ProductionService {
         // === DOWNTIME CALCULATION ===
         const shift_duration_seconds = shiftDuration * 60; // Convert minutes to seconds
         const downtime_seconds = shift_duration_seconds - actual_production_time;
-        const downtime_minutes = Math.floor(downtime_seconds / 60);
+        const downtime_minutes = Math.max(0, Math.floor(downtime_seconds / 60));
 
         // Validate downtime reason if > 30 mins
         if (downtime_minutes > 30 && !data.downtime_reason) {

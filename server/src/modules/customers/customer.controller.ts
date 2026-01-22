@@ -7,6 +7,23 @@ const createCustomerSchema = z.object({
     phone: z.string().optional(),
     type: z.enum(['permanent', 'seasonal', 'other']).optional(),
     notes: z.string().optional(),
+    email: z.string().email().optional(),
+    address: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    pincode: z.string().optional(),
+    gstin: z.string().optional(),
+    credit_limit: z.number().optional(),
+    payment_terms: z.enum(['immediate', 'net_15', 'net_30', 'net_60']).optional(),
+    tags: z.array(z.string()).optional(),
+});
+
+const createInteractionSchema = z.object({
+    customer_id: z.string().uuid(),
+    interaction_type: z.enum(['order_placed', 'order_delivered', 'order_cancelled', 'note_added', 'profile_updated', 'contact_made', 'payment_received', 'credit_limit_changed']),
+    description: z.string().optional(),
+    metadata: z.record(z.any()).optional(),
+    performed_by: z.string().uuid(),
 });
 
 export class CustomerController {
@@ -79,6 +96,135 @@ export class CustomerController {
             } else {
                 res.status(404).json({ error: 'Customer not found' });
             }
+        }
+    }
+
+    // ============================================================================
+    // Customer Profile & Analytics Endpoints
+    // ============================================================================
+
+    async getProfile(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const profile = await customerService.getCustomerProfile(id);
+            res.json(profile);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getPurchaseHistory(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const { page, limit } = req.query;
+
+            const options = {
+                page: page ? parseInt(page as string) : 1,
+                limit: limit ? parseInt(limit as string) : 20
+            };
+
+            const history = await customerService.getCustomerPurchaseHistory(id, options);
+            res.json(history);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getAnalytics(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const analytics = await customerService.getCustomerAnalytics(id);
+            res.json(analytics);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // ============================================================================
+    // Customer Interactions Endpoints
+    // ============================================================================
+
+    async getInteractions(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const { page, limit } = req.query;
+
+            const options = {
+                page: page ? parseInt(page as string) : 1,
+                limit: limit ? parseInt(limit as string) : 50
+            };
+
+            const interactions = await customerService.getCustomerInteractions(id, options);
+            res.json(interactions);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async addInteraction(req: Request, res: Response) {
+        try {
+            const validatedData = createInteractionSchema.parse(req.body);
+            const interaction = await customerService.addCustomerInteraction(validatedData);
+            res.status(201).json(interaction);
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: error.issues });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
+
+    // ============================================================================
+    // Customer Segmentation Endpoints
+    // ============================================================================
+
+    async getBySegment(req: Request, res: Response) {
+        try {
+            const { segment } = req.params;
+            const validSegments = ['vip', 'regular', 'at_risk', 'new', 'inactive'];
+
+            if (!validSegments.includes(segment)) {
+                return res.status(400).json({ error: 'Invalid segment' });
+            }
+
+            const customers = await customerService.getCustomersBySegment(segment as any);
+            res.json(customers);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getVIP(req: Request, res: Response) {
+        try {
+            const { limit } = req.query;
+            const customers = await customerService.getVIPCustomers(
+                limit ? parseInt(limit as string) : 50
+            );
+            res.json(customers);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getAtRisk(req: Request, res: Response) {
+        try {
+            const { limit } = req.query;
+            const customers = await customerService.getAtRiskCustomers(
+                limit ? parseInt(limit as string) : 50
+            );
+            res.json(customers);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getStats(req: Request, res: Response) {
+        try {
+            const stats = await customerService.getCustomerStats();
+            res.json(stats);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
         }
     }
 }

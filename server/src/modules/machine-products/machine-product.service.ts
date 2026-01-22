@@ -3,7 +3,7 @@ import { supabase } from '../../config/supabase';
 export interface CreateMachineProductDTO {
     machine_id: string;
     product_id: string;
-    cycle_time_seconds: number;
+    ideal_cycle_time_seconds: number;
     capacity_restriction?: number | null;
     enabled?: boolean;
 }

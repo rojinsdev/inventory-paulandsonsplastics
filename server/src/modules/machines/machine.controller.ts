@@ -6,8 +6,9 @@ const createMachineSchema = z.object({
     name: z.string().min(1),
     type: z.enum(['extruder', 'cutting', 'printing', 'packing']),
     category: z.enum(['small', 'large', 'other']),
-    max_die_weight: z.number().optional(),
+    max_die_weight: z.number().nullable().optional(),
     daily_running_cost: z.number().min(0),
+    status: z.enum(['active', 'inactive']).optional(),
 });
 
 export class MachineController {
@@ -77,3 +78,4 @@ export class MachineController {
 }
 
 export const machineController = new MachineController();
+
