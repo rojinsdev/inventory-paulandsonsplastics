@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Search, Filter, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
 import { inventoryAPI, productsAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { formatNumber, formatDate, cn } from '@/lib/utils';
 import styles from './page.module.css';
 
@@ -19,6 +20,7 @@ const TRANSACTION_TYPES = [
 
 export default function TransactionsPage() {
     const { setPageTitle } = useUI();
+    const { selectedFactory } = useFactory();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [transactions, setTransactions] = useState([]);
@@ -32,15 +34,19 @@ export default function TransactionsPage() {
 
     useEffect(() => {
         setPageTitle('Inventory Transactions');
-        loadData();
     }, [setPageTitle]);
+
+    useEffect(() => {
+        loadData();
+    }, [selectedFactory]);
 
     const loadData = async () => {
         try {
             setLoading(true);
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
             const [txData, productsData] = await Promise.all([
-                inventoryAPI.getTransactions().catch(() => []),
-                productsAPI.getAll().catch(() => []),
+                inventoryAPI.getTransactions(params).catch(() => []),
+                productsAPI.getAll(params).catch(() => []),
             ]);
             setTransactions(Array.isArray(txData) ? txData : []);
             setProducts(Array.isArray(productsData) ? productsData : []);

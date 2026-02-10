@@ -18,7 +18,7 @@ final inventoryOperationProvider =
 final inventoryStockProvider =
     FutureProvider<List<InventoryStock>>((ref) async {
   final repository = ref.watch(inventoryRepositoryProvider);
-  return repository.getStock();
+  return repository.getStockOverview();
 });
 
 final rawMaterialsProvider =
@@ -43,10 +43,15 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<void> bundle(String productId, int quantity) async {
+  Future<void> bundle(String productId, int quantity,
+      {String source = 'packed'}) async {
     state = const AsyncValue.loading();
     try {
-      await _repository.bundle(productId: productId, bundlesCreated: quantity);
+      await _repository.bundle(
+        productId: productId,
+        bundlesCreated: quantity,
+        source: source,
+      );
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -84,12 +89,13 @@ class InventoryStock {
 
   factory InventoryStock.fromJson(Map<String, dynamic> json) {
     return InventoryStock(
-      productId: json['product_id'] ?? json['id'] ?? '',
-      productName: json['product_name'] ?? json['name'] ?? 'Unknown',
+      productId: (json['product_id'] ?? json['id'] ?? '') as String,
+      productName:
+          (json['product_name'] ?? json['name'] ?? 'Unknown') as String,
       semiFinishedQty:
-          json['semi_finished_qty'] ?? json['semifinished_qty'] ?? 0,
-      packedQty: json['packed_qty'] ?? 0,
-      bundledQty: json['bundled_qty'] ?? 0,
+          (json['semi_finished_qty'] ?? json['semifinished_qty'] ?? 0) as int,
+      packedQty: (json['packed_qty'] ?? 0) as int,
+      bundledQty: (json['bundled_qty'] ?? 0) as int,
     );
   }
 }

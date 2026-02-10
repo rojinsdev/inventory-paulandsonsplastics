@@ -1,41 +1,87 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
-import { Loader2, Plus, Minus, History, Boxes, AlertTriangle, Search, Filter } from 'lucide-react';
+import { Loader2, Plus, Minus, History, Boxes, AlertTriangle, Search, Filter, Wallet, CreditCard, Info } from 'lucide-react';
 import { inventoryAPI } from '@/lib/api';
-import { formatNumber, formatCurrency, formatDate, cn } from '@/lib/utils';
+import { formatNumber, formatCurrency, formatDate, cn, getLocalDateISO } from '@/lib/utils';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
+import FactorySelect from '@/components/ui/FactorySelect';
+import CustomSelect from '@/components/ui/CustomSelect';
+import toast from 'react-hot-toast'; // Changed to react-hot-toast
 import styles from './page.module.css';
 
 export default function RawMaterialsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [materials, setMaterials] = useState([]);
-    const [modalOpen, setModalOpen] = useState(false);
-    const [createModalOpen, setCreateModalOpen] = useState(false);
-    const [adjusting, setAdjusting] = useState(null);
-    const [saving, setSaving] = useState(false);
+    const { selectedFactory, factories } = useFactory();
+
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+    const [selectedMaterial, setSelectedMaterial] = useState(null);
+    const [adjustmentData, setAdjustmentData] = useState({
+        quantity: '',
+        unit: 'bags',
+        rate: ''
+    });
+    const [adjustmentReason, setAdjustmentReason] = useState('Purchase');
+    const [paymentMode, setPaymentMode] = useState('Cash');
+    const [formData, setFormData] = useState({
+        name: '',
+        stock_weight_kg: 0,
+        bag_weight_kg: 25,
+        type: 'Granule'
+    });
     const [filters, setFilters] = useState({
         search: '',
     });
-
-    const [adjustmentData, setAdjustmentData] = useState({
-        type: 'add',
-        quantity: '',
-        reason: '',
+    const { data: materials = [], isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['raw-materials', selectedFactory],
+        queryFn: () => inventoryAPI.getRawMaterials(selectedFactory ? { factory_id: selectedFactory } : {}),
     });
 
-    const [newData, setNewData] = useState({
-        name: '',
-        stock_weight_kg: ''
+    const error = queryError?.message;
+
+    // Mutations
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }) => inventoryAPI.updateRawMaterial(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['raw-materials']);
+            setIsEditModalOpen(false);
+            toast.success('Material updated successfully');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to update material')
     });
 
-    useEffect(() => {
-        loadMaterials();
-    }, []);
+    const adjustMutation = useMutation({
+        mutationFn: ({ id, data }) => inventoryAPI.adjustRawMaterial(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['raw-materials']);
+            setIsAdjustModalOpen(false);
+            setAdjustmentData({ quantity: '', unit: 'bags', rate: '' });
+            toast.success('Stock adjusted successfully');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to adjust stock')
+    });
+
+    const createMutation = useMutation({
+        mutationFn: (data) => inventoryAPI.createRawMaterial(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['raw-materials'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            setIsAddModalOpen(false);
+            setFormData({ name: '', stock_weight_kg: 0, bag_weight_kg: 25, type: 'Granule' });
+            toast.success('Material created successfully');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to create material')
+    });
+
+    const saving = updateMutation.isPending || adjustMutation.isPending || createMutation.isPending;
+
 
     useEffect(() => {
         setPageTitle('Raw Materials');
@@ -64,17 +110,6 @@ export default function RawMaterialsPage() {
         });
     }, [registerGuide, setPageTitle]);
 
-    const loadMaterials = async () => {
-        try {
-            setLoading(true);
-            const data = await inventoryAPI.getRawMaterials();
-            setMaterials(Array.isArray(data) ? data : []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     // Filter materials based on search
     const filteredMaterials = useMemo(() => {
@@ -87,54 +122,87 @@ export default function RawMaterialsPage() {
     }, [materials, filters.search]);
 
     const handleAdjust = (material) => {
-        setAdjusting(material);
+        setSelectedMaterial(material);
         setAdjustmentData({
-            type: 'add',
             quantity: '',
-            reason: '',
+            unit: 'bags',
+            rate: material.last_cost_per_kg || ''
         });
-        setModalOpen(true);
+        setIsAdjustModalOpen(true);
+        setPaymentMode('Cash');
     };
 
-    const handleSubmitAdjustment = async (e) => {
-        e.preventDefault();
-        if (!adjusting) return;
-        setSaving(true);
-
-        try {
-            const quantity = Number(adjustmentData.quantity);
-            const adjustedQty = adjustmentData.type === 'subtract' ? -quantity : quantity;
-
-            await inventoryAPI.adjustRawMaterial(adjusting.id, {
-                quantity_kg: adjustedQty,
-                reason: adjustmentData.reason,
-            });
-
-            setModalOpen(false);
-            loadMaterials();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
+    const handleEdit = (material) => {
+        setSelectedMaterial(material);
+        setFormData({
+            name: material.name,
+            stock_weight_kg: material.stock_weight_kg,
+            bag_weight_kg: material.bag_weight_kg || 25,
+            type: material.type || 'Granule',
+            min_threshold_kg: material.min_threshold_kg || 100
+        });
+        setIsEditModalOpen(true);
     };
 
-    const handleCreate = async (e) => {
+    const handleOpenAddModal = () => {
+        setFormData({
+            name: '',
+            stock_weight_kg: 0,
+            bag_weight_kg: 25,
+            type: 'Granule',
+            factory_id: selectedFactory || (factories.length > 0 ? factories[0].id : null),
+            min_threshold_kg: 100
+        });
+        setIsAddModalOpen(true);
+    };
+
+    const handleCreateSubmit = (e) => {
         e.preventDefault();
-        setSaving(true);
-        try {
-            await inventoryAPI.createRawMaterial({
-                name: newData.name,
-                stock_weight_kg: Number(newData.stock_weight_kg)
-            });
-            setCreateModalOpen(false);
-            setNewData({ name: '', stock_weight_kg: '' });
-            loadMaterials();
-        } catch (err) {
-            alert('Error creating material: ' + err.message);
-        } finally {
-            setSaving(false);
+
+        // Ensure we have a valid factory_id
+        const finalFactoryId = formData.factory_id || selectedFactory || (factories.length > 0 ? factories[0].id : null);
+
+        if (!finalFactoryId) {
+            toast.error('Please select a factory');
+            return;
         }
+
+        createMutation.mutate({
+            ...formData,
+            factory_id: finalFactoryId,
+            stock_weight_kg: Number(formData.stock_weight_kg) || 0,
+            bag_weight_kg: Number(formData.bag_weight_kg) || 25,
+            min_threshold_kg: Number(formData.min_threshold_kg) || 100
+        });
+    };
+
+    const handleEditSubmit = (e) => {
+        e.preventDefault();
+        updateMutation.mutate({
+            id: selectedMaterial.id,
+            data: {
+                name: formData.name,
+                bag_weight_kg: Number(formData.bag_weight_kg),
+                type: formData.type,
+                min_threshold_kg: Number(formData.min_threshold_kg)
+            }
+        });
+    };
+
+    const handleAdjustSubmit = (e) => {
+        e.preventDefault();
+        const quantity = parseFloat(adjustmentData.quantity);
+        adjustMutation.mutate({
+            id: selectedMaterial.id,
+            data: {
+                quantity: quantity,
+                unit: adjustmentData.unit,
+                rate_per_kg: parseFloat(adjustmentData.rate),
+                reason: adjustmentReason,
+                payment_mode: paymentMode,
+                date: getLocalDateISO()
+            }
+        });
     };
 
     // Calculate totals from filtered materials
@@ -150,7 +218,7 @@ export default function RawMaterialsPage() {
                     <h1 className={styles.pageTitle}>Raw Materials</h1>
                     <p className={styles.pageDescription}>Manage plastic granule stock and consumption</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setCreateModalOpen(true)}>
+                <button className={styles.primaryButton} onClick={handleOpenAddModal}>
                     <Plus size={18} style={{ marginRight: '8px' }} />
                     Add Material
                 </button>
@@ -218,167 +286,248 @@ export default function RawMaterialsPage() {
             {error && (
                 <div className={styles.error}>
                     <p>Error: {error}</p>
-                    <button className="btn btn-secondary" onClick={loadMaterials}>
+                    <button className={styles.retryButton} onClick={() => refetch()}>
                         Retry
                     </button>
                 </div>
             )}
 
             {/* Content */}
-            <div className="card">
+            <div className={styles.tableCard}>
                 {loading ? (
                     <div className={styles.loading}>
                         <Loader2 size={24} className={styles.spinner} />
                         <span>Loading materials...</span>
                     </div>
                 ) : materials.length === 0 ? (
-                    <div className="empty-state">
+                    <div className={styles.emptyState}>
                         <Boxes size={48} />
                         <p>No raw materials configured</p>
                     </div>
                 ) : filteredMaterials.length === 0 ? (
-                    <div className="empty-state">
+                    <div className={styles.emptyState}>
                         <Search size={48} />
                         <p>No materials found matching your search</p>
                         <p className="text-muted">Try adjusting your search criteria</p>
                     </div>
                 ) : (
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Material</th>
-                                <th>Type</th>
-                                <th style={{ textAlign: 'right' }}>Current Stock</th>
-                                <th style={{ textAlign: 'right' }}>Min Threshold</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredMaterials.map((material) => {
-                                const isLow = material.stock_weight_kg < (material.min_threshold_kg || 100);
-                                return (
-                                    <tr key={material.id}>
-                                        <td className="font-medium">{material.name}</td>
-                                        <td>
-                                            <span className="badge badge-gray">{material.type || 'Granule'}</span>
-                                        </td>
-                                        <td style={{ textAlign: 'right' }}>
-                                            <span className={cn(styles.stockValue, isLow && styles.lowStock)}>
-                                                {formatNumber(material.stock_weight_kg)} kg
-                                            </span>
-                                        </td>
-                                        <td style={{ textAlign: 'right' }} className="text-muted">
-                                            {formatNumber(material.min_threshold_kg || 100)} kg
-                                        </td>
-                                        <td>
-                                            {isLow ? (
-                                                <span className="badge badge-error">Low Stock</span>
-                                            ) : (
-                                                <span className="badge badge-success">OK</span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <button
-                                                className="btn btn-sm btn-outline"
-                                                onClick={() => handleAdjust(material)}
-                                            >
-                                                Adjust
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                    <div className={styles.tableWrapper}>
+                        <table className={styles.table}>
+                            <thead>
+                                <tr>
+                                    <th>Material</th>
+                                    <th>Type</th>
+                                    <th style={{ textAlign: 'right' }}>Current Stock</th>
+                                    <th style={{ textAlign: 'right' }}>Min Threshold</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredMaterials.map((material) => {
+                                    const isLow = material.stock_weight_kg < (material.min_threshold_kg || 100);
+                                    return (
+                                        <tr key={material.id}>
+                                            <td className={styles.nameCell}>{material.name}</td>
+                                            <td>
+                                                <span className={cn(styles.badge, styles.badgeGray)}>{material.type || 'Granule'}</span>
+                                            </td>
+                                            <td style={{ textAlign: 'right' }}>
+                                                <span className={cn(styles.stockValue, isLow && styles.lowStock)}>
+                                                    {formatNumber(material.stock_weight_kg)} kg
+                                                </span>
+                                            </td>
+                                            <td style={{ textAlign: 'right' }} className={styles.textMuted}>
+                                                {formatNumber(material.min_threshold_kg || 100)} kg
+                                            </td>
+                                            <td>
+                                                {isLow ? (
+                                                    <span className={cn(styles.badge, styles.badgeError)}>Low Stock</span>
+                                                ) : (
+                                                    <span className={cn(styles.badge, styles.badgeSuccess)}>OK</span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div style={{ display: 'flex', gap: '8px' }}>
+                                                    <button
+                                                        className={styles.actionButton}
+                                                        onClick={() => handleAdjust(material)}
+                                                    >
+                                                        Adjust Stock
+                                                    </button>
+                                                    <button
+                                                        className={cn(styles.actionButton, styles.secondaryAction)}
+                                                        onClick={() => handleEdit(material)}
+                                                        style={{ background: 'var(--bg-glass)', border: '1px solid var(--border-color)' }}
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
             {/* Adjustment Modal */}
-            {modalOpen && adjusting && (
-                <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h2>Adjust Stock: {adjusting.name}</h2>
-                            <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
-                                ×
+            {isAdjustModalOpen && selectedMaterial && (
+                <div className={styles.modalBackdrop} onClick={() => setIsAdjustModalOpen(false)}>
+                    <div className={cn(styles.modal, styles.wideModal)} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h2 className={styles.modalTitle}>Adjust Stock: {selectedMaterial.name}</h2>
+                            <button onClick={() => setIsAdjustModalOpen(false)} className={styles.closeBtn}>
+                                <Plus size={20} style={{ transform: 'rotate(45deg)' }} />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmitAdjustment}>
-                            <div className="modal-body">
-                                <p className="text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-                                    Current stock: <strong>{formatNumber(adjusting.stock_weight_kg)} kg</strong>
-                                </p>
-
-                                <div className="form-group">
-                                    <label className="form-label">Adjustment Type *</label>
-                                    <div className={styles.typeButtons}>
-                                        <button
-                                            type="button"
-                                            className={cn(styles.typeBtn, adjustmentData.type === 'add' && styles.active)}
-                                            onClick={() => setAdjustmentData({ ...adjustmentData, type: 'add' })}
-                                        >
-                                            <Plus size={18} />
-                                            Add Stock
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={cn(styles.typeBtn,
-                                                adjustmentData.type === 'subtract' && styles.active,
-                                                adjustmentData.type === 'subtract' && styles.subtract
-                                            )}
-                                            onClick={() => setAdjustmentData({ ...adjustmentData, type: 'subtract' })}
-                                        >
-                                            <Minus size={18} />
-                                            Remove Stock
-                                        </button>
+                        <form onSubmit={handleAdjustSubmit}>
+                            <div className={styles.modalBody}>
+                                <div className={cn(styles.formGroup, styles['mb-24'])}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label className={styles.formLabel} style={{ margin: 0 }}>Current Stock</label>
+                                        <span className={styles.badgeGray}>{selectedMaterial.stock_weight_kg?.toFixed(1) || '0.0'} kg</span>
                                     </div>
                                 </div>
 
-                                <div className="form-group">
-                                    <label className="form-label">Quantity (kg) *</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }} className={styles['mb-24']}>
+                                    <div className={styles.formGroup}>
+                                        <label className={cn(styles.formLabel, styles['mb-8'])}>Quantity *</label>
+                                        <input
+                                            type="number"
+                                            className={styles.formInput}
+                                            value={adjustmentData.quantity ?? ''}
+                                            onChange={(e) => setAdjustmentData({ ...adjustmentData, quantity: e.target.value === '' ? '' : e.target.value })}
+                                            required
+                                            min="0"
+                                            step="0.01"
+                                            placeholder="Enter amount"
+                                        />
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label className={cn(styles.formLabel, styles['mb-8'])}>Unit *</label>
+                                        <select
+                                            className={styles.formSelect}
+                                            value={adjustmentData.unit}
+                                            onChange={(e) => setAdjustmentData({ ...adjustmentData, unit: e.target.value })}
+                                        >
+                                            <option value="kg">kg</option>
+                                            <option value="bags">Bags (25kg)</option>
+                                            <option value="tons">Tons (1000kg / 40 Bags)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className={cn(styles.formGroup, styles['mb-24'])}>
+                                    <label className={cn(styles.formLabel, styles['mb-8'])}>Rate per Kilo (₹) *</label>
                                     <input
                                         type="number"
-                                        className="input"
-                                        value={adjustmentData.quantity}
-                                        onChange={(e) =>
-                                            setAdjustmentData({ ...adjustmentData, quantity: e.target.value })
-                                        }
+                                        className={styles.formInput}
+                                        value={adjustmentData.rate ?? ''}
+                                        onChange={(e) => setAdjustmentData({ ...adjustmentData, rate: e.target.value === '' ? '' : e.target.value })}
                                         required
-                                        min="0.1"
-                                        step="0.1"
-                                        placeholder="Enter quantity in kg"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="Current market rate per kg"
                                     />
                                 </div>
 
-                                <div className="form-group">
-                                    <label className="form-label">Reason *</label>
+                                {adjustmentData.quantity && adjustmentData.rate && (
+                                    <div className={styles.costSummary}>
+                                        <div className={styles.costRow}>
+                                            <span className={styles.costLabel}>Operational Breakdown</span>
+                                            <span className={styles.costFormula}>
+                                                {(() => {
+                                                    const qty = parseFloat(adjustmentData.quantity);
+                                                    const weight = adjustmentData.unit === 'bags' ? qty * 25 : adjustmentData.unit === 'tons' ? qty * 1000 : qty;
+                                                    const bags = weight / 25;
+                                                    return (
+                                                        <>
+                                                            {formatNumber(weight)} kg <strong>({formatNumber(bags)} Bags)</strong> × ₹{adjustmentData.rate}
+                                                        </>
+                                                    );
+                                                })()}
+                                            </span>
+                                        </div>
+                                        <div className={styles.costRow}>
+                                            <span className={styles.costLabel}>Total Procurement Value</span>
+                                            <span className={styles.costValue}>
+                                                {formatCurrency(
+                                                    (adjustmentData.unit === 'bags'
+                                                        ? parseFloat(adjustmentData.quantity) * 25
+                                                        : adjustmentData.unit === 'tons'
+                                                            ? parseFloat(adjustmentData.quantity) * 1000
+                                                            : parseFloat(adjustmentData.quantity)
+                                                    ) * parseFloat(adjustmentData.rate)
+                                                )}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className={cn(styles.formGroup, styles['mb-24'])}>
+                                    <label className={cn(styles.formLabel, styles['mb-8'])}>Reason / Reference *</label>
                                     <input
                                         type="text"
-                                        className="input"
-                                        value={adjustmentData.reason}
-                                        onChange={(e) =>
-                                            setAdjustmentData({ ...adjustmentData, reason: e.target.value })
-                                        }
+                                        className={styles.formInput}
+                                        value={adjustmentReason}
+                                        onChange={(e) => setAdjustmentReason(e.target.value)}
                                         required
-                                        placeholder="e.g., New purchase, Wastage adjustment"
+                                        placeholder="e.g., Purchase from Vendor X"
                                     />
+                                </div>
+
+                                <div className={cn(styles.formGroup, styles['mb-24'])}>
+                                    <label className={cn(styles.formLabel, styles['mb-8'])}>Payment Mode *</label>
+                                    <div className={styles.typeButtons}>
+                                        <button
+                                            type="button"
+                                            className={cn(styles.typeBtn, paymentMode === 'Cash' && styles.active)}
+                                            onClick={() => setPaymentMode('Cash')}
+                                        >
+                                            <Wallet size={16} />
+                                            Cash
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={cn(styles.typeBtn, paymentMode === 'Credit' && styles.active)}
+                                            onClick={() => setPaymentMode('Credit')}
+                                        >
+                                            <CreditCard size={16} />
+                                            Credit
+                                        </button>
+                                    </div>
+                                    <div className={cn(
+                                        styles.disclaimer,
+                                        paymentMode === 'Cash' ? styles.disclaimerSuccess : styles.disclaimerWarning
+                                    )}>
+                                        {paymentMode === 'Cash' ? (
+                                            <>
+                                                <div style={{ color: 'var(--success)' }}>✓</div>
+                                                <span>Will automatically create a Cash Flow entry.</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div style={{ color: 'var(--warning)' }}>⚠</div>
+                                                <span>Stock will be added, but NO cash flow entry will be created.</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+                            <div className={styles.modalFooter}>
+                                <button type="button" className={styles.secondaryButton} onClick={() => setIsAdjustModalOpen(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={saving}>
-                                    {saving ? (
-                                        <>
-                                            <Loader2 size={16} className={styles.spinner} />
-                                            Saving...
-                                        </>
-                                    ) : (
-                                        'Confirm Adjustment'
-                                    )}
+                                <button
+                                    type="submit"
+                                    className={styles.submitButton}
+                                    disabled={saving || !adjustmentData.quantity || !adjustmentData.rate || !adjustmentReason}
+                                >
+                                    {saving ? <Loader2 size={16} className={styles.spinner} /> : 'Complete Adjustment'}
                                 </button>
                             </div>
                         </form>
@@ -386,55 +535,105 @@ export default function RawMaterialsPage() {
                 </div>
             )}
 
-            {/* Create Modal */}
-            {createModalOpen && (
-                <div className="modal-backdrop" onClick={() => setCreateModalOpen(false)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h2>Add New Material</h2>
-                            <button onClick={() => setCreateModalOpen(false)} className={styles.closeBtn}>
-                                ×
+            {/* Add/Edit Material Modal */}
+            {(isAddModalOpen || isEditModalOpen) && (
+                <div className={styles.modalBackdrop} onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }}>
+                    <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <h2 className={styles.modalTitle}>{isEditModalOpen ? 'Edit Material' : 'Add New Material'}</h2>
+                            <button onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }} className={styles.closeBtn}>
+                                <Plus size={20} style={{ transform: 'rotate(45deg)' }} />
                             </button>
                         </div>
-                        <form onSubmit={handleCreate}>
-                            <div className="modal-body">
-                                <div className="form-group">
-                                    <label className="form-label">Material Name *</label>
+                        <form onSubmit={isEditModalOpen ? handleEditSubmit : handleCreateSubmit}>
+                            <div className={styles.modalBody}>
+                                {isAddModalOpen && factories.length > 0 && (
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Factory *</label>
+                                        <FactorySelect
+                                            value={formData.factory_id}
+                                            onChange={(val) => setFormData({ ...formData, factory_id: val })}
+                                        />
+                                    </div>
+                                )}
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Material Name *</label>
                                     <input
                                         type="text"
-                                        className="input"
-                                        value={newData.name}
-                                        onChange={(e) => setNewData({ ...newData, name: e.target.value })}
+                                        className={styles.formInput}
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                         required
                                         placeholder="e.g. Polypropylene Granules"
                                     />
                                 </div>
-                                <div className="form-group">
-                                    <label className="form-label">Initial Stock (kg) *</label>
-                                    <input
-                                        type="number"
-                                        className="input"
-                                        value={newData.stock_weight_kg}
-                                        onChange={(e) => setNewData({ ...newData, stock_weight_kg: e.target.value })}
-                                        required
-                                        min="0"
-                                        step="0.1"
-                                        placeholder="0"
-                                    />
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Material Type</label>
+                                    <select
+                                        className={styles.formInput}
+                                        value={formData.type}
+                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                    >
+                                        <option value="Granule">Granule (Virgin)</option>
+                                        <option value="Reprocessed">Reprocessed (Recycled)</option>
+                                        <option value="Color">Color Masterbatch</option>
+                                        <option value="Additive">Additive</option>
+                                    </select>
                                 </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Standard Bag Weight (kg)</label>
+                                        <input
+                                            type="number"
+                                            className={styles.formInput}
+                                            value={formData.bag_weight_kg ?? ''}
+                                            onChange={(e) => setFormData({ ...formData, bag_weight_kg: e.target.value === '' ? '' : parseFloat(e.target.value) })}
+                                            required
+                                            min="1"
+                                            step="0.5"
+                                        />
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Min Threshold (kg)</label>
+                                        <input
+                                            type="number"
+                                            className={styles.formInput}
+                                            value={formData.min_threshold_kg ?? ''}
+                                            onChange={(e) => setFormData({ ...formData, min_threshold_kg: e.target.value === '' ? '' : parseFloat(e.target.value) })}
+                                            required
+                                            min="0"
+                                        />
+                                    </div>
+                                </div>
+                                {isAddModalOpen && (
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Initial Stock (kg)</label>
+                                        <input
+                                            type="number"
+                                            className={styles.formInput}
+                                            value={formData.stock_weight_kg ?? ''}
+                                            onChange={(e) => setFormData({ ...formData, stock_weight_kg: e.target.value === '' ? '' : parseFloat(e.target.value) })}
+                                            required
+                                            min="0"
+                                            placeholder="0"
+                                        />
+                                    </div>
+                                )}
                             </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setCreateModalOpen(false)}>
+                            <div className={styles.modalFooter}>
+                                <button type="button" className={styles.secondaryButton} onClick={() => { setIsAddModalOpen(false); setIsEditModalOpen(false); }}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={saving}>
-                                    {saving ? 'Creating...' : 'Create Material'}
+                                <button type="submit" className={styles.submitButton} disabled={saving}>
+                                    {saving ? <Loader2 size={16} className={styles.spinner} /> : (isEditModalOpen ? 'Save Changes' : 'Create Material')}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
-            )}
+            )
+            }
         </>
     );
 }
+

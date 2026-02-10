@@ -12,7 +12,12 @@ class InventoryRepository {
   /// Get all inventory stock (read-only)
   Future<List<InventoryStock>> getStock() async {
     try {
-      final response = await _apiClient.client.get(ApiConstants.inventoryStock);
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.inventoryStock}?factory_id=$factoryId'
+          : ApiConstants.inventoryStock;
+
+      final response = await _apiClient.client.get(endpoint);
       final data = response.data as List<dynamic>? ?? [];
       return data.map((item) => InventoryStock.fromJson(item)).toList();
     } catch (e) {
@@ -23,11 +28,35 @@ class InventoryRepository {
     }
   }
 
+  /// Get aggregated stock overview (read-only)
+  Future<List<InventoryStock>> getStockOverview() async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.inventoryStockOverview}?factory_id=$factoryId'
+          : ApiConstants.inventoryStockOverview;
+
+      final response = await _apiClient.client.get(endpoint);
+      final data = response.data as List<dynamic>? ?? [];
+      return data.map((item) => InventoryStock.fromJson(item)).toList();
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(
+            e.response?.data['error'] ?? 'Failed to fetch stock overview');
+      }
+      rethrow;
+    }
+  }
+
   /// Get raw materials (read-only)
   Future<List<RawMaterial>> getRawMaterials() async {
     try {
-      final response =
-          await _apiClient.client.get(ApiConstants.inventoryRawMaterials);
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.inventoryRawMaterials}?factory_id=$factoryId'
+          : ApiConstants.inventoryRawMaterials;
+
+      final response = await _apiClient.client.get(endpoint);
       final data = response.data as List<dynamic>? ?? [];
       return data.map((item) => RawMaterial.fromJson(item)).toList();
     } catch (e) {
@@ -81,11 +110,16 @@ class InventoryRepository {
   Future<void> bundle({
     required String productId,
     required int bundlesCreated,
+    String source = 'packed',
   }) async {
     try {
       await _apiClient.client.post(
         ApiConstants.inventoryBundle,
-        data: {'product_id': productId, 'bundles_created': bundlesCreated},
+        data: {
+          'product_id': productId,
+          'bundles_created': bundlesCreated,
+          'source': source,
+        },
       );
     } catch (e) {
       if (e is DioException) {

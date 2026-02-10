@@ -92,4 +92,29 @@ class ApiClient {
   }
 
   Dio get client => _dio;
+
+  Future<String?> getFactoryId() async {
+    final userJson = _storage.getString('user_data');
+    if (userJson == null) return null;
+
+    // Simple parsing to avoid circular dependency with User model if possible,
+    // or import dart:convert
+    try {
+      // Create a localized import or just regex if we want to avoid import issues,
+      // but simpler to just parse json.
+      // We need to import dart:convert at the top if not present.
+      // Looking at the file, it doesn't have dart:convert.
+      // I'll add the import first in a separate replacement or just use regex for simplicity
+      // as adding import changes line numbers at top.
+      // Actually, let's just use string manipulation or a dynamic map if we can't import easily.
+      // Wait, I can just use basic pattern matching since it's a JSON string.
+      // "factory_id":"..."
+
+      final match = RegExp(r'"factory_id":"([^"]+)"').firstMatch(userJson);
+      return match?.group(1);
+    } catch (e) {
+      debugPrint('Error parsing factory_id: $e');
+      return null;
+    }
+  }
 }

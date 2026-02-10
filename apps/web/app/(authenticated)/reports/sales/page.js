@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, ShoppingCart, Users, DollarSign, TrendingUp, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
 import { reportsAPI, customersAPI, productsAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatNumber, formatCurrency, formatDate, cn } from '@/lib/utils';
 import styles from './page.module.css';
@@ -17,18 +19,42 @@ const DATE_PRESETS = [
 ];
 
 export default function SalesReportsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [report, setReport] = useState(null);
-    const [customers, setCustomers] = useState([]);
-    const [products, setProducts] = useState([]);
+    const { selectedFactory } = useFactory();
     const [datePreset, setDatePreset] = useState('this_month');
     const [filters, setFilters] = useState({
         date_from: '',
         date_to: '',
     });
+
+    // Queries
+    const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['sales-report', filters, selectedFactory],
+        queryFn: () => reportsAPI.getSales({
+            from: filters.date_from,
+            to: filters.date_to,
+            factory_id: selectedFactory || undefined
+        }),
+        enabled: !!(filters.date_from || filters.date_to),
+    });
+
+    const { data: customersData } = useQuery({
+        queryKey: ['customers', { factory_id: selectedFactory }],
+        queryFn: () => customersAPI.getAll({ factory_id: selectedFactory || undefined }),
+    });
+
+    const { data: productsData } = useQuery({
+        queryKey: ['products', { factory_id: selectedFactory }],
+        queryFn: () => productsAPI.getAll({ factory_id: selectedFactory || undefined }),
+    });
+
+    const error = queryError?.message;
+    const report = reportData || {};
+    const customers = Array.isArray(customersData) ? customersData : [];
+    const products = Array.isArray(productsData) ? productsData : [];
+
 
     useEffect(() => {
         setPageTitle('Sales Reports');
@@ -56,15 +82,10 @@ export default function SalesReportsPage() {
                 }
             ]
         });
-        loadCustomersAndProducts();
         applyDatePreset(datePreset);
-    }, [registerGuide]);
+    }, [registerGuide, setPageTitle, datePreset]);
 
-    useEffect(() => {
-        if (filters.date_from || filters.date_to) {
-            loadData();
-        }
-    }, [filters.date_from, filters.date_to]);
+
 
     const getDateRange = (preset) => {
         const today = new Date();
@@ -114,34 +135,8 @@ export default function SalesReportsPage() {
         }));
     };
 
-    const loadCustomersAndProducts = async () => {
-        try {
-            const [customersData, productsData] = await Promise.all([
-                customersAPI.getAll().catch(() => []),
-                productsAPI.getAll().catch(() => []),
-            ]);
-            setCustomers(Array.isArray(customersData) ? customersData : []);
-            setProducts(Array.isArray(productsData) ? productsData : []);
-        } catch (err) {
-            console.error('Failed to load customers/products:', err);
-        }
-    };
-
-    const loadData = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const params = {
-                from: filters.date_from,
-                to: filters.date_to,
-            };
-            const reportData = await reportsAPI.getSales(params).catch(() => ({}));
-            setReport(reportData || {});
-        } catch (err) {
-            setError(err.message || 'Failed to load sales report');
-        } finally {
-            setLoading(false);
-        }
+    const loadData = () => {
+        refetch();
     };
 
     const handleFilter = () => {

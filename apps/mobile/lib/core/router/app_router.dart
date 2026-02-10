@@ -5,10 +5,15 @@ import '../../features/production/screens/dashboard_screen.dart';
 import '../../features/inventory/screens/inventory_hub_screen.dart';
 import '../../features/settings/screens/more_screen.dart';
 import '../../features/production/screens/production_entry_screen.dart';
+import '../../features/production/screens/production_type_selection_screen.dart';
+import '../../features/production/screens/cap_production_entry_screen.dart';
 import '../../features/inventory/screens/packing_screen.dart';
 
 import '../../features/inventory/screens/bundling_screen.dart';
 import '../../features/inventory/screens/raw_materials_screen.dart';
+import '../../features/inventory/screens/stock_detail_screen.dart';
+import '../../features/production/screens/production_requests_screen.dart';
+import '../../features/production/screens/order_preparation_screen.dart';
 import '../../core/navigation/main_navigation.dart';
 
 class AppRouter {
@@ -61,7 +66,17 @@ class AppRouter {
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
         path: '/production/entry',
+        builder: (context, state) => const ProductionTypeSelectionScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/production/submit',
         builder: (context, state) => const ProductionEntryScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/production/cap-submit',
+        builder: (context, state) => const CapProductionEntryScreen(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,
@@ -77,6 +92,26 @@ class AppRouter {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/inventory/raw-materials',
         builder: (context, state) => const RawMaterialsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/stock-details',
+        builder: (context, state) => const StockDetailScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/stock-detail',
+        builder: (context, state) => const StockDetailScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/production/requests',
+        builder: (context, state) => const ProductionRequestsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/production/preparation',
+        builder: (context, state) => const OrderPreparationScreen(),
       ),
     ],
   );

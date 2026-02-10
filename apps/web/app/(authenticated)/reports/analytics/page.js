@@ -18,7 +18,9 @@ import { PieChart } from '@mui/x-charts/PieChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { analyticsAPI } from '@/lib/api';
+
 import styles from './analytics.module.css';
+import { useFactory } from '@/contexts/FactoryContext'; // Import Context
 
 const TIME_PERIODS = [
     { label: 'Last 7 Days', value: '7' },
@@ -34,6 +36,7 @@ export default function AnalyticsPage() {
     const [showCustomDateRange, setShowCustomDateRange] = useState(false);
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
+    const { selectedFactory } = useFactory(); // Use Global Context
 
     // State for all analytics data
     const [summary, setSummary] = useState(null);
@@ -46,9 +49,10 @@ export default function AnalyticsPage() {
     useEffect(() => {
         setPageTitle('Production Analytics');
         fetchAllAnalytics();
-    }, [timePeriod]);
+    }, [timePeriod, selectedFactory]);
 
     const getDateRange = () => {
+        // ... existing code
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
 
@@ -99,6 +103,10 @@ export default function AnalyticsPage() {
                 end_date: dateRange.end_date,
             };
 
+            if (selectedFactory) {
+                params.factory_id = selectedFactory;
+            }
+
             const [summaryData, cycleData, weightData, downtimeData, efficiencyData, shiftData] =
                 await Promise.all([
                     analyticsAPI.getSummary(params),
@@ -144,6 +152,7 @@ export default function AnalyticsPage() {
                     </p>
                 </div>
                 <div className={styles.timeSelector}>
+
                     {TIME_PERIODS.map((period) => (
                         <button
                             key={period.value}

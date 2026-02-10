@@ -29,7 +29,7 @@ export class MachineProductController {
 
     async list(req: Request, res: Response) {
         try {
-            const { machine_id, product_id } = req.query;
+            const { machine_id, product_id, factory_id } = req.query;
 
             let mappings;
             if (machine_id) {
@@ -37,7 +37,7 @@ export class MachineProductController {
             } else if (product_id) {
                 mappings = await machineProductService.getMappingsByProduct(product_id as string);
             } else {
-                mappings = await machineProductService.getAllMappings();
+                mappings = await machineProductService.getAllMappings(factory_id as string | undefined);
             }
 
             res.json(mappings);

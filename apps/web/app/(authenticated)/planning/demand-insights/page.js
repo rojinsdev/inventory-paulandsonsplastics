@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { planningAPI } from '@/lib/api/planning';
 import {
     TrendingUp,
@@ -28,25 +29,16 @@ const TIME_PERIODS = [
 
 export default function DemandInsightsPage() {
     const { setPageTitle } = useUI();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [period, setPeriod] = useState('3m');
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
     const [showCustomRange, setShowCustomRange] = useState(false);
-    const [demandData, setDemandData] = useState(null);
-    const [seasonalPatterns, setSeasonalPatterns] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState('');
 
-    useEffect(() => {
-        setPageTitle('Demand Insights');
-        loadData();
-    }, [setPageTitle]);
-
-    const loadData = async () => {
-        setLoading(true);
-        setError(null);
-        try {
+    // Query for demand insights
+    const { data: demandData, isLoading: demandLoading, error: demandError, refetch: refetchDemand } = useQuery({
+        queryKey: ['demand-insights', period, customStartDate, customEndDate, selectedProduct],
+        queryFn: () => {
             const filters = {
                 period,
                 ...(period === 'custom' && customStartDate && customEndDate && {
@@ -55,19 +47,27 @@ export default function DemandInsightsPage() {
                 }),
                 ...(selectedProduct && { product_id: selectedProduct }),
             };
+            return planningAPI.getDemandTrends(filters);
+        },
+    });
 
-            const [trends, patterns] = await Promise.all([
-                planningAPI.getDemandTrends(filters),
-                planningAPI.getSeasonalPatterns({ is_active: true }),
-            ]);
+    // Query for seasonal patterns
+    const { data: patternsData, isLoading: patternsLoading, error: patternsError, refetch: refetchPatterns } = useQuery({
+        queryKey: ['seasonal-patterns'],
+        queryFn: () => planningAPI.getSeasonalPatterns({ is_active: true }),
+    });
 
-            setDemandData(trends);
-            setSeasonalPatterns(patterns.patterns || []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
+    const loading = demandLoading || patternsLoading;
+    const error = demandError?.message || patternsError?.message;
+    const seasonalPatterns = patternsData?.patterns || [];
+
+    useEffect(() => {
+        setPageTitle('Demand Insights');
+    }, [setPageTitle]);
+
+    const loadData = () => {
+        refetchDemand();
+        refetchPatterns();
     };
 
     const handlePeriodChange = (newPeriod) => {
@@ -76,14 +76,12 @@ export default function DemandInsightsPage() {
             setShowCustomRange(true);
         } else {
             setShowCustomRange(false);
-            setTimeout(loadData, 100);
         }
     };
 
     const handleApplyCustomRange = () => {
         if (customStartDate && customEndDate) {
             setShowCustomRange(false);
-            loadData();
         }
     };
 
@@ -224,7 +222,6 @@ export default function DemandInsightsPage() {
                             onClick={() => {
                                 setShowCustomRange(false);
                                 setPeriod('3m');
-                                loadData();
                             }}
                             className={styles.cancelButton}
                         >

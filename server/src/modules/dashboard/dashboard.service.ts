@@ -87,24 +87,36 @@ export interface ComprehensiveDashboardData {
 }
 
 export class DashboardService {
-    async getStats(): Promise<DashboardStats> {
+    async getStats(factoryId?: string): Promise<DashboardStats> {
         const today = new Date().toISOString().split('T')[0];
 
         // 1. Today's Production: Sum of actual_quantity from production_logs for today
-        const { data: productionData, error: productionError } = await supabase
+        let productionQuery = supabase
             .from('production_logs')
             .select('actual_quantity')
             .eq('date', today);
+
+        if (factoryId) {
+            productionQuery = productionQuery.eq('factory_id', factoryId);
+        }
+
+        const { data: productionData, error: productionError } = await productionQuery;
 
         if (productionError) throw new Error(`Production stats error: ${productionError.message}`);
 
         const todaysProduction = productionData.reduce((sum, log) => sum + (log.actual_quantity || 0), 0);
 
         // 2. Active Machines: Count of machines where status = 'active'
-        const { count: activeMachines, error: machinesError } = await supabase
+        let machinesQuery = supabase
             .from('machines')
             .select('*', { count: 'exact', head: true })
             .eq('status', 'active');
+
+        if (factoryId) {
+            machinesQuery = machinesQuery.eq('factory_id', factoryId);
+        }
+
+        const { count: activeMachines, error: machinesError } = await machinesQuery;
 
         if (machinesError) throw new Error(`Machine stats error: ${machinesError.message}`);
 
@@ -118,9 +130,15 @@ export class DashboardService {
         if (ordersError) throw new Error(`Order stats error: ${ordersError.message}`);
 
         // 4. Low Stock Alerts: Count of raw_materials where stock_weight_kg < 100kg (Default Threshold)
-        const { data: materials, error: materialsError } = await supabase
+        let materialsQuery = supabase
             .from('raw_materials')
             .select('stock_weight_kg');
+
+        if (factoryId) {
+            materialsQuery = materialsQuery.eq('factory_id', factoryId);
+        }
+
+        const { data: materials, error: materialsError } = await materialsQuery;
 
         if (materialsError) throw new Error(`Inventory stats error: ${materialsError.message}`);
 
@@ -144,21 +162,21 @@ export class DashboardService {
 
         // Production Metrics
         const productionMetrics = await this.getProductionMetrics(today, start, end);
-        
+
         // Inventory Metrics
         const inventoryMetrics = await this.getInventoryMetrics();
-        
+
         // Sales Metrics
         const salesMetrics = await this.getSalesMetrics(today, start, end);
-        
+
         // Chart Data
         const productionTrends = await this.getProductionTrends(start, end);
         const machinePerformance = await this.getMachinePerformance(today);
         const salesTrends = await this.getSalesTrends(start, end);
-        
+
         // Activity Feed
         const recentActivity = await this.getRecentActivity();
-        
+
         // Alerts
         const alerts = await this.getAlerts(today);
 
@@ -257,7 +275,7 @@ export class DashboardService {
             .select('stock_weight_kg, min_threshold_kg');
 
         const rawMaterialStock = rawMaterials?.reduce((sum, m) => sum + (m.stock_weight_kg || 0), 0) || 0;
-        const lowStockAlerts = rawMaterials?.filter(m => 
+        const lowStockAlerts = rawMaterials?.filter(m =>
             (m.stock_weight_kg || 0) < (m.min_threshold_kg || 100)
         ).length || 0;
 
@@ -353,11 +371,11 @@ export class DashboardService {
         if (logs) {
             logs.forEach((log: any) => {
                 const machineId = log.machine_id;
-                const existing = machineMap.get(machineId) || { 
-                    efficiency: 0, 
-                    count: 0, 
-                    name: log.machines?.name || 'Unknown', 
-                    status: log.machines?.status || 'unknown' 
+                const existing = machineMap.get(machineId) || {
+                    efficiency: 0,
+                    count: 0,
+                    name: log.machines?.name || 'Unknown',
+                    status: log.machines?.status || 'unknown'
                 };
                 existing.efficiency += log.efficiency_percentage || 0;
                 existing.count += 1;
@@ -503,7 +521,7 @@ export class DashboardService {
         const { data: rawMaterials } = await supabase
             .from('raw_materials')
             .select('id, name, stock_weight_kg, min_threshold_kg');
-        
+
         const lowStock = (rawMaterials || [])
             .filter((m: any) => (m.stock_weight_kg || 0) < (m.min_threshold_kg || 100))
             .map((m: any) => ({
@@ -517,7 +535,7 @@ export class DashboardService {
         const { data: machines } = await supabase
             .from('machines')
             .select('id, name, status');
-        
+
         const { data: todayLogs } = await supabase
             .from('production_logs')
             .select('machine_id, efficiency_percentage, machines(name, status)')
@@ -536,15 +554,15 @@ export class DashboardService {
             .filter((m: any) => {
                 const status = m.status;
                 const avgEff = machineEfficiencyMap.get(m.id);
-                const efficiency = avgEff && avgEff.count > 0 
-                    ? avgEff.efficiency / avgEff.count 
+                const efficiency = avgEff && avgEff.count > 0
+                    ? avgEff.efficiency / avgEff.count
                     : 0;
                 return status === 'maintenance' || (efficiency > 0 && efficiency < 70);
             })
             .map((m: any) => {
                 const avgEff = machineEfficiencyMap.get(m.id);
-                const efficiency = avgEff && avgEff.count > 0 
-                    ? Math.round((avgEff.efficiency / avgEff.count) * 100) / 100 
+                const efficiency = avgEff && avgEff.count > 0
+                    ? Math.round((avgEff.efficiency / avgEff.count) * 100) / 100
                     : 0;
                 return {
                     machineId: m.id,

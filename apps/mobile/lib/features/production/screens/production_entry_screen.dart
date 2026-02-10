@@ -44,6 +44,31 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
     super.dispose();
   }
 
+  Future<void> _fetchLastSession() async {
+    if (_selectedMachineId == null) return;
+
+    try {
+      final repository = ref.read(productionRepositoryProvider);
+      final lastEndTime = await repository.getLastSessionEndTime(
+        machineId: _selectedMachineId!,
+        date: _selectedDate,
+        shiftNumber: _shiftNumber,
+      );
+
+      if (lastEndTime != null && mounted) {
+        final parts = lastEndTime.split(':');
+        setState(() {
+          _startTime = TimeOfDay(
+            hour: int.parse(parts[0]),
+            minute: int.parse(parts[1]),
+          );
+        });
+      }
+    } catch (e) {
+      // Ignore background fetch errors
+    }
+  }
+
   Future<void> _selectDate(BuildContext context) async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -69,9 +94,42 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
           _startTime = picked;
         } else {
           _endTime = picked;
+          _checkShiftBoundary(picked);
         }
       });
     }
+  }
+
+  void _checkShiftBoundary(TimeOfDay picked) {
+    if (_shiftNumber == 1) {
+      // Shift 1 ends at 8PM (20:00)
+      if (picked.hour > 20 || (picked.hour == 20 && picked.minute > 0)) {
+        _showShiftWarning(2);
+      }
+    } else {
+      // Shift 2 ends at 8AM (08:00)
+      if (picked.hour > 8 && picked.hour < 20) {
+        _showShiftWarning(1);
+      }
+    }
+  }
+
+  void _showShiftWarning(int nextShift) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Note: This time falls into Shift $nextShift boundary.',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.orange.shade800,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'OK',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
+      ),
+    );
   }
 
   void _submit({bool saveAndAddAnother = false}) {
@@ -386,6 +444,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                       _endTime = const TimeOfDay(hour: 8, minute: 0);
                     }
                   });
+                  _fetchLastSession();
                 },
                 style: ButtonStyle(
                   visualDensity: VisualDensity.comfortable,
@@ -461,7 +520,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
               // Machine Dropdown
               machinesAsync.when(
                 data: (machines) => DropdownButtonFormField<String>(
-                  value: _selectedMachineId,
+                  initialValue: _selectedMachineId,
                   decoration: const InputDecoration(
                     labelText: 'Machine',
                     prefixIcon: Icon(Icons.precision_manufacturing_outlined),
@@ -471,8 +530,10 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                       .map((m) =>
                           DropdownMenuItem(value: m.id, child: Text(m.name)))
                       .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedMachineId = value),
+                  onChanged: (value) {
+                    setState(() => _selectedMachineId = value);
+                    _fetchLastSession();
+                  },
                   validator: (value) => value == null ? 'Required' : null,
                 ),
                 loading: () => const LinearProgressIndicator(),
@@ -484,7 +545,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
               // Product Dropdown
               productsAsync.when(
                 data: (products) => DropdownButtonFormField<String>(
-                  value: _selectedProductId,
+                  initialValue: _selectedProductId,
                   decoration: const InputDecoration(
                     labelText: 'Product',
                     prefixIcon: Icon(Icons.inventory_2_outlined),

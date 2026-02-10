@@ -3,23 +3,46 @@
 import { useState, useEffect } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { useGuide } from '@/contexts/GuideContext';
+import { useSearchParams } from 'next/navigation';
 import {
     Loader2,
     Package,
     Boxes,
     PackageCheck,
     Lock,
+    Truck,
+    History,
     TrendingUp,
     TrendingDown,
 } from 'lucide-react';
-import { inventoryAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
+import { inventoryAPI, productsAPI } from '@/lib/api';
 import { formatNumber } from '@/lib/utils';
+import InternalStockTable from '@/components/inventory/InternalStockTable';
 import styles from './page.module.css';
 
 export default function StockOverviewPage() {
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
+    const { selectedFactory } = useFactory();
+    const searchParams = useSearchParams();
+    const initialSearch = searchParams.get('search') || '';
+
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [stockRaw, setStockRaw] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [filters, setFilters] = useState({
+        search: initialSearch,
+        product_id: '',
+        factory_id: '',
+    });
+    const [stockData, setStockData] = useState({
+        semi_finished: 0,
+        packed: 0,
+        finished: 0,
+        reserved: 0,
+    });
 
     useEffect(() => {
         setPageTitle('Inventory Overview');
@@ -34,6 +57,10 @@ export default function StockOverviewPage() {
                 {
                     title: "State Transition",
                     explanation: "Inventory moves from Semi-Finished ➔ Packed ➔ Finished ➔ Reserved. Each stage adds value or locks availability."
+                },
+                {
+                    title: "Unified Hub",
+                    explanation: "The table below shows every product's status across all stages in a single row."
                 }
             ],
             components: [
@@ -42,29 +69,30 @@ export default function StockOverviewPage() {
                     description: "Clickable metrics that show total KGs/Units in a specific state. Yellow = WIP, Blue = Packed, Green = Saleable."
                 },
                 {
-                    name: "Flow Diagram",
-                    description: "Visual logic showing how materials progress through the factory before reaching the customer."
+                    name: "Internal Stock Table",
+                    description: "A product-centric view of your entire inventory."
                 }
             ]
         });
     }, [registerGuide, setPageTitle]);
-    const [error, setError] = useState(null);
-    const [stockData, setStockData] = useState({
-        semi_finished: 0,
-        packed: 0,
-        finished: 0,
-        reserved: 0,
-    });
 
     useEffect(() => {
-        loadStock();
-    }, []);
+        loadData();
+    }, [selectedFactory]);
 
-    const loadStock = async () => {
+    const loadData = async () => {
         try {
             setLoading(true);
-            const data = await inventoryAPI.getStock();
-            if (data && Array.isArray(data)) {
+            // Fetch all stock/products to keep the hub "Master" as requested
+            const [stockRes, productsRes] = await Promise.all([
+                inventoryAPI.getStock(),
+                productsAPI.getAll()
+            ]);
+
+            setStockRaw(stockRes || []);
+            setProducts(productsRes || []);
+
+            if (stockRes && Array.isArray(stockRes)) {
                 const stats = {
                     semi_finished: 0,
                     packed: 0,
@@ -72,8 +100,7 @@ export default function StockOverviewPage() {
                     reserved: 0,
                 };
 
-                data.forEach((item) => {
-                    // Ensure state matches keys (DB uses snake_case which matches our keys)
+                stockRes.forEach((item) => {
                     if (stats.hasOwnProperty(item.state)) {
                         stats[item.state] += Number(item.quantity) || 0;
                     }
@@ -92,28 +119,28 @@ export default function StockOverviewPage() {
         {
             key: 'semi_finished',
             label: 'Semi-Finished',
-            description: 'Items produced, not yet packed',
+            description: 'Loose items',
             icon: Package,
             color: 'yellow',
         },
         {
             key: 'packed',
             label: 'Packed',
-            description: 'Items packed into packets',
+            description: 'Packets ready',
             icon: Boxes,
             color: 'blue',
         },
         {
             key: 'finished',
             label: 'Finished',
-            description: 'Bundles ready for sale',
+            description: 'Bundles ready',
             icon: PackageCheck,
             color: 'green',
         },
         {
             key: 'reserved',
             label: 'Reserved',
-            description: 'Reserved for sales orders',
+            description: 'Locked for orders',
             icon: Lock,
             color: 'purple',
         },
@@ -126,7 +153,7 @@ export default function StockOverviewPage() {
         <>
             <div className="page-header">
                 <div>
-                    <p className="text-muted">View inventory state across all stages</p>
+                    <p className="text-muted">Master Internal Stock Hub</p>
                 </div>
             </div>
 
@@ -138,7 +165,7 @@ export default function StockOverviewPage() {
             ) : error ? (
                 <div className={styles.error}>
                     <p>Error: {error}</p>
-                    <button className="btn btn-secondary" onClick={loadStock}>
+                    <button className="btn btn-secondary" onClick={loadData}>
                         Retry
                     </button>
                 </div>
@@ -154,88 +181,36 @@ export default function StockOverviewPage() {
                                     <div className={`${styles.stockIcon} ${styles[card.color]}`}>
                                         <Icon size={24} />
                                     </div>
-                                    <div className={styles.stockValue}>{formatNumber(value)}</div>
-                                    <div className={styles.stockLabel}>{card.label}</div>
-                                    <div className={styles.stockDesc}>{card.description}</div>
+                                    <div className={styles.stockContent}>
+                                        <div className={styles.stockValue}>{formatNumber(value)}</div>
+                                        <div className={styles.stockLabel}>{card.label}</div>
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                            {card.description}
+                                        </div>
+                                    </div>
                                 </div>
                             );
                         })}
                     </div>
 
-                    {/* Summary Cards */}
-                    <div className={styles.summaryRow}>
-                        <div className="card">
-                            <div className="card-body">
-                                <div className={styles.summaryCard}>
-                                    <div className={styles.summaryIcon}>
-                                        <TrendingUp size={24} />
-                                    </div>
-                                    <div>
-                                        <div className={styles.summaryValue}>{formatNumber(totalItems)}</div>
-                                        <div className={styles.summaryLabel}>Total Items (Semi + Packed)</div>
-                                    </div>
-                                </div>
+                    {/* Unified Stock Table */}
+                    <div style={{ marginTop: '2.5rem' }}>
+                        <div className="page-header" style={{ marginBottom: '1.25rem' }}>
+                            <div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Internal Stock Levels</h3>
+                                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Real-time inventory across all production stages</p>
                             </div>
                         </div>
-                        <div className="card">
-                            <div className="card-body">
-                                <div className={styles.summaryCard}>
-                                    <div className={styles.summaryIcon}>
-                                        <TrendingDown size={24} />
-                                    </div>
-                                    <div>
-                                        <div className={styles.summaryValue}>{formatNumber(totalBundles)}</div>
-                                        <div className={styles.summaryLabel}>Total Bundles (Finished + Reserved)</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <InternalStockTable
+                            stock={stockRaw}
+                            products={products}
+                            loading={loading}
+                            filters={filters}
+                            setFilters={setFilters}
+                            factories={useFactory().factories}
+                        />
                     </div>
 
-                    {/* Flow Diagram */}
-                    <div className="card" style={{ marginTop: 'var(--space-6)' }}>
-                        <div className="card-header">
-                            <h3>Inventory Flow</h3>
-                        </div>
-                        <div className="card-body">
-                            <div className={styles.flowDiagram}>
-                                <div className={styles.flowStep}>
-                                    <div className={`${styles.flowIcon} ${styles.yellow}`}>
-                                        <Package size={20} />
-                                    </div>
-                                    <span>Semi-Finished</span>
-                                </div>
-                                <div className={styles.flowArrow}>→</div>
-                                <div className={styles.flowStep}>
-                                    <div className={`${styles.flowIcon} ${styles.blue}`}>
-                                        <Boxes size={20} />
-                                    </div>
-                                    <span>Packed</span>
-                                </div>
-                                <div className={styles.flowArrow}>→</div>
-                                <div className={styles.flowStep}>
-                                    <div className={`${styles.flowIcon} ${styles.green}`}>
-                                        <PackageCheck size={20} />
-                                    </div>
-                                    <span>Finished</span>
-                                </div>
-                                <div className={styles.flowArrow}>→</div>
-                                <div className={styles.flowStep}>
-                                    <div className={`${styles.flowIcon} ${styles.purple}`}>
-                                        <Lock size={20} />
-                                    </div>
-                                    <span>Reserved</span>
-                                </div>
-                                <div className={styles.flowArrow}>→</div>
-                                <div className={styles.flowStep}>
-                                    <div className={`${styles.flowIcon} ${styles.gray}`}>
-                                        <Package size={20} />
-                                    </div>
-                                    <span>Delivered</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </>
             )}
         </>

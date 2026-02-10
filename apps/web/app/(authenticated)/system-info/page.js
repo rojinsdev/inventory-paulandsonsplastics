@@ -1,70 +1,60 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Server, Database, CheckCircle, XCircle, Clock, Info, RefreshCw, Activity, Globe, Code } from 'lucide-react';
 import styles from './page.module.css';
 
 export default function SystemInfoPage() {
     const { setPageTitle } = useUI();
-    const [loading, setLoading] = useState(true);
-    const [apiStatus, setApiStatus] = useState('checking');
-    const [dbStatus, setDbStatus] = useState('checking');
-    const [systemInfo, setSystemInfo] = useState(null);
-    const [lastChecked, setLastChecked] = useState(null);
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
+    // Query for health status
+    const { data: healthData, isLoading: loading, refetch } = useQuery({
+        queryKey: ['system-health'],
+        queryFn: async () => {
+            try {
+                const response = await fetch(`${baseUrl}/health`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    return {
+                        api: 'online',
+                        db: data.database === 'connected' ? 'online' : 'offline',
+                        lastChecked: new Date()
+                    };
+                }
+                return { api: 'error', db: 'offline', lastChecked: new Date() };
+            } catch (err) {
+                return { api: 'offline', db: 'offline', lastChecked: new Date() };
+            }
+        },
+        refetchInterval: 30000, // Refresh every 30 seconds
+    });
+
+    const apiStatus = healthData?.api || 'checking';
+    const dbStatus = healthData?.db || 'checking';
+    const lastChecked = healthData?.lastChecked || null;
+
+    const systemInfo = {
+        app_version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
+        api_url: baseUrl,
+        build_time: new Date().toISOString(),
+        node_version: typeof window !== 'undefined' ? navigator.userAgent : 'N/A',
+    };
+
 
     useEffect(() => {
         setPageTitle('System Info');
-        checkSystem();
     }, [setPageTitle]);
 
-    const checkSystem = async () => {
-        setLoading(true);
-        setApiStatus('checking');
-        setDbStatus('checking');
-
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-        // Check API status
-        try {
-            const response = await fetch(`${baseUrl}/health`, {
-                method: 'GET',
-                signal: AbortSignal.timeout(5000)
-            });
-
-            if (response.ok) {
-                setApiStatus('online');
-                // Try to get health data which might include DB status
-                try {
-                    const healthData = await response.json();
-                    if (healthData.database) {
-                        setDbStatus(healthData.database === 'connected' ? 'online' : 'offline');
-                    } else {
-                        setDbStatus('online'); // Assume DB is OK if API is OK
-                    }
-                } catch {
-                    setDbStatus('online');
-                }
-            } else {
-                setApiStatus('error');
-                setDbStatus('offline');
-            }
-        } catch (err) {
-            setApiStatus('offline');
-            setDbStatus('offline');
-        }
-
-        // Get system info
-        setSystemInfo({
-            app_version: '1.0.0',
-            environment: process.env.NODE_ENV || 'development',
-            api_url: baseUrl,
-            build_time: new Date().toISOString(),
-            node_version: typeof window !== 'undefined' ? navigator.userAgent : 'N/A',
-        });
-
-        setLastChecked(new Date());
-        setLoading(false);
+    const checkSystem = () => {
+        refetch();
     };
 
     const getStatusColor = (status) => {

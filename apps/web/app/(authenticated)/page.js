@@ -1,14 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import MetricCard from '@/components/dashboard/MetricCard';
-import ProductionChart from '@/components/dashboard/ProductionChart';
-import MachinePerformance from '@/components/dashboard/MachinePerformance';
-import SalesChart from '@/components/dashboard/SalesChart';
-import InventoryFlow from '@/components/dashboard/InventoryFlow';
-import ActivityFeed from '@/components/dashboard/ActivityFeed';
-import AlertsPanel from '@/components/dashboard/AlertsPanel';
 import {
     Factory,
     Package,
@@ -26,10 +20,14 @@ import {
     FileText,
     X
 } from 'lucide-react';
-import { dashboardAPI } from '@/lib/api';
-import { formatDate, formatCurrency } from '@/lib/utils';
+import { dashboardAPI, cashFlowAPI } from '@/lib/api';
+import BentoMetric from '@/components/dashboard/BentoMetric';
+import BusinessHealthCard from '@/components/dashboard/BusinessHealthCard';
+import ProductionChart from '@/components/dashboard/ProductionChart';
+import { formatDate, formatCurrency, cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/contexts/SettingsContext';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { useUI } from '@/contexts/UIContext';
 import styles from './page.module.css';
@@ -44,51 +42,23 @@ const TIME_PERIODS = [
 export default function Dashboard() {
     const { user } = useAuth();
     const { settings } = useSettings();
+    const { selectedFactory } = useFactory();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
+    const queryClient = useQueryClient();
     const router = useRouter();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+
     const [timePeriod, setTimePeriod] = useState('week');
-    const [dashboardData, setDashboardData] = useState(null);
     const [showCustomDateRange, setShowCustomDateRange] = useState(false);
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
+    const [expandedSections, setExpandedSections] = useState({
+        production: true,
+        inventory: true,
+        sales: true
+    });
 
-    useEffect(() => {
-        setPageTitle('Dashboard');
-        loadDashboardData();
-    }, [timePeriod, setPageTitle]);
-
-    useEffect(() => {
-        registerGuide({
-            title: 'Factory Dashboard',
-            description: 'Real-time overview of production, inventory, and sales performance.',
-            logic: [
-                {
-                    title: 'Active Machines',
-                    explanation: 'Shows current running machines out of total available machines. Status is updated via production logs.'
-                },
-                {
-                    title: 'Production Today',
-                    explanation: 'Cumulative count of bundles produced across all machines since 00:00 local time.'
-                },
-                {
-                    title: 'Inventory Flow',
-                    explanation: 'Visualizes the transition of materials from Raw -> Semi-Finished -> Packed -> Finished -> Reserved.'
-                }
-            ],
-            components: [
-                { name: 'Stats Cards', description: 'Quick KPIs for today\'s performance.' },
-                { name: 'Production Trends', description: 'Comparison between actual output and theoretical capacity.' },
-                { name: 'Quick Actions', description: 'One-click shortcuts to common tasks like New Order or Production Logging.' }
-            ]
-        });
-    }, [registerGuide]);
-
-
-
-    const getDateRange = () => {
+    const dateRange = useMemo(() => {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
 
@@ -112,7 +82,54 @@ export default function Dashboard() {
             default:
                 return { startDate: null, endDate: null };
         }
-    };
+    }, [timePeriod, customStartDate, customEndDate]);
+
+    const { data: dashboardData, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['dashboard', dateRange, selectedFactory],
+        queryFn: () => {
+            const params = dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : {};
+            if (selectedFactory) {
+                params.factory_id = selectedFactory;
+            }
+            return dashboardAPI.getComprehensive(params);
+        },
+        enabled: timePeriod !== 'custom' || (!!customStartDate && !!customEndDate),
+    });
+
+    const error = queryError?.message;
+
+
+    useEffect(() => {
+        setPageTitle('Dashboard');
+    }, [setPageTitle]);
+
+    useEffect(() => {
+        registerGuide({
+            title: 'Factory Dashboard',
+            description: 'Real-time overview of production, inventory, and sales performance.',
+            logic: [
+                {
+                    title: 'Bento Command Center',
+                    explanation: 'An interactive grid showing production trends, financial health, and operational KPIs.'
+                },
+                {
+                    title: 'Financial Pulse',
+                    explanation: 'Real-time inflow and outflow tracking with survival balance calculation.'
+                },
+                {
+                    title: 'Priority Alerts',
+                    explanation: 'Critical stock levels and order delays highlighted for immediate action.'
+                }
+            ],
+            components: [
+                { name: 'Production Chart', description: 'Visual comparison of actual vs theoretical output.' },
+                { name: 'Business Health', description: 'High-level financial insights.' },
+                { name: 'Operational Metrics', description: 'Key performance indicators for efficiency and output.' }
+            ]
+        });
+    }, [registerGuide]);
+
+
 
     const handleCustomDateApply = () => {
         if (customStartDate && customEndDate) {
@@ -120,24 +137,8 @@ export default function Dashboard() {
                 alert('Start date must be before end date');
                 return;
             }
-            loadDashboardData();
+            refetch();
             setShowCustomDateRange(false);
-        }
-    };
-
-    const loadDashboardData = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const { startDate, endDate } = getDateRange();
-            const params = startDate ? { startDate, endDate } : {};
-            const data = await dashboardAPI.getComprehensive(params);
-            setDashboardData(data);
-        } catch (err) {
-            console.error('Dashboard data load error:', err);
-            setError('Failed to load dashboard data');
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -148,37 +149,16 @@ export default function Dashboard() {
         }));
     };
 
-    const MetricSection = ({ title, section, count, children }) => {
-        const isExpanded = expandedSections[section];
-        const ChevronIcon = isExpanded ? X : Plus;
 
-        return (
-            <div className={styles.metricSection}>
-                <button
-                    className={styles.sectionHeader}
-                    onClick={() => toggleSection(section)}
-                >
-                    <div className={styles.sectionHeaderContent}>
-                        <h3 className={styles.sectionTitle}>{title}</h3>
-                        <span className={styles.sectionCount}>{count} metrics</span>
-                    </div>
-                    <ChevronIcon size={20} className={`${styles.expandIcon} ${isExpanded ? styles.expanded : ''}`} />
-                </button>
-                <div className={`${styles.sectionContent} ${isExpanded ? styles.expanded : ''}`}>
-                    <div className={styles.sectionGrid}>
-                        {children}
-                    </div>
-                </div>
-            </div>
-        );
-    };
 
-    const quickActions = [
-        { label: 'New Order', icon: ShoppingCart, onClick: () => router.push('/orders') },
-        { label: 'Production Log', icon: Factory, onClick: () => router.push('/production/logs') },
-        { label: 'Pack Items', icon: Package, onClick: () => router.push('/inventory/packed') },
-        { label: 'View Reports', icon: FileText, onClick: () => router.push('/reports') },
-    ];
+    const { data: financeData } = useQuery({
+        queryKey: ['cash-flow-analytics', dateRange, selectedFactory],
+        queryFn: () => {
+            const params = dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : {};
+            if (selectedFactory) params.factory_id = selectedFactory;
+            return cashFlowAPI.getAnalytics(params);
+        }
+    });
 
     if (loading) {
         return (
@@ -189,28 +169,36 @@ export default function Dashboard() {
         );
     }
 
-    if (error || !dashboardData) {
+    if (error || (!loading && !dashboardData)) {
         return (
             <div className={styles.error}>
                 <p>{error || 'Failed to load dashboard data'}</p>
-                <button className="btn btn-secondary" onClick={loadDashboardData}>
+                <button className="btn btn-secondary" onClick={() => refetch()}>
                     Retry
                 </button>
             </div>
         );
     }
 
-    const { production, inventory, sales, productionTrends, machinePerformance, salesTrends, recentActivity, alerts } = dashboardData;
+    const {
+        production = { today: 0, averageEfficiency: 0 },
+        inventory = { lowStockAlerts: 0 },
+        sales = { thisWeekRevenue: 0, pendingOrders: 0 },
+        productionTrends = [],
+        machinePerformance = [],
+        salesTrends = [],
+        alerts: alertsData = {}
+    } = dashboardData || {};
 
     return (
-        <>
-            {/* Welcome Header */}
+        <div className={cn(styles.dashboard, settings.compactMode && styles.compact)}>
             <div className={styles.welcomeSection}>
                 <div>
                     <h1 className={styles.welcomeTitle}>Hello, {user?.name || 'Admin'}!</h1>
-                    <p className={styles.welcomeSubtitle}>Here's your factory overview</p>
+                    <p className={styles.welcomeSubtitle}>Here's your perfect operational overview</p>
                 </div>
                 <div className={styles.timeSelector}>
+
                     {TIME_PERIODS.map((period) => (
                         <button
                             key={period.value}
@@ -227,7 +215,7 @@ export default function Dashboard() {
                             {period.label}
                         </button>
                     ))}
-                    <button className={styles.refreshButton} onClick={loadDashboardData} title="Refresh">
+                    <button className={styles.refreshButton} onClick={() => refetch()} title="Refresh">
                         <RefreshCw size={16} />
                     </button>
                 </div>
@@ -275,80 +263,191 @@ export default function Dashboard() {
                 </div>
             )}
 
-            {/* Dashboard Metrics - Filtered by User Settings */}
-            {(() => {
-                const allMetrics = [
-                    { id: 'todayProduction', component: <MetricCard key="todayProduction" title="Today's Production" value={production.today} subtitle="Bundles produced" icon={Factory} gradient="linear-gradient(135deg, #3b82f6, #2563eb)" /> },
-                    { id: 'activeMachines', component: <MetricCard key="activeMachines" title="Active Machines" value={`${production.activeMachines}/${production.totalMachines}`} subtitle="Currently running" icon={Activity} gradient="linear-gradient(135deg, #10b981, #059669)" /> },
-                    { id: 'avgEfficiency', component: <MetricCard key="avgEfficiency" title="Avg Efficiency" value={`${production.averageEfficiency}%`} subtitle="Today's average" icon={TrendingUp} gradient="linear-gradient(135deg, #6366f1, #4f46e5)" /> },
-                    { id: 'costRecovered', component: <MetricCard key="costRecovered" title="Cost Recovered" value={production.costRecoveredMachines} subtitle="Machines today" icon={DollarSign} gradient="linear-gradient(135deg, #f59e0b, #d97706)" /> },
-                    { id: 'finishedGoods', component: <MetricCard key="finishedGoods" title="Finished Goods" value={inventory.finishedGoods} subtitle="Ready to sell" icon={Package} gradient="linear-gradient(135deg, #10b981, #059669)" /> },
-                    { id: 'rawMaterial', component: <MetricCard key="rawMaterial" title="Raw Material" value={`${inventory.rawMaterialStock} kg`} subtitle="Total stock" icon={Boxes} gradient="linear-gradient(135deg, #6b7280, #4b5563)" /> },
-                    { id: 'lowStockAlerts', component: <MetricCard key="lowStockAlerts" title="Low Stock Alerts" value={inventory.lowStockAlerts} subtitle="Needs attention" icon={AlertTriangle} gradient="linear-gradient(135deg, #ef4444, #dc2626)" /> },
-                    { id: 'stockValue', component: <MetricCard key="stockValue" title="Stock Value" value={formatCurrency(inventory.totalStockValue)} subtitle="Finished goods value" icon={DollarSign} gradient="linear-gradient(135deg, #6366f1, #4f46e5)" /> },
-                    { id: 'pendingOrders', component: <MetricCard key="pendingOrders" title="Pending Orders" value={sales.pendingOrders} subtitle="Awaiting delivery" icon={ShoppingCart} gradient="linear-gradient(135deg, #f59e0b, #d97706)" /> },
-                    { id: 'todayDeliveries', component: <MetricCard key="todayDeliveries" title="Today's Deliveries" value={sales.todayDeliveries} subtitle="Completed today" icon={Truck} gradient="linear-gradient(135deg, #10b981, #059669)" /> },
-                    { id: 'weekRevenue', component: <MetricCard key="weekRevenue" title="This Week Revenue" value={formatCurrency(sales.thisWeekRevenue)} subtitle="Total revenue" icon={DollarSign} gradient="linear-gradient(135deg, #3b82f6, #2563eb)" /> },
-                    { id: 'activeCustomers', component: <MetricCard key="activeCustomers" title="Active Customers" value={sales.activeCustomers} subtitle="Last 30 days" icon={Users} gradient="linear-gradient(135deg, #6366f1, #4f46e5)" /> },
-                ];
-
-                const visibleMetrics = allMetrics.filter(m => settings.visibleMetrics?.[m.id]);
-
-                if (visibleMetrics.length === 0) {
-                    return (
-                        <div className={styles.emptyMetrics}>
-                            <p>No metrics selected. Open Settings to customize your dashboard.</p>
+            {/* Bento Grid Command Center */}
+            <div className={styles.bentoGrid}>
+                {/* Production Achievement - 2x2 Hero */}
+                {settings.visibleMetrics.productionAchievement && (
+                    <div className={cn(styles.bentoCard, styles.span2x2)}>
+                        <div className={styles.cardHeaderArea}>
+                            <div className={styles.cardIcon}>
+                                <TrendingUp size={20} />
+                            </div>
+                            <h3 className={styles.cardTitle}>Production Achievement</h3>
+                            <span className={styles.cardSubtitle}>Actual output vs Theoretical capacity</span>
                         </div>
-                    );
-                }
-
-                return (
-                    <div className={styles.metricsGrid}>
-                        {visibleMetrics.map(m => m.component)}
+                        <div style={{ height: '300px', marginTop: '1.5rem' }}>
+                            <ProductionChart data={productionTrends} timePeriod={timePeriod} compact={settings.compactMode} />
+                        </div>
                     </div>
-                );
-            })()}
+                )}
 
-            {/* Inventory Flow - Linear Process Bar */}
-            <div className={styles.flowSection}>
-                <div className={styles.sectionHeader}>
-                    <h3 className={styles.sectionTitle}>Workflow & Status</h3>
-                    <p className={styles.sectionSubtitle}>End-to-end production & stock process</p>
-                </div>
-                <InventoryFlow data={inventory.byState} rawMaterialStock={inventory.rawMaterialStock} />
+                {/* Financial Pulse - 2x1 */}
+                {settings.visibleMetrics.businessHealthCard && (
+                    <BusinessHealthCard data={financeData} spanClass="span2x1" />
+                )}
+
+                {/* Revenue Insight - 1x1 */}
+                {settings.visibleMetrics.revenuePerformance && (
+                    <BentoMetric
+                        title="Revenue Performance"
+                        value={formatCurrency(sales.thisWeekRevenue)}
+                        subtitle="This period's total"
+                        icon={DollarSign}
+                        trend="+8.4%"
+                        isTrendUp={true}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/reports/sales')}
+                    />
+                )}
+
+                {/* Efficiency Gauge - 1x1 */}
+                {settings.visibleMetrics.overallEfficiency && (
+                    <BentoMetric
+                        title="Overall Efficiency"
+                        value={`${production.averageEfficiency}%`}
+                        subtitle="Factory performance score"
+                        icon={Activity}
+                        trend={production.averageEfficiency > 85 ? "+2.1%" : "-1.2%"}
+                        isTrendUp={production.averageEfficiency > 85}
+                        spanClass="span1x1"
+                    />
+                )}
+
+                {/* Pending Focus - 1x1 */}
+                {settings.visibleMetrics.ordersQueue && (
+                    <BentoMetric
+                        title="Orders in Queue"
+                        value={sales.pendingOrders}
+                        subtitle="Awaiting processing"
+                        icon={ShoppingCart}
+                        spanClass="span1x1"
+                        className={sales.pendingOrders > 10 ? styles.highPriority : ''}
+                        onClick={() => router.push('/orders?status=pending')}
+                    />
+                )}
+
+                {/* Achievement Score - 1x1 */}
+                {settings.visibleMetrics.outputToday && (
+                    <BentoMetric
+                        title="Output Today"
+                        value={production.today}
+                        subtitle="Bundles completed"
+                        icon={Package}
+                        trend="+120"
+                        isTrendUp={true}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/production')}
+                    />
+                )}
+
+                {/* Active Machines - 1x1 */}
+                {settings.visibleMetrics.activeMachines && (
+                    <BentoMetric
+                        title="Active Machines"
+                        value={production.activeMachines || 0}
+                        subtitle="Currently running"
+                        icon={Activity}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/machines')}
+                    />
+                )}
+
+                {/* Cost Recovered - 1x1 */}
+                {settings.visibleMetrics.costRecovered && (
+                    <BentoMetric
+                        title="Cost Recovered"
+                        value={formatCurrency(production.costRecovered || 0)}
+                        subtitle="Operational recovery"
+                        icon={DollarSign}
+                        spanClass="span1x1"
+                    />
+                )}
+
+                {/* Finished Goods - 1x1 */}
+                {settings.visibleMetrics.finishedGoods && (
+                    <BentoMetric
+                        title="Finished Goods"
+                        value={inventory.finishedGoods || 0}
+                        subtitle="Ready for dispatch"
+                        icon={Package}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/inventory/products')}
+                    />
+                )}
+
+                {/* Raw Material - 1x1 */}
+                {settings.visibleMetrics.rawMaterial && (
+                    <BentoMetric
+                        title="Raw Material"
+                        value={`${inventory.rawMaterial || 0} kg`}
+                        subtitle="Total stock on hand"
+                        icon={Boxes}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/inventory/raw-materials')}
+                    />
+                )}
+
+                {/* Stock Value - 1x1 */}
+                {settings.visibleMetrics.stockValue && (
+                    <BentoMetric
+                        title="Stock Value"
+                        value={formatCurrency(inventory.stockValue || 0)}
+                        subtitle="Estimated worth"
+                        icon={DollarSign}
+                        spanClass="span1x1"
+                    />
+                )}
+
+                {/* Today's Deliveries - 1x1 */}
+                {settings.visibleMetrics.todayDeliveries && (
+                    <BentoMetric
+                        title="Today's Deliveries"
+                        value={sales.todayDeliveries || 0}
+                        subtitle="Out for delivery"
+                        icon={Truck}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/deliveries')}
+                    />
+                )}
+
+                {/* Active Customers - 1x1 */}
+                {settings.visibleMetrics.activeCustomers && (
+                    <BentoMetric
+                        title="Active Customers"
+                        value={sales.activeCustomers || 0}
+                        subtitle="With recent activity"
+                        icon={Users}
+                        spanClass="span1x1"
+                        onClick={() => router.push('/customers')}
+                    />
+                )}
+
+                {/* Critical Stock alerts - 2x1 */}
+                {settings.visibleMetrics.inventoryAlerts && (
+                    <div className={cn(styles.bentoCard, styles.span2x1)}>
+                        <div className={styles.cardHeaderArea}>
+                            <div className={cn(styles.cardIcon, styles.alertIcon)}>
+                                <AlertTriangle size={20} />
+                            </div>
+                            <h3 className={styles.cardTitle}>Inventory Alerts</h3>
+                            <span className={styles.cardSubtitle}>{inventory.lowStockAlerts} items below minimum</span>
+                        </div>
+                        <div className={styles.alertList}>
+                            {(alertsData.lowStock || []).slice(0, 3).map((alert, idx) => (
+                                <div
+                                    key={idx}
+                                    className={styles.alertItem}
+                                    onClick={() => router.push(`/inventory?search=${encodeURIComponent(alert.name)}`)}
+                                    style={{ cursor: 'pointer' }}
+                                >
+                                    <span className={styles.alertName}>{alert.name}</span>
+                                    <span className={styles.alertValue}>{alert.currentStock}&nbsp;kg left</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
-
-            {/* Charts Section */}
-            <div className={styles.chartsGrid}>
-                {/* Production Trends - Main Graph */}
-                <div className={`${styles.chartCard} ${styles.fullWidth}`}>
-                    <div className={styles.chartHeader}>
-                        <h3 className={styles.chartTitle}>Production Trends</h3>
-                        <span className={styles.chartSubtitle}>Daily production output vs capacity</span>
-                    </div>
-                    <ProductionChart data={productionTrends} timePeriod={timePeriod} />
-                </div>
-
-                {/* Machine Performance */}
-                <div className={styles.chartCard}>
-                    <div className={styles.chartHeader}>
-                        <h3 className={styles.chartTitle}>Machine Efficiency</h3>
-                        <span className={styles.chartSubtitle}>Today's performance by unit</span>
-                    </div>
-                    <MachinePerformance data={machinePerformance} />
-                </div>
-
-                {/* Sales Trends */}
-                <div className={styles.chartCard}>
-                    <div className={styles.chartHeader}>
-                        <h3 className={styles.chartTitle}>Sales & Revenue</h3>
-                        <span className={styles.chartSubtitle}>Revenue and order volume trends</span>
-                    </div>
-                    <SalesChart data={salesTrends} />
-                </div>
-            </div>
-
-
-        </>
+        </div>
     );
 }

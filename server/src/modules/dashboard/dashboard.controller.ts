@@ -4,7 +4,8 @@ import { dashboardService } from './dashboard.service';
 export class DashboardController {
     async getStats(req: Request, res: Response) {
         try {
-            const stats = await dashboardService.getStats();
+            const factoryId = req.query.factory_id as string | undefined;
+            const stats = await dashboardService.getStats(factoryId);
             return res.json(stats);
         } catch (error: any) {
             console.error('Error fetching dashboard stats:', error);

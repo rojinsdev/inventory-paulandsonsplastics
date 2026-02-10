@@ -7,7 +7,8 @@ The **Web Admin Portal** is the central command center for Paul & Sons Plastics.
 - **Framework**: [Next.js 14](https://nextjs.org/) (App Router)
 - **Styling**: Vanilla CSS with CSS Variables (Design System tokens) for a consistent, premium look.
 - **Icons**: [Lucide React](https://lucide.dev/)
-- **Data Fetching**: Custom `fetchAPI` utility interacting with the backend.
+- **Data Fetching**: [TanStack Query v5](https://tanstack.com/query) for intelligent caching and background synchronization.
+- **Real-time**: [Supabase Realtime](https://supabase.com/realtime) for live "hot" table updates between mobile and desktop.
 - **Authentication**: Supabase Auth (via Context API).
 
 ## 3. Application Structure
@@ -27,7 +28,11 @@ The sidebar follows a strictly optimized operational flow:
 5.  **Reports**: Historical data analysis.
 6.  **System**: User access and system health.
 
-### 3.3 Authentication Flow
+### 3.3 State & Sync
+- **Caching**: Global `QueryClient` manages the data lifecycle and prevents loading flickers.
+- **Real-time**: `RealtimeHandler` listens for database changes from the Flutter app and triggers instant UI updates via TanStack invalidate.
+
+### 3.4 Authentication Flow
 - **Login**: `app/login/page.js` handles user credentials.
 - **Protection**: `components/auth/ProtectedRoute.jsx` wraps the layout to ensure only authenticated users can access the system.
 - **Context**: `lib/auth.js` (`AuthProvider`) manages the user session global state.

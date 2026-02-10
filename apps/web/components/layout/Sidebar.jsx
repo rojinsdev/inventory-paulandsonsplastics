@@ -41,9 +41,7 @@ const menuSections = [
                 label: 'Inventory',
                 icon: Boxes,
                 submenu: [
-                    { label: 'Semi-Finished', href: '/inventory/semi-finished' },
-                    { label: 'Packed', href: '/inventory/packed' },
-                    { label: 'Finished Goods', href: '/inventory/finished-goods' },
+                    { label: 'Internal Stock', href: '/inventory' },
                     { label: 'Reserved', href: '/inventory/reserved' },
                     { label: 'Raw Material', href: '/inventory/raw-materials' },
                 ],
@@ -56,6 +54,7 @@ const menuSections = [
                     { label: 'Customers', href: '/customers' },
                     { label: 'Sales Orders', href: '/orders' },
                     { label: 'Deliveries', href: '/deliveries' },
+                    { label: 'Payments', href: '/payments' },
                 ],
             },
             {
@@ -64,6 +63,7 @@ const menuSections = [
                 submenu: [
                     { label: 'Machines', href: '/machines' },
                     { label: 'Products', href: '/products' },
+                    { label: 'Caps', href: '/inventory/caps' },
                     { label: 'Dies & Cycle Time', href: '/die-mappings' },
                     { label: 'Packing Rules', href: '/packing-rules' },
                 ],
@@ -80,6 +80,7 @@ const menuSections = [
                     { label: 'Production Reports', href: '/reports/production' },
                     { label: 'Inventory Reports', href: '/reports/inventory' },
                     { label: 'Sales Reports', href: '/reports/sales' },
+                    { label: 'Cash Flow & Expenses', href: '/reports/cash-flow' },
                     { label: 'Analytics', href: '/reports/analytics' },
                 ],
             },
@@ -96,6 +97,7 @@ const menuSections = [
                 label: 'System',
                 icon: Settings,
                 submenu: [
+                    { label: 'Factories', href: '/factories' },
                     { label: 'User Management', href: '/users' },
                     { label: 'System Settings', href: '/system-settings' },
                     { label: 'Audit Logs', href: '/audit-logs' },

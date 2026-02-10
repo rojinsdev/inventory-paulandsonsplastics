@@ -22,6 +22,27 @@ export class MachineProductService {
             throw new Error('This machine-product mapping already exists. Use update instead.');
         }
 
+        // CRITICAL: Validate machine and product belong to same factory
+        const { data: machine } = await supabase
+            .from('machines')
+            .select('factory_id')
+            .eq('id', data.machine_id)
+            .single();
+
+        const { data: product } = await supabase
+            .from('products')
+            .select('factory_id')
+            .eq('id', data.product_id)
+            .single();
+
+        if (!machine || !product) {
+            throw new Error('Invalid machine or product ID');
+        }
+
+        if (machine.factory_id !== product.factory_id) {
+            throw new Error('Cannot map machine and product from different factories');
+        }
+
         const { data: mapping, error } = await supabase
             .from('machine_products')
             .insert(data)
@@ -32,15 +53,22 @@ export class MachineProductService {
         return mapping;
     }
 
-    async getAllMappings() {
-        const { data, error } = await supabase
+    async getAllMappings(factoryId?: string) {
+        let query = supabase
             .from('machine_products')
             .select(`
                 *,
-                machines(id, name, type, category),
-                products(id, name, size, color, weight_grams)
+                machines(id, name, type, category, factory_id),
+                products(id, name, size, color, weight_grams, factory_id)
             `)
             .order('created_at', { ascending: false });
+
+        // Filter by factory if provided (filter on machines.factory_id)
+        if (factoryId) {
+            query = query.eq('machines.factory_id', factoryId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw new Error(error.message);
         return data;

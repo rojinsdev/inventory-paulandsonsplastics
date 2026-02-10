@@ -4,25 +4,36 @@ import { z } from 'zod';
 
 const createProductSchema = z.object({
     name: z.string().min(1),
-    sku: z.string().optional(),
+    sku: z.string().nullable().optional(),
     size: z.string().min(1),
     color: z.string().min(1),
     weight_grams: z.number().positive(),
     selling_price: z.number().positive().optional(),
     items_per_packet: z.number().int().positive().optional(),
     packets_per_bundle: z.number().int().positive().optional(),
+    items_per_bundle: z.number().int().positive().optional(),
     status: z.enum(['active', 'inactive']).optional(),
+    factory_id: z.string().uuid('Invalid factory ID'),
+    raw_material_id: z.string().uuid('Invalid raw material ID').optional().nullable(),
 });
 
 export class ProductController {
     async create(req: Request, res: Response) {
         try {
-            const validatedData = createProductSchema.parse(req.body);
+            const data = { ...req.body };
+            // Convert empty SKU to null to avoid unique constraint collision on empty strings
+            if (data.sku === '' || (typeof data.sku === 'string' && data.sku.trim() === '')) {
+                data.sku = null;
+            }
+
+            const validatedData = createProductSchema.parse(data);
             const product = await productService.createProduct(validatedData);
             res.status(201).json(product);
         } catch (error: any) {
             if (error instanceof z.ZodError) {
                 res.status(400).json({ error: error.issues });
+            } else if (error.message?.includes('unique constraint') || error.message?.includes('already exists')) {
+                res.status(409).json({ error: 'A product with this SKU already exists.' });
             } else {
                 res.status(500).json({ error: error.message });
             }
@@ -31,7 +42,8 @@ export class ProductController {
 
     async list(req: Request, res: Response) {
         try {
-            const products = await productService.getAllProducts();
+            const factoryId = req.query.factory_id as string | undefined;
+            const products = await productService.getAllProducts(factoryId);
             res.json(products);
         } catch (error: any) {
             res.status(500).json({ error: error.message });
@@ -51,7 +63,14 @@ export class ProductController {
     async update(req: Request, res: Response) {
         try {
             const { id } = req.params;
-            const validatedData = createProductSchema.partial().parse(req.body);
+            const data = { ...req.body };
+
+            // Convert empty SKU to null
+            if (data.sku === '' || (typeof data.sku === 'string' && data.sku.trim() === '')) {
+                data.sku = null;
+            }
+
+            const validatedData = createProductSchema.partial().parse(data);
             const product = await productService.updateProduct(id, validatedData);
             res.json(product);
         } catch (error: any) {
@@ -59,6 +78,8 @@ export class ProductController {
                 res.status(400).json({ error: error.issues });
             } else if (error.message.includes('not found')) {
                 res.status(404).json({ error: 'Product not found' });
+            } else if (error.message?.includes('unique constraint') || error.message?.includes('already exists')) {
+                res.status(409).json({ error: 'A product with this SKU already exists.' });
             } else {
                 res.status(500).json({ error: error.message });
             }

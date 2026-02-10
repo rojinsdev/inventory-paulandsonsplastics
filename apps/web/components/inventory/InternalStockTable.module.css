@@ -1,0 +1,137 @@
+.filterContainer {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+}
+
+.filterRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.searchBox {
+    position: relative;
+    flex: 2;
+    min-width: 300px;
+}
+
+.filterGroup {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 220px;
+}
+
+.filterIcon {
+    position: absolute;
+    left: 1.25rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0.7;
+}
+
+.filterInput,
+.filterSelect {
+    width: 100%;
+    padding: 0.875rem 1rem 0.875rem 3.25rem;
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    color: var(--text-main);
+    font-size: 0.9375rem;
+    font-family: inherit;
+    transition: all var(--transition-base);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.filterSelect {
+    appearance: none;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 1.25rem center;
+    background-size: 1.25rem;
+    padding-right: 3rem;
+}
+
+.filterInput:hover,
+.filterSelect:hover {
+    border-color: var(--slate-400);
+    background-color: var(--surface-hover);
+}
+
+.filterInput:focus,
+.filterSelect:focus {
+    outline: none;
+    border-color: var(--primary);
+    background-color: var(--surface-elevated);
+    box-shadow: 0 0 0 4px var(--primary-light);
+}
+
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8rem;
+    gap: 1.5rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+    color: var(--primary);
+}
+
+.noData {
+    padding: 5rem 2rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (max-width: 1024px) {
+    .filterRow {
+        gap: 1rem;
+    }
+
+    .searchBox {
+        flex: 1 1 100%;
+        max-width: none;
+    }
+
+    .filterGroup {
+        flex: 1;
+    }
+}
+
+@media (max-width: 640px) {
+    .filterContainer {
+        padding: 1rem;
+    }
+
+    .filterRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filterGroup {
+        width: 100%;
+    }
+}

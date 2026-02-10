@@ -6,17 +6,24 @@ class User {
   final String role;
   final String fullName;
 
+  final String? factoryId;
+  final String? factoryName;
+
   User({
     required this.id,
     required this.email,
     required this.role,
     required this.fullName,
+    this.factoryId,
+    this.factoryName,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     final id = json['id'] as String?;
     final email = json['email'] as String?;
     final role = json['role'] as String?;
+    final factoryId = json['factory_id'] as String?;
+    final factoryName = json['factory_name'] as String?;
     final fullName = json['full_name'] as String? ??
         json['fullName'] as String? ??
         email ??
@@ -37,11 +44,20 @@ class User {
       email: email,
       role: role,
       fullName: fullName,
+      factoryId: factoryId,
+      factoryName: factoryName,
     );
   }
 
   Map<String, dynamic> toJson() {
-    return {'id': id, 'email': email, 'role': role, 'full_name': fullName};
+    return {
+      'id': id,
+      'email': email,
+      'role': role,
+      'full_name': fullName,
+      'factory_id': factoryId,
+      'factory_name': factoryName,
+    };
   }
 
   /// Serialize to JSON string for storage

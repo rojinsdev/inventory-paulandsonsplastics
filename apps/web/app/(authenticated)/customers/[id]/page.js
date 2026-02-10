@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useUI } from '@/contexts/UIContext';
-import { ArrowLeft, TrendingUp, ShoppingCart, Calendar, Tag, Loader2, Plus } from 'lucide-react';
-import { customersAPI } from '@/lib/api';
+import { ArrowLeft, TrendingUp, ShoppingCart, Calendar, Tag, Loader2, Plus, DollarSign, AlertCircle, X } from 'lucide-react';
+import { customersAPI, ordersAPI } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import styles from './page.module.css';
 
@@ -12,29 +13,58 @@ export default function CustomerDetailPage() {
     const { setPageTitle } = useUI();
     const params = useParams();
     const router = useRouter();
+    const queryClient = useQueryClient();
     const customerId = params.id;
 
     const [activeTab, setActiveTab] = useState('overview');
-    const [loading, setLoading] = useState(true);
-    const [profile, setProfile] = useState(null);
-    const [error, setError] = useState(null);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [selectedOrder, setSelectedOrder] = useState(null);
+    const [paymentForm, setPaymentForm] = useState({
+        amount: '',
+        payment_method: 'Cash',
+        payment_date: new Date().toISOString().split('T')[0],
+        notes: ''
+    });
+
+    // Query for customer profile
+    const { data: profile, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['customer', customerId],
+        queryFn: () => customersAPI.getProfile(customerId),
+        enabled: !!customerId,
+    });
+
+    // Query for payment history
+    const { data: paymentHistory, isLoading: paymentsLoading } = useQuery({
+        queryKey: ['customer-payments', customerId],
+        queryFn: () => ordersAPI.getCustomerPaymentHistory(customerId),
+        enabled: !!customerId,
+    });
+
+    // Mutation for recording payment
+    const recordPaymentMutation = useMutation({
+        mutationFn: ({ orderId, data }) => ordersAPI.recordPayment(orderId, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['customer-payments', customerId]);
+            queryClient.invalidateQueries(['customer', customerId]);
+            queryClient.invalidateQueries(['pending-payments']);
+            setShowPaymentModal(false);
+            setSelectedOrder(null);
+            setPaymentForm({
+                amount: '',
+                payment_method: 'Cash',
+                payment_date: new Date().toISOString().split('T')[0],
+                notes: ''
+            });
+        },
+    });
+
+    const error = queryError?.message;
 
     useEffect(() => {
         setPageTitle('Customer Profile');
-        loadCustomerProfile();
-    }, [customerId]);
+    }, [setPageTitle]);
 
-    const loadCustomerProfile = async () => {
-        try {
-            setLoading(true);
-            const data = await customersAPI.getProfile(customerId);
-            setProfile(data);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     if (loading) {
         return (
@@ -47,14 +77,19 @@ export default function CustomerDetailPage() {
         );
     }
 
-    if (error || !profile) {
+    if (error || (!loading && !profile)) {
         return (
             <>
                 <div className={styles.error}>
                     <p>Error: {error || 'Customer not found'}</p>
-                    <button className="btn btn-secondary" onClick={() => router.push('/customers')}>
-                        Back to Customers
-                    </button>
+                    <div className={styles.errorActions}>
+                        <button className="btn btn-primary" onClick={() => refetch()}>
+                            Retry
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => router.push('/customers')}>
+                            Back to Customers
+                        </button>
+                    </div>
                 </div>
             </>
         );
@@ -160,6 +195,12 @@ export default function CustomerDetailPage() {
                     onClick={() => setActiveTab('orders')}
                 >
                     Purchase History ({recentOrders?.length || 0})
+                </button>
+                <button
+                    className={`${styles.tab} ${activeTab === 'payments' ? styles.tabActive : ''}`}
+                    onClick={() => setActiveTab('payments')}
+                >
+                    Payments & Credit
                 </button>
                 <button
                     className={`${styles.tab} ${activeTab === 'interactions' ? styles.tabActive : ''}`}
@@ -284,6 +325,151 @@ export default function CustomerDetailPage() {
                     </div>
                 )}
 
+                {activeTab === 'payments' && (
+                    <div className={styles.paymentsTab}>
+                        {paymentsLoading ? (
+                            <div className={styles.loading}>
+                                <Loader2 size={32} className={styles.spinner} />
+                                <p>Loading payment history...</p>
+                            </div>
+                        ) : paymentHistory ? (
+                            <>
+                                {/* Outstanding Balance Summary */}
+                                <div className={styles.paymentSummary}>
+                                    <div className={styles.summaryCard}>
+                                        <div className={styles.summaryIcon} style={{ background: 'linear-gradient(135deg, #3b82f6, #2563eb)' }}>
+                                            <TrendingUp size={24} />
+                                        </div>
+                                        <div>
+                                            <div className={styles.summaryLabel}>Total Billed</div>
+                                            <div className={styles.summaryValue}>{formatCurrency(paymentHistory.total_billed || 0)}</div>
+                                        </div>
+                                    </div>
+                                    <div className={styles.summaryCard}>
+                                        <div className={styles.summaryIcon} style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                                            <DollarSign size={24} />
+                                        </div>
+                                        <div>
+                                            <div className={styles.summaryLabel}>Total Paid</div>
+                                            <div className={styles.summaryValue}>{formatCurrency(paymentHistory.total_paid || 0)}</div>
+                                        </div>
+                                    </div>
+                                    <div className={styles.summaryCard}>
+                                        <div className={styles.summaryIcon} style={{ background: paymentHistory.outstanding_balance > 0 ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
+                                            {paymentHistory.outstanding_balance > 0 ? <AlertCircle size={24} /> : <DollarSign size={24} />}
+                                        </div>
+                                        <div>
+                                            <div className={styles.summaryLabel}>Outstanding Balance</div>
+                                            <div className={styles.summaryValue} style={{ color: paymentHistory.outstanding_balance > 0 ? 'var(--warning)' : 'var(--success)' }}>
+                                                {formatCurrency(paymentHistory.outstanding_balance || 0)}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Outstanding Orders */}
+                                {paymentHistory.orders_with_balance && paymentHistory.orders_with_balance.length > 0 && (
+                                    <div className={styles.outstandingOrders}>
+                                        <h3>Outstanding Orders</h3>
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Order #</th>
+                                                    <th>Order Date</th>
+                                                    <th>Total Amount</th>
+                                                    <th>Amount Paid</th>
+                                                    <th>Balance Due</th>
+                                                    <th>Credit Deadline</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {paymentHistory.orders_with_balance.map((order) => (
+                                                    <tr key={order.id} className={order.is_overdue ? styles.overdueRow : ''}>
+                                                        <td className={styles.orderNumber}>{order.order_number}</td>
+                                                        <td>{formatDate(order.order_date)}</td>
+                                                        <td>{formatCurrency(order.total_amount || 0)}</td>
+                                                        <td>{formatCurrency(order.amount_paid || 0)}</td>
+                                                        <td className={styles.balanceDue}>{formatCurrency(order.balance_due || 0)}</td>
+                                                        <td>
+                                                            {order.credit_deadline ? (
+                                                                <span className={order.is_overdue ? styles.overdueDate : ''}>
+                                                                    {formatDate(order.credit_deadline)}
+                                                                    {order.is_overdue && ' (Overdue)'}
+                                                                </span>
+                                                            ) : 'N/A'}
+                                                        </td>
+                                                        <td>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedOrder(order);
+                                                                    setPaymentForm({
+                                                                        amount: order.balance_due || '',
+                                                                        payment_method: 'Cash',
+                                                                        payment_date: new Date().toISOString().split('T')[0],
+                                                                        notes: ''
+                                                                    });
+                                                                    setShowPaymentModal(true);
+                                                                }}
+                                                                className={styles.recordButton}
+                                                            >
+                                                                <DollarSign size={14} />
+                                                                Record Payment
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {/* Payment History */}
+                                {paymentHistory.payment_records && paymentHistory.payment_records.length > 0 && (
+                                    <div className={styles.paymentHistorySection}>
+                                        <h3>Payment History</h3>
+                                        <table className="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Date</th>
+                                                    <th>Order #</th>
+                                                    <th>Amount</th>
+                                                    <th>Payment Method</th>
+                                                    <th>Notes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {paymentHistory.payment_records.map((payment) => (
+                                                    <tr key={payment.id}>
+                                                        <td>{formatDate(payment.payment_date)}</td>
+                                                        <td>{payment.order_number || 'N/A'}</td>
+                                                        <td className={styles.paymentAmount}>{formatCurrency(payment.amount)}</td>
+                                                        <td>{payment.payment_method}</td>
+                                                        <td>{payment.notes || '—'}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+
+                                {(!paymentHistory.orders_with_balance || paymentHistory.orders_with_balance.length === 0) &&
+                                    (!paymentHistory.payment_records || paymentHistory.payment_records.length === 0) && (
+                                        <div className="empty-state">
+                                            <DollarSign size={48} />
+                                            <p>No payment history available</p>
+                                        </div>
+                                    )}
+                            </>
+                        ) : (
+                            <div className="empty-state">
+                                <DollarSign size={48} />
+                                <p>No payment data available</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {activeTab === 'interactions' && (
                     <div className={styles.interactionsTab}>
                         <div className="card">
@@ -391,6 +577,132 @@ export default function CustomerDetailPage() {
                     </div>
                 )}
             </div>
+
+            {/* Payment Modal */}
+            {showPaymentModal && selectedOrder && (
+                <div className={styles.modalOverlay} onClick={() => setShowPaymentModal(false)}>
+                    <div className={styles.paymentModal} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.modalHeader}>
+                            <div>
+                                <h2 className={styles.modalTitle}>Record Payment</h2>
+                                <p className={styles.modalSubtitle}>
+                                    Order #{selectedOrder.order_number}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setShowPaymentModal(false)}
+                                className={styles.closeButton}
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const amount = parseFloat(paymentForm.amount);
+                            if (amount <= 0 || amount > parseFloat(selectedOrder.balance_due)) {
+                                alert('Invalid payment amount');
+                                return;
+                            }
+                            recordPaymentMutation.mutate({
+                                orderId: selectedOrder.id,
+                                data: {
+                                    amount,
+                                    payment_method: paymentForm.payment_method,
+                                    payment_date: paymentForm.payment_date,
+                                    notes: paymentForm.notes
+                                }
+                            });
+                        }} className={styles.modalBody}>
+                            <div className={styles.summarySection}>
+                                <div className={styles.summaryRow}>
+                                    <span>Total Amount:</span>
+                                    <span>{formatCurrency(selectedOrder.total_amount || 0)}</span>
+                                </div>
+                                <div className={styles.summaryRow}>
+                                    <span>Already Paid:</span>
+                                    <span>{formatCurrency(selectedOrder.amount_paid || 0)}</span>
+                                </div>
+                                <div className={`${styles.summaryRow} ${styles.balanceRow}`}>
+                                    <span>Balance Due:</span>
+                                    <span>{formatCurrency(selectedOrder.balance_due || 0)}</span>
+                                </div>
+                            </div>
+
+                            <div className={styles.formGrid}>
+                                <div className={styles.formGroup}>
+                                    <label>Payment Amount *</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0.01"
+                                        max={selectedOrder.balance_due}
+                                        value={paymentForm.amount}
+                                        onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                                        className={styles.input}
+                                        required
+                                    />
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label>Payment Method *</label>
+                                    <select
+                                        value={paymentForm.payment_method}
+                                        onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
+                                        className={styles.select}
+                                        required
+                                    >
+                                        <option value="Cash">Cash</option>
+                                        <option value="Bank Transfer">Bank Transfer</option>
+                                        <option value="Cheque">Cheque</option>
+                                        <option value="UPI">UPI</option>
+                                    </select>
+                                </div>
+
+                                <div className={styles.formGroup}>
+                                    <label>Payment Date *</label>
+                                    <input
+                                        type="date"
+                                        value={paymentForm.payment_date}
+                                        onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                                        className={styles.input}
+                                        required
+                                    />
+                                </div>
+
+                                <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
+                                    <label>Notes</label>
+                                    <textarea
+                                        value={paymentForm.notes}
+                                        onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                                        className={styles.textarea}
+                                        rows="3"
+                                        placeholder="Add any notes about this payment..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div className={styles.modalFooter}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPaymentModal(false)}
+                                    className={styles.cancelButton}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className={styles.submitButton}
+                                    disabled={recordPaymentMutation.isPending}
+                                >
+                                    <DollarSign size={18} />
+                                    {recordPaymentMutation.isPending ? 'Recording...' : 'Record Payment'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

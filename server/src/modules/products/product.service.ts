@@ -2,14 +2,17 @@ import { supabase } from '../../config/supabase';
 
 export interface CreateProductDTO {
     name: string;
-    sku?: string;
+    sku?: string | null;
     size: string;
     color: string;
     weight_grams: number;
     selling_price?: number;
     items_per_packet?: number;
     packets_per_bundle?: number;
+    items_per_bundle?: number;
     status?: 'active' | 'inactive';
+    factory_id: string; // Required: which factory this product belongs to
+    raw_material_id?: string | null; // Optional: raw material used for this product
 }
 
 export class ProductService {
@@ -24,11 +27,21 @@ export class ProductService {
         return product;
     }
 
-    async getAllProducts() {
-        const { data: products, error } = await supabase
+    async getAllProducts(factoryId?: string) {
+        let query = supabase
             .from('products')
-            .select('*')
+            .select(`
+                *,
+                raw_materials(id, name)
+            `)
             .order('name', { ascending: true });
+
+        // Filter by factory if provided
+        if (factoryId) {
+            query = query.eq('factory_id', factoryId);
+        }
+
+        const { data: products, error } = await query;
 
         if (error) throw new Error(error.message);
         return products;

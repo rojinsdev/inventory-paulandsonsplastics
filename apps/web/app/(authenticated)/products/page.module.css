@@ -315,7 +315,7 @@
     border-radius: 1rem;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
     width: 100%;
-    max-width: 700px;
+    max-width: 1000px;
     max-height: 90vh;
     overflow-y: auto;
     animation: slideUp 0.3s ease-out;
@@ -433,8 +433,28 @@
 .formInput:focus,
 .formSelect:focus {
     outline: none;
-    border-color: var(--primary);
+    border-color: var(--indigo-500);
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.prefixWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.prefixWrapper::before {
+    content: "₹";
+    position: absolute;
+    left: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.875rem;
+    pointer-events: none;
+}
+
+.prefixWrapper input {
+    padding-left: 1.75rem !important;
 }
 
 .formSelect {
@@ -444,7 +464,13 @@
 .formRow {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    gap: 1.5rem;
+}
+
+.formRow3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1.5rem;
 }
 
 .modalFooter {

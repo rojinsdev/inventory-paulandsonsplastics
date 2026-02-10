@@ -17,11 +17,11 @@ class Product {
 
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      size: json['size'] as String,
-      color: json['color'] as String,
-      sku: json['sku'] as String,
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Unknown',
+      size: json['size'] as String? ?? '',
+      color: json['color'] as String? ?? '',
+      sku: json['sku'] as String? ?? '',
       countingMethod: json['counting_method'] as String? ?? 'unit_count',
     );
   }

@@ -16,17 +16,28 @@ const TABS = [
 ];
 
 const METRIC_DEFINITIONS = [
-    { id: 'todayProduction', label: 'Today\'s Production', icon: Factory, category: 'Production' },
+    // Graphs & Trends
+    { id: 'productionAchievement', label: 'Production Chart', icon: TrendingUp, category: 'Graphs & Trends' },
+    { id: 'businessHealthCard', label: 'Financial Pulse', icon: DollarSign, category: 'Graphs & Trends' },
+
+    // Dashboard Widgets
+    { id: 'revenuePerformance', label: 'Revenue Widget', icon: DollarSign, category: 'Dashboard Widgets' },
+    { id: 'overallEfficiency', label: 'Efficiency Widget', icon: Activity, category: 'Dashboard Widgets' },
+    { id: 'ordersQueue', label: 'Orders Widget', icon: ShoppingCart, category: 'Dashboard Widgets' },
+    { id: 'outputToday', label: 'Output Widget', icon: Package, category: 'Dashboard Widgets' },
+    { id: 'inventoryAlerts', label: 'Alerts Widget', icon: AlertTriangle, category: 'Dashboard Widgets' },
+
+    // Production Metrics
     { id: 'activeMachines', label: 'Active Machines', icon: Activity, category: 'Production' },
-    { id: 'avgEfficiency', label: 'Avg Efficiency', icon: TrendingUp, category: 'Production' },
     { id: 'costRecovered', label: 'Cost Recovered', icon: DollarSign, category: 'Production' },
+
+    // Inventory Metrics
     { id: 'finishedGoods', label: 'Finished Goods', icon: Package, category: 'Inventory' },
     { id: 'rawMaterial', label: 'Raw Material', icon: Boxes, category: 'Inventory' },
-    { id: 'lowStockAlerts', label: 'Low Stock Alerts', icon: AlertTriangle, category: 'Inventory' },
     { id: 'stockValue', label: 'Stock Value', icon: DollarSign, category: 'Inventory' },
-    { id: 'pendingOrders', label: 'Pending Orders', icon: ShoppingCart, category: 'Sales' },
+
+    // Sales Metrics
     { id: 'todayDeliveries', label: 'Today\'s Deliveries', icon: Truck, category: 'Sales' },
-    { id: 'weekRevenue', label: 'This Week Revenue', icon: DollarSign, category: 'Sales' },
     { id: 'activeCustomers', label: 'Active Customers', icon: Users, category: 'Sales' },
 ];
 
@@ -178,13 +189,13 @@ export default function SettingsModal({ isOpen, onClose }) {
                                 </div>
 
                                 <h3 className={styles.sectionTitle} style={{ marginTop: '2rem' }}>
-                                    Visible Metrics
+                                    Dashboard Components
                                 </h3>
                                 <p className={styles.sectionDesc}>
-                                    Choose which metrics to display on your dashboard
+                                    Toggle visibility for charts, graphs, and metric widgets
                                 </p>
 
-                                {['Production', 'Inventory', 'Sales'].map(category => {
+                                {Array.from(new Set(METRIC_DEFINITIONS.map(m => m.category))).map(category => {
                                     const metricsInCategory = METRIC_DEFINITIONS.filter(m => m.category === category);
                                     const selectedCount = metricsInCategory.filter(m => settings.visibleMetrics?.[m.id]).length;
                                     const allSelected = selectedCount === metricsInCategory.length;

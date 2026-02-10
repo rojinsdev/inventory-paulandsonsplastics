@@ -27,6 +27,11 @@ router.get('/stock',
     requireRole('admin', 'production_manager'),
     inventoryController.listAll
 );
+router.get('/overview',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    inventoryController.getStockOverview
+);
 router.get('/available',
     authenticate,
     requireRole('admin', 'production_manager'),
@@ -44,6 +49,11 @@ router.post('/raw-materials',
     requireRole('admin'),
     inventoryController.createRawMaterial
 );
+router.put('/raw-materials/:id',
+    authenticate,
+    requireRole('admin'),
+    inventoryController.updateRawMaterial
+);
 router.post('/raw-materials/:id/adjust',
     authenticate,
     requireRole('admin', 'production_manager'),
@@ -51,4 +61,3 @@ router.post('/raw-materials/:id/adjust',
 );
 
 export default router;
-

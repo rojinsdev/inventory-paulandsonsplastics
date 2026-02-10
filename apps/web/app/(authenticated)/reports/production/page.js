@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Factory, TrendingUp, AlertTriangle, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
 import { productionAPI, machinesAPI, productsAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatNumber, formatDate, cn } from '@/lib/utils';
 import styles from './page.module.css';
@@ -17,13 +19,11 @@ const DATE_PRESETS = [
 ];
 
 export default function ProductionReportsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [logs, setLogs] = useState([]);
-    const [machines, setMachines] = useState([]);
-    const [products, setProducts] = useState([]);
+    const { selectedFactory } = useFactory();
+
     const [datePreset, setDatePreset] = useState('this_month');
     const [filters, setFilters] = useState({
         date_from: '',
@@ -31,6 +31,41 @@ export default function ProductionReportsPage() {
         machine_id: '',
         product_id: '',
     });
+
+    // Queries
+    const { data: logsData, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['production-logs', filters, selectedFactory],
+        queryFn: () => productionAPI.getLogs({
+            start_date: filters.date_from,
+            end_date: filters.date_to,
+            machine_id: filters.machine_id || undefined,
+            product_id: filters.product_id || undefined,
+            factory_id: selectedFactory || undefined,
+        }),
+        enabled: !!(filters.date_from || filters.date_to),
+    });
+
+    const { data: machinesData } = useQuery({
+        queryKey: ['machines', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : undefined;
+            return machinesAPI.getAll(params);
+        },
+    });
+
+    const { data: productsData } = useQuery({
+        queryKey: ['products', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : undefined;
+            return productsAPI.getAll(params);
+        },
+    });
+
+    const error = queryError?.message;
+    const logs = Array.isArray(logsData) ? logsData : [];
+    const machines = Array.isArray(machinesData) ? machinesData : [];
+    const products = Array.isArray(productsData) ? productsData : [];
+
 
     useEffect(() => {
         setPageTitle('Production Reports');
@@ -58,15 +93,10 @@ export default function ProductionReportsPage() {
                 }
             ]
         });
-        loadMachinesAndProducts();
         applyDatePreset(datePreset);
-    }, [registerGuide]);
+    }, [registerGuide, setPageTitle, datePreset]);
 
-    useEffect(() => {
-        if (filters.date_from || filters.date_to) {
-            loadData();
-        }
-    }, [filters]);
+
 
     const getDateRange = (preset) => {
         const today = new Date();
@@ -116,36 +146,8 @@ export default function ProductionReportsPage() {
         }));
     };
 
-    const loadMachinesAndProducts = async () => {
-        try {
-            const [machinesData, productsData] = await Promise.all([
-                machinesAPI.getAll().catch(() => []),
-                productsAPI.getAll().catch(() => []),
-            ]);
-            setMachines(Array.isArray(machinesData) ? machinesData : []);
-            setProducts(Array.isArray(productsData) ? productsData : []);
-        } catch (err) {
-            console.error('Failed to load machines/products:', err);
-        }
-    };
-
-    const loadData = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const params = {
-                start_date: filters.date_from,
-                end_date: filters.date_to,
-                machine_id: filters.machine_id || undefined,
-                product_id: filters.product_id || undefined,
-            };
-            const logsData = await productionAPI.getLogs(params).catch(() => []);
-            setLogs(Array.isArray(logsData) ? logsData : []);
-        } catch (err) {
-            setError(err.message || 'Failed to load production logs');
-        } finally {
-            setLoading(false);
-        }
+    const loadData = () => {
+        refetch();
     };
 
     const handleFilter = () => {
@@ -355,7 +357,7 @@ export default function ProductionReportsPage() {
                     <div className={styles.error}>
                         <AlertTriangle size={24} />
                         <p>{error}</p>
-                        <button className={styles.retryButton} onClick={loadData}>
+                        <button className={styles.retryButton} onClick={() => refetch()}>
                             <RefreshCw size={16} />
                             Retry
                         </button>

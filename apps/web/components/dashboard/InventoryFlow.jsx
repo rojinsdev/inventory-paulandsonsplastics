@@ -13,7 +13,7 @@ import {
     Archive,
     ShoppingCart
 } from 'lucide-react';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, cn } from '@/lib/utils';
 import styles from './InventoryFlow.module.css';
 
 const stateConfig = {
@@ -65,7 +65,7 @@ const stateConfig = {
     }
 };
 
-export default function InventoryFlow({ data, rawMaterialStock }) {
+export default function InventoryFlow({ data, rawMaterialStock, compact }) {
     const router = useRouter();
 
     const states = ['raw_material', 'semi_finished', 'packed', 'finished', 'reserved'];
@@ -78,7 +78,7 @@ export default function InventoryFlow({ data, rawMaterialStock }) {
     };
 
     return (
-        <div className={styles.flowContainer}>
+        <div className={cn(styles.flowContainer, compact && styles.compact)}>
             <div className={styles.flowDiagram}>
                 {states.map((state, index) => {
                     const config = stateConfig[state];

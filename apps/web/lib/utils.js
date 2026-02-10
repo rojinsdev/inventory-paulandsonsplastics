@@ -93,6 +93,14 @@ export function capitalize(str) {
 }
 
 /**
+ * Get current date in YYYY-MM-DD format (Local Time)
+ */
+export function getLocalDateISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
  * Class name helper (like classnames/clsx)
  */
 export function cn(...classes) {

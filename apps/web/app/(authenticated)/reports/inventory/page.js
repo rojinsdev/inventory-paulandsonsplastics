@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Package, Boxes, ArrowRight, TrendingUp, Download, Calendar, Filter, X, RefreshCw, Search } from 'lucide-react';
 import { reportsAPI, productsAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatNumber, formatDate, cn } from '@/lib/utils';
 import styles from './page.module.css';
@@ -17,18 +19,38 @@ const DATE_PRESETS = [
 ];
 
 export default function InventoryReportsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [report, setReport] = useState(null);
-    const [products, setProducts] = useState([]);
+    const { selectedFactory } = useFactory();
     const [datePreset, setDatePreset] = useState('this_month');
     const [filters, setFilters] = useState({
         date_from: '',
         date_to: '',
         product_search: '',
     });
+
+    // Queries
+    // Queries
+    const { data: reportData, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['inventory-report', { from: filters.date_from, to: filters.date_to }, selectedFactory],
+        queryFn: () => reportsAPI.getInventory({
+            from: filters.date_from,
+            to: filters.date_to,
+            factory_id: selectedFactory || undefined
+        }),
+        enabled: !!(filters.date_from || filters.date_to),
+    });
+
+    const { data: productsData } = useQuery({
+        queryKey: ['products', { factory_id: selectedFactory }],
+        queryFn: () => productsAPI.getAll({ factory_id: selectedFactory || undefined }),
+    });
+
+    const error = queryError?.message;
+    const report = reportData || {};
+    const products = Array.isArray(productsData) ? productsData : [];
+
 
     useEffect(() => {
         setPageTitle('Inventory Reports');
@@ -56,15 +78,10 @@ export default function InventoryReportsPage() {
                 }
             ]
         });
-        loadProducts();
         applyDatePreset(datePreset);
-    }, [registerGuide]);
+    }, [registerGuide, setPageTitle, datePreset]);
 
-    useEffect(() => {
-        if (filters.date_from || filters.date_to) {
-            loadData();
-        }
-    }, [filters.date_from, filters.date_to]);
+
 
     const getDateRange = (preset) => {
         const today = new Date();
@@ -114,30 +131,8 @@ export default function InventoryReportsPage() {
         }));
     };
 
-    const loadProducts = async () => {
-        try {
-            const productsData = await productsAPI.getAll().catch(() => []);
-            setProducts(Array.isArray(productsData) ? productsData : []);
-        } catch (err) {
-            console.error('Failed to load products:', err);
-        }
-    };
-
-    const loadData = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const params = {
-                from: filters.date_from,
-                to: filters.date_to,
-            };
-            const reportData = await reportsAPI.getInventory(params).catch(() => ({}));
-            setReport(reportData || {});
-        } catch (err) {
-            setError(err.message || 'Failed to load inventory report');
-        } finally {
-            setLoading(false);
-        }
+    const loadData = () => {
+        refetch();
     };
 
     const handleFilter = () => {
@@ -342,7 +337,7 @@ export default function InventoryReportsPage() {
                     <div className={styles.error}>
                         <Package size={24} />
                         <p>{error}</p>
-                        <button className={styles.retryButton} onClick={loadData}>
+                        <button className={styles.retryButton} onClick={() => refetch()}>
                             <RefreshCw size={16} />
                             Retry
                         </button>

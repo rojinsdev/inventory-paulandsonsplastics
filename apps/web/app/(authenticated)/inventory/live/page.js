@@ -5,12 +5,14 @@ import { useUI } from '@/contexts/UIContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { Loader2, Search, Filter, Package } from 'lucide-react';
 import { inventoryAPI, productsAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { formatNumber, cn } from '@/lib/utils';
 import styles from './page.module.css';
 
 export default function LiveStockPage() {
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
+    const { selectedFactory } = useFactory();
     const [loading, setLoading] = useState(true);
     const [stock, setStock] = useState([]);
     const [products, setProducts] = useState([]);
@@ -46,15 +48,19 @@ export default function LiveStockPage() {
                 }
             ]
         });
-        loadData();
     }, [registerGuide, setPageTitle]);
+
+    useEffect(() => {
+        loadData();
+    }, [selectedFactory]);
 
     const loadData = async () => {
         try {
             setLoading(true);
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
             const [stockData, productsData] = await Promise.all([
-                inventoryAPI.getAvailable().catch(() => []),
-                productsAPI.getAll().catch(() => []),
+                inventoryAPI.getAvailable(params).catch(() => []),
+                productsAPI.getAll(params).catch(() => []),
             ]);
             setStock(Array.isArray(stockData) ? stockData : []);
             setProducts(Array.isArray(productsData) ? productsData : []);

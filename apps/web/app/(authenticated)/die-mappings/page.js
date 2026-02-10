@@ -1,24 +1,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Plus, Pencil, Trash2, Loader2, Link2, X, RefreshCw, Factory, Package, CheckCircle } from 'lucide-react';
 import { dieMappingsAPI, machinesAPI, productsAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { cn } from '@/lib/utils';
 import styles from './page.module.css';
 
 export default function DieMappingsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
+    const { selectedFactory } = useFactory();
     const { registerGuide } = useGuide();
-    const [mappings, setMappings] = useState([]);
-    const [machines, setMachines] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+
     const [modalOpen, setModalOpen] = useState(false);
     const [editingMapping, setEditingMapping] = useState(null);
-    const [saving, setSaving] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -28,6 +27,56 @@ export default function DieMappingsPage() {
         capacity_restriction: '',
         enabled: true,
     });
+
+    // Queries
+    const { data: mappings = [], isLoading: mappingsLoading, error: mappingsError } = useQuery({
+        queryKey: ['die-mappings', selectedFactory?.id],
+        queryFn: () => dieMappingsAPI.getAll(selectedFactory?.id ? { factory_id: selectedFactory.id } : {}).then(res => Array.isArray(res) ? res : []),
+    });
+
+    const { data: machines = [], isLoading: machinesLoading } = useQuery({
+        queryKey: ['machines', selectedFactory?.id],
+        queryFn: () => machinesAPI.getAll(selectedFactory?.id ? { factory_id: selectedFactory.id } : {}).then(res => Array.isArray(res) ? res : []),
+    });
+
+    const { data: products = [], isLoading: productsLoading } = useQuery({
+        queryKey: ['products', selectedFactory?.id],
+        queryFn: () => productsAPI.getAll(selectedFactory?.id ? { factory_id: selectedFactory.id } : {}).then(res => Array.isArray(res) ? res : []),
+    });
+
+    const loading = mappingsLoading || machinesLoading || productsLoading;
+    const error = mappingsError?.message;
+
+    // Mutations
+    const saveMutation = useMutation({
+        mutationFn: (data) => editingMapping
+            ? dieMappingsAPI.update(editingMapping.id, data)
+            : dieMappingsAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['die-mappings'] });
+            setModalOpen(false);
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id) => dieMappingsAPI.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['die-mappings'] });
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const statusMutation = useMutation({
+        mutationFn: ({ id, enabled }) => dieMappingsAPI.update(id, { enabled }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['die-mappings'] });
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const saving = saveMutation.isPending;
+
 
     // Load data
     useEffect(() => {
@@ -56,27 +105,9 @@ export default function DieMappingsPage() {
                 }
             ]
         });
-        loadData();
-    }, [registerGuide]);
+    }, [registerGuide, setPageTitle]);
 
-    const loadData = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const [mappingsData, machinesData, productsData] = await Promise.all([
-                dieMappingsAPI.getAll().catch(() => []),
-                machinesAPI.getAll().catch(() => []),
-                productsAPI.getAll().catch(() => []),
-            ]);
-            setMappings(Array.isArray(mappingsData) ? mappingsData : []);
-            setMachines(Array.isArray(machinesData) ? machinesData : []);
-            setProducts(Array.isArray(productsData) ? productsData : []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     // Get machine/product name by ID
     const getMachineName = (id) => machines.find((m) => m.id === id)?.name || 'Unknown';
@@ -114,30 +145,16 @@ export default function DieMappingsPage() {
     // Handle form submit
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setSaving(true);
 
-        try {
-            const payload = {
-                ...formData,
-                ideal_cycle_time_seconds: Number(formData.ideal_cycle_time_seconds),
-                capacity_restriction: formData.capacity_restriction
-                    ? Number(formData.capacity_restriction)
-                    : null,
-            };
+        const payload = {
+            ...formData,
+            ideal_cycle_time_seconds: Number(formData.ideal_cycle_time_seconds),
+            capacity_restriction: formData.capacity_restriction
+                ? Number(formData.capacity_restriction)
+                : null,
+        };
 
-            if (editingMapping) {
-                await dieMappingsAPI.update(editingMapping.id, payload);
-            } else {
-                await dieMappingsAPI.create(payload);
-            }
-
-            setModalOpen(false);
-            loadData();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
+        saveMutation.mutate(payload);
     };
 
     // Handle delete
@@ -145,25 +162,15 @@ export default function DieMappingsPage() {
         const machineName = getMachineName(mapping.machine_id);
         const productName = getProductName(mapping.product_id);
         if (!confirm(`Delete mapping: ${machineName} → ${productName}?`)) return;
-
-        try {
-            await dieMappingsAPI.delete(mapping.id);
-            loadData();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        deleteMutation.mutate(mapping.id);
     };
 
     // Toggle enabled
     const handleToggleEnabled = async (mapping) => {
-        try {
-            await dieMappingsAPI.update(mapping.id, {
-                enabled: !mapping.enabled,
-            });
-            loadData();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        statusMutation.mutate({
+            id: mapping.id,
+            enabled: !mapping.enabled,
+        });
     };
 
     // Calculate stats
@@ -245,7 +252,7 @@ export default function DieMappingsPage() {
                     <div className={styles.error}>
                         <Link2 size={24} />
                         <p>{error}</p>
-                        <button className={styles.retryButton} onClick={loadData}>
+                        <button className={styles.retryButton} onClick={() => queryClient.invalidateQueries({ queryKey: ['die-mappings'] })}>
                             <RefreshCw size={16} />
                             Retry
                         </button>

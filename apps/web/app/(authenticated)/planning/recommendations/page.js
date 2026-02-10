@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { planningAPI } from '@/lib/api/planning';
 import {
     CheckCircle,
@@ -21,92 +22,87 @@ import { useUI } from '@/contexts/UIContext';
 import styles from './page.module.css';
 
 export default function RecommendationsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [targetMonth, setTargetMonth] = useState('');
-    const [recommendations, setRecommendations] = useState([]);
     const [statusFilter, setStatusFilter] = useState('pending');
     const [editingId, setEditingId] = useState(null);
     const [adjustedQty, setAdjustedQty] = useState('');
     const [rejectReason, setRejectReason] = useState('');
     const [showRejectModal, setShowRejectModal] = useState(null);
-    const [actionLoading, setActionLoading] = useState(null);
+
+    // Queries
+    const { data: recData, isLoading: loading, error: queryError, refetch: loadRecommendations } = useQuery({
+        queryKey: ['recommendations', targetMonth, statusFilter],
+        queryFn: () => planningAPI.getRecommendations({
+            target_month: targetMonth,
+            status: statusFilter,
+        }),
+        enabled: !!targetMonth,
+    });
+
+    const error = queryError?.message;
+    const recommendations = recData?.recommendations || [];
+
+    // Mutations
+    const generateMutation = useMutation({
+        mutationFn: (month) => planningAPI.generateRecommendations(month),
+        onSuccess: () => {
+            // Background job takes time, but we invalidate to show progress or refresh
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+            }, 2000);
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const acceptMutation = useMutation({
+        mutationFn: ({ id, qty }) => planningAPI.acceptRecommendation(id, qty),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            setEditingId(null);
+            setAdjustedQty('');
+        },
+        onError: (err) => alert(`Failed to accept: ${err.message}`)
+    });
+
+    const rejectMutation = useMutation({
+        mutationFn: ({ id, reason }) => planningAPI.rejectRecommendation(id, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+            setShowRejectModal(null);
+            setRejectReason('');
+        },
+        onError: (err) => alert(`Failed to reject: ${err.message}`)
+    });
+
+    const actionLoading = acceptMutation.isPending || rejectMutation.isPending ? (acceptMutation.variables?.id || rejectMutation.variables?.id) : null;
+
 
     useEffect(() => {
         setPageTitle('Production Recommendations');
-        // Set default to next month
-        const nextMonth = new Date();
-        nextMonth.setMonth(nextMonth.getMonth() + 1);
-        const monthStr = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
-        setTargetMonth(monthStr);
-    }, []);
-
-    useEffect(() => {
-        if (targetMonth) {
-            loadRecommendations();
+        // Set default to next month if not set
+        if (!targetMonth) {
+            const nextMonth = new Date();
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+            const monthStr = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
+            setTargetMonth(monthStr);
         }
-    }, [targetMonth, statusFilter]);
-
-    const loadRecommendations = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await planningAPI.getRecommendations({
-                target_month: targetMonth,
-                status: statusFilter,
-            });
-            setRecommendations(data.recommendations || []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [setPageTitle, targetMonth]);
 
     const handleGenerateRecommendations = async () => {
         if (!targetMonth) return;
-
-        setLoading(true);
-        try {
-            await planningAPI.generateRecommendations(targetMonth);
-            // Wait a bit for background job to process
-            setTimeout(() => {
-                loadRecommendations();
-            }, 2000);
-        } catch (err) {
-            setError(err.message);
-            setLoading(false);
-        }
+        generateMutation.mutate(targetMonth);
     };
 
     const handleAccept = async (id, originalQty) => {
-        setActionLoading(id);
-        try {
-            const qty = editingId === id && adjustedQty ? parseInt(adjustedQty) : null;
-            await planningAPI.acceptRecommendation(id, qty);
-            setEditingId(null);
-            setAdjustedQty('');
-            loadRecommendations();
-        } catch (err) {
-            alert(`Failed to accept: ${err.message}`);
-        } finally {
-            setActionLoading(null);
-        }
+        const qty = editingId === id && adjustedQty ? parseInt(adjustedQty) : null;
+        acceptMutation.mutate({ id, qty });
     };
 
     const handleReject = async (id) => {
-        setActionLoading(id);
-        try {
-            await planningAPI.rejectRecommendation(id, rejectReason || null);
-            setShowRejectModal(null);
-            setRejectReason('');
-            loadRecommendations();
-        } catch (err) {
-            alert(`Failed to reject: ${err.message}`);
-        } finally {
-            setActionLoading(null);
-        }
+        rejectMutation.mutate({ id, reason: rejectReason || null });
     };
 
     const handleExport = () => {

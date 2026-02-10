@@ -1,7 +1,7 @@
 'use client';
 
 import { LucideIcon, TrendingUp, TrendingDown } from 'lucide-react';
-import { formatNumber } from '@/lib/utils';
+import { formatNumber, cn } from '@/lib/utils';
 import styles from './MetricCard.module.css';
 
 export default function MetricCard({
@@ -12,15 +12,16 @@ export default function MetricCard({
     gradient,
     trend,
     trendLabel,
-    onClick
+    onClick,
+    compact
 }) {
     const TrendIcon = trend && trend > 0 ? TrendingUp : TrendingDown;
     const trendClass = trend && trend > 0 ? styles.trendUp : styles.trendDown;
 
     return (
-        <div className={styles.metricCard} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+        <div className={cn(styles.metricCard, compact && styles.compact)} onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
             <div className={styles.iconWrapper} style={{ background: gradient }}>
-                <Icon size={28} />
+                <Icon size={compact ? 20 : 28} />
             </div>
             <div className={styles.content}>
                 <div className={styles.value}>

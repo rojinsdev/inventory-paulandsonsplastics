@@ -1,24 +1,37 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Package, Loader2, X, RefreshCw } from 'lucide-react';
-import { productsAPI } from '@/lib/api';
+import { productsAPI, inventoryAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatCurrency, cn } from '@/lib/utils';
 import { useUI } from '@/contexts/UIContext';
+import toast from 'react-hot-toast';
+import CustomSelect from '@/components/ui/CustomSelect';
+import FactorySelect from '@/components/ui/FactorySelect';
 import styles from './page.module.css';
 
-const COLORS = ['White', 'Black', 'Milky', 'Blue', 'Red', 'Green', 'Yellow', 'Transparent'];
+const COLORS = [
+    { value: 'White', label: 'White' },
+    { value: 'Black', label: 'Black' },
+    { value: 'Milky', label: 'Milky' },
+    { value: 'Blue', label: 'Blue' },
+    { value: 'Red', label: 'Red' },
+    { value: 'Green', label: 'Green' },
+    { value: 'Yellow', label: 'Yellow' },
+    { value: 'Transparent', label: 'Transparent' },
+];
 
 export default function ProductsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const { selectedFactory, factories } = useFactory();
+
     const [modalOpen, setModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
-    const [saving, setSaving] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -30,8 +43,70 @@ export default function ProductsPage() {
         selling_price: '',
         items_per_packet: '100',
         packets_per_bundle: '50',
+        items_per_bundle: '600',
         status: 'active',
+        factory_id: '',
+        raw_material_id: '',
     });
+
+    // Queries
+    const { data: products = [], isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['products', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
+            return productsAPI.getAll(params).then(res => Array.isArray(res) ? res : []);
+        },
+    });
+
+    const error = queryError?.message;
+
+    // Query for raw materials (factory-specific)
+    const { data: rawMaterials = [], isLoading: rawMaterialsLoading } = useQuery({
+        queryKey: ['rawMaterials', formData.factory_id],
+        queryFn: async () => {
+            if (!formData.factory_id) return [];
+            const res = await inventoryAPI.getRawMaterials({ factory_id: formData.factory_id });
+            return Array.isArray(res) ? res : [];
+        },
+        enabled: modalOpen && !!formData.factory_id,
+    });
+
+    // Mutations
+    const saveMutation = useMutation({
+        mutationFn: (data) => editingProduct
+            ? productsAPI.update(editingProduct.id, data)
+            : productsAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            setModalOpen(false);
+            toast.success(editingProduct ? 'Product updated successfully' : 'Product created successfully');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to save product')
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id) => productsAPI.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            toast.success('Product deleted successfully');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to delete product')
+    });
+
+    const statusMutation = useMutation({
+        mutationFn: ({ id, status }) => productsAPI.update(id, { status }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            toast.success('Status updated');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to update status')
+    });
+
+    const saving = saveMutation.isPending;
+
 
     // Load products
     useEffect(() => {
@@ -64,21 +139,9 @@ export default function ProductsPage() {
                 }
             ]
         });
-        loadProducts();
     }, [registerGuide, setPageTitle]);
 
-    const loadProducts = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const data = await productsAPI.getAll();
-            setProducts(Array.isArray(data) ? data : []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     // Open modal for create
     const handleCreate = () => {
@@ -92,7 +155,10 @@ export default function ProductsPage() {
             selling_price: '',
             items_per_packet: '100',
             packets_per_bundle: '50',
+            items_per_bundle: '600',
             status: 'active',
+            factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
+            raw_material_id: '',
         });
         setModalOpen(true);
     };
@@ -109,7 +175,10 @@ export default function ProductsPage() {
             selling_price: product.selling_price || '',
             items_per_packet: product.items_per_packet || '100',
             packets_per_bundle: product.packets_per_bundle || '50',
+            items_per_bundle: product.items_per_bundle || '',
             status: product.status || 'active',
+            factory_id: product.factory_id || '',
+            raw_material_id: product.raw_material_id || '',
         });
         setModalOpen(true);
     };
@@ -117,54 +186,33 @@ export default function ProductsPage() {
     // Handle form submit
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setSaving(true);
 
-        try {
-            const payload = {
-                ...formData,
-                weight_grams: Number(formData.weight_grams),
-                selling_price: formData.selling_price ? Number(formData.selling_price) : null,
-                items_per_packet: Number(formData.items_per_packet),
-                packets_per_bundle: Number(formData.packets_per_bundle),
-            };
+        const payload = {
+            ...formData,
+            sku: formData.sku?.trim() || null, // Ensure empty SKU is null
+            weight_grams: Number(formData.weight_grams) || 0,
+            selling_price: formData.selling_price ? Number(formData.selling_price) : null,
+            items_per_packet: Number(formData.items_per_packet) || 0,
+            packets_per_bundle: Number(formData.packets_per_bundle) || 0,
+            items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
+            raw_material_id: formData.raw_material_id || null,
+        };
 
-            if (editingProduct) {
-                await productsAPI.update(editingProduct.id, payload);
-            } else {
-                await productsAPI.create(payload);
-            }
-
-            setModalOpen(false);
-            loadProducts();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
+        saveMutation.mutate(payload);
     };
 
     // Handle delete
     const handleDelete = async (product) => {
         if (!confirm(`Delete product "${product.name}"?`)) return;
-
-        try {
-            await productsAPI.delete(product.id);
-            loadProducts();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        deleteMutation.mutate(product.id);
     };
 
     // Toggle status
     const handleToggleStatus = async (product) => {
-        try {
-            await productsAPI.update(product.id, {
-                status: product.status === 'active' ? 'inactive' : 'active',
-            });
-            loadProducts();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        statusMutation.mutate({
+            id: product.id,
+            status: product.status === 'active' ? 'inactive' : 'active',
+        });
     };
 
     // Calculate stats
@@ -233,7 +281,7 @@ export default function ProductsPage() {
                     <div className={styles.error}>
                         <Package size={24} />
                         <p>{error}</p>
-                        <button className={styles.retryButton} onClick={loadProducts}>
+                        <button className={styles.retryButton} onClick={() => refetch()}>
                             <RefreshCw size={16} />
                             Retry
                         </button>
@@ -260,8 +308,10 @@ export default function ProductsPage() {
                                     <th>Size</th>
                                     <th>Color</th>
                                     <th>Weight (g)</th>
+                                    <th>Raw Material</th>
                                     <th>Items/Pkt</th>
-                                    <th>Pkts/Bundle</th>
+                                    <th>Pkts/Bndl</th>
+                                    <th>Items/Bndl</th>
                                     <th>Status</th>
                                     <th>Actions</th>
                                 </tr>
@@ -278,8 +328,10 @@ export default function ProductsPage() {
                                             </span>
                                         </td>
                                         <td className={styles.weightCell}>{product.weight_grams}</td>
+                                        <td>{product.raw_materials?.name || '—'}</td>
                                         <td>{product.items_per_packet}</td>
                                         <td>{product.packets_per_bundle}</td>
+                                        <td>{product.items_per_bundle || '—'}</td>
                                         <td>
                                             <button
                                                 className={cn(styles.toggle, product.status === 'active' && styles.toggleActive)}
@@ -327,10 +379,10 @@ export default function ProductsPage() {
                         </div>
                         <form onSubmit={handleSubmit}>
                             <div className={styles.modalBody}>
-                                {/* Basic Info Section */}
+                                {/* Basic Information Section */}
                                 <div className={styles.formSection}>
                                     <h3 className={styles.sectionTitle}>Basic Information</h3>
-                                    <div className={styles.formRow}>
+                                    <div className={styles.formRow3}>
                                         <div className={styles.formGroup}>
                                             <label className={styles.formLabel}>Name *</label>
                                             <input
@@ -352,9 +404,23 @@ export default function ProductsPage() {
                                                 placeholder="Optional"
                                             />
                                         </div>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Factory *</label>
+                                            <FactorySelect
+                                                value={formData.factory_id}
+                                                onChange={(val) => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        factory_id: val,
+                                                        raw_material_id: ''
+                                                    });
+                                                }}
+                                                disabled={!!editingProduct}
+                                            />
+                                        </div>
                                     </div>
 
-                                    <div className={styles.formRow}>
+                                    <div className={styles.formRow3}>
                                         <div className={styles.formGroup}>
                                             <label className={styles.formLabel}>Size *</label>
                                             <input
@@ -368,48 +434,70 @@ export default function ProductsPage() {
                                         </div>
                                         <div className={styles.formGroup}>
                                             <label className={styles.formLabel}>Color *</label>
-                                            <select
-                                                className={styles.formSelect}
+                                            <CustomSelect
+                                                options={COLORS}
                                                 value={formData.color}
-                                                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                                            >
-                                                {COLORS.map((color) => (
-                                                    <option key={color} value={color}>
-                                                        {color}
-                                                    </option>
-                                                ))}
-                                            </select>
+                                                onChange={(val) => setFormData({ ...formData, color: val })}
+                                            />
+                                        </div>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Status</label>
+                                            <CustomSelect
+                                                options={[
+                                                    { value: 'active', label: 'Active' },
+                                                    { value: 'inactive', label: 'Inactive' }
+                                                ]}
+                                                value={formData.status}
+                                                onChange={(val) => setFormData({ ...formData, status: val })}
+                                            />
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Specifications Section */}
+                                {/* Manufacturing & Pricing Section */}
                                 <div className={styles.formSection}>
-                                    <h3 className={styles.sectionTitle}>Specifications</h3>
-                                    <div className={styles.formRow}>
+                                    <h3 className={styles.sectionTitle}>Manufacturing & Pricing</h3>
+                                    <div className={styles.formRow3}>
                                         <div className={styles.formGroup}>
                                             <label className={styles.formLabel}>Weight (grams) *</label>
                                             <input
                                                 type="number"
                                                 className={styles.formInput}
-                                                value={formData.weight_grams}
-                                                onChange={(e) => setFormData({ ...formData, weight_grams: e.target.value })}
+                                                value={formData.weight_grams ?? ''}
+                                                onChange={(e) => setFormData({ ...formData, weight_grams: e.target.value === '' ? '' : e.target.value })}
                                                 required
                                                 min="0"
                                                 step="0.01"
                                             />
                                         </div>
                                         <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Selling Price (₹)</label>
-                                            <input
-                                                type="number"
-                                                className={styles.formInput}
-                                                value={formData.selling_price}
-                                                onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
-                                                placeholder="Price per piece (e.g. 0.80)"
-                                                min="0"
-                                                step="0.01"
+                                            <label className={styles.formLabel}>Raw Material *</label>
+                                            <CustomSelect
+                                                options={rawMaterials.map(rm => ({ value: rm.id, label: rm.name }))}
+                                                value={formData.raw_material_id}
+                                                onChange={(val) => setFormData({ ...formData, raw_material_id: val })}
+                                                placeholder={formData.factory_id ? "Select material" : "Select factory first"}
+                                                disabled={!formData.factory_id || rawMaterialsLoading}
                                             />
+                                            {formData.factory_id && !rawMaterialsLoading && rawMaterials.length === 0 && (
+                                                <p style={{ fontSize: '0.75rem', color: 'var(--color-warning)', marginTop: '0.25rem' }}>
+                                                    No materials found.
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Selling Price</label>
+                                            <div className={styles.prefixWrapper}>
+                                                <input
+                                                    type="number"
+                                                    className={styles.formInput}
+                                                    value={formData.selling_price ?? ''}
+                                                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value === '' ? '' : e.target.value })}
+                                                    placeholder="per piece (e.g. 0.80)"
+                                                    min="0"
+                                                    step="0.01"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -417,14 +505,14 @@ export default function ProductsPage() {
                                 {/* Packing Rules Section */}
                                 <div className={styles.formSection}>
                                     <h3 className={styles.sectionTitle}>Packing Rules</h3>
-                                    <div className={styles.formRow}>
+                                    <div className={styles.formRow3}>
                                         <div className={styles.formGroup}>
                                             <label className={styles.formLabel}>Items per Packet *</label>
                                             <input
                                                 type="number"
                                                 className={styles.formInput}
-                                                value={formData.items_per_packet}
-                                                onChange={(e) => setFormData({ ...formData, items_per_packet: e.target.value })}
+                                                value={formData.items_per_packet ?? ''}
+                                                onChange={(e) => setFormData({ ...formData, items_per_packet: e.target.value === '' ? '' : e.target.value })}
                                                 required
                                                 min="1"
                                             />
@@ -434,26 +522,24 @@ export default function ProductsPage() {
                                             <input
                                                 type="number"
                                                 className={styles.formInput}
-                                                value={formData.packets_per_bundle}
-                                                onChange={(e) => setFormData({ ...formData, packets_per_bundle: e.target.value })}
+                                                value={formData.packets_per_bundle ?? ''}
+                                                onChange={(e) => setFormData({ ...formData, packets_per_bundle: e.target.value === '' ? '' : e.target.value })}
                                                 required
                                                 min="1"
                                             />
                                         </div>
+                                        <div className={styles.formGroup}>
+                                            <label className={styles.formLabel}>Items per Bundle (Direct)</label>
+                                            <input
+                                                type="number"
+                                                className={styles.formInput}
+                                                value={formData.items_per_bundle ?? ''}
+                                                onChange={(e) => setFormData({ ...formData, items_per_bundle: e.target.value === '' ? '' : e.target.value })}
+                                                placeholder="For loose-to-bundle"
+                                                min="1"
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-
-                                {/* Status */}
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Status</label>
-                                    <select
-                                        className={styles.formSelect}
-                                        value={formData.status}
-                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                    >
-                                        <option value="active">Active</option>
-                                        <option value="inactive">Inactive</option>
-                                    </select>
                                 </div>
                             </div>
 

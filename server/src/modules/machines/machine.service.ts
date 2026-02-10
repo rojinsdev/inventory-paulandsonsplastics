@@ -7,6 +7,7 @@ export interface CreateMachineDTO {
     max_die_weight?: number | null;
     daily_running_cost: number;
     status?: 'active' | 'inactive';
+    factory_id: string; // Required: which factory this machine belongs to
 }
 
 export class MachineService {
@@ -21,11 +22,18 @@ export class MachineService {
         return machine;
     }
 
-    async getAllMachines() {
-        const { data: machines, error } = await supabase
+    async getAllMachines(factoryId?: string) {
+        let query = supabase
             .from('machines')
-            .select('*')
+            .select('*, factories(name, code)')
             .order('created_at', { ascending: true });
+
+        // Filter by factory if provided
+        if (factoryId) {
+            query = query.eq('factory_id', factoryId);
+        }
+
+        const { data: machines, error } = await query;
 
         if (error) throw new Error(error.message);
         return machines;

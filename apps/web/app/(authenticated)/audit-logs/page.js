@@ -1,4 +1,6 @@
+'use client';
 import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, FileText, User, Filter, Clock, Download, RefreshCw, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { useUI } from '@/contexts/UIContext';
 import { auditAPI } from '@/lib/api';
@@ -27,12 +29,9 @@ const ENTITY_TYPES = [
 ];
 
 export default function AuditLogsPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [logs, setLogs] = useState([]);
-    const [total, setTotal] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize] = useState(50);
     const [filters, setFilters] = useState({
@@ -42,6 +41,23 @@ export default function AuditLogsPage() {
         date_to: '',
     });
     const [searchQuery, setSearchQuery] = useState('');
+
+    // Query
+    const { data: logData, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['audit-logs', { ...filters, page: currentPage, limit: pageSize }],
+        queryFn: () => auditAPI.getLogs({
+            ...filters,
+            page: currentPage,
+            limit: pageSize,
+        }),
+    });
+
+    const error = queryError?.message;
+
+    // Process results
+    const logs = Array.isArray(logData) ? logData : (logData?.data || []);
+    const total = Array.isArray(logData) ? logData.length : (logData?.total || logData?.data?.length || 0);
+
 
     useEffect(() => {
         setPageTitle('Audit Logs');
@@ -69,43 +85,14 @@ export default function AuditLogsPage() {
                 }
             ]
         });
-        loadLogs();
-    }, [currentPage, registerGuide, setPageTitle]);
+    }, [registerGuide, setPageTitle]);
 
-    const loadLogs = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const params = {
-                ...filters,
-                page: currentPage,
-                limit: pageSize,
-            };
-            const result = await auditAPI.getLogs(params);
-
-            // Handle both array and object responses
-            if (Array.isArray(result)) {
-                setLogs(result);
-                setTotal(result.length);
-            } else if (result && result.data) {
-                setLogs(result.data || []);
-                setTotal(result.total || result.data?.length || 0);
-            } else {
-                setLogs([]);
-                setTotal(0);
-            }
-        } catch (err) {
-            setError(err.message || 'Failed to load audit logs');
-            setLogs([]);
-            setTotal(0);
-        } finally {
-            setLoading(false);
-        }
+    const loadLogs = () => {
+        refetch();
     };
 
     const handleFilter = () => {
         setCurrentPage(1);
-        loadLogs();
     };
 
     const handleClearFilters = () => {
@@ -117,7 +104,6 @@ export default function AuditLogsPage() {
         });
         setSearchQuery('');
         setCurrentPage(1);
-        setTimeout(() => loadLogs(), 100);
     };
 
     const handleExport = () => {
@@ -320,7 +306,7 @@ export default function AuditLogsPage() {
                     <div className={styles.error}>
                         <X size={24} />
                         <p>{error}</p>
-                        <button className={styles.retryButton} onClick={loadLogs}>
+                        <button className={styles.retryButton} onClick={() => refetch()}>
                             Retry
                         </button>
                     </div>

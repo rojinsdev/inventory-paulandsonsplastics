@@ -10,6 +10,7 @@ export class AnalyticsService {
         end_date?: string;
         machine_id?: string;
         flagged_only?: boolean;
+        factory_id?: string;
     }) {
         let query = supabase
             .from('production_logs')
@@ -23,7 +24,7 @@ export class AnalyticsService {
                 actual_cycle_time_seconds,
                 units_lost_to_cycle,
                 flagged_for_review,
-                machines(name, category),
+                machines!inner(name, category, factory_id),
                 products(name, size, color)
             `)
             .order('units_lost_to_cycle', { ascending: false });
@@ -31,6 +32,7 @@ export class AnalyticsService {
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
         if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
+        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
         if (filters?.flagged_only) query = query.eq('flagged_for_review', true);
 
         const { data, error } = await query;
@@ -52,6 +54,7 @@ export class AnalyticsService {
         start_date?: string;
         end_date?: string;
         product_id?: string;
+        factory_id?: string;
     }) {
         let query = supabase
             .from('production_logs')
@@ -62,7 +65,7 @@ export class AnalyticsService {
                 actual_quantity,
                 actual_weight_grams,
                 weight_wastage_kg,
-                machines(name),
+                machines!inner(name, factory_id),
                 products(name, size, color, weight_grams)
             `)
             .order('weight_wastage_kg', { ascending: false });
@@ -70,6 +73,7 @@ export class AnalyticsService {
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
         if (filters?.product_id) query = query.eq('product_id', filters.product_id);
+        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);
@@ -88,6 +92,7 @@ export class AnalyticsService {
         start_date?: string;
         end_date?: string;
         machine_id?: string;
+        factory_id?: string;
     }) {
         let query = supabase
             .from('production_logs')
@@ -96,13 +101,14 @@ export class AnalyticsService {
                 downtime_reason,
                 date,
                 shift_number,
-                machines(name)
+                machines!inner(name, factory_id)
             `)
             .gt('downtime_minutes', 0);
 
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
         if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
+        if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);
@@ -137,6 +143,7 @@ export class AnalyticsService {
         start_date?: string;
         end_date?: string;
         machine_id?: string;
+        factory_id?: string;
     }) {
         let query = supabase
             .from('production_logs')
@@ -147,13 +154,14 @@ export class AnalyticsService {
                 actual_quantity,
                 theoretical_quantity,
                 machine_id,
-                machines(name, category)
+                machines!inner(name, category, factory_id)
             `)
             .order('date', { ascending: true });
 
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
         if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
+        if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);
@@ -198,6 +206,7 @@ export class AnalyticsService {
     async getShiftComparison(filters?: {
         start_date?: string;
         end_date?: string;
+        factory_id?: string;
     }) {
         let query = supabase
             .from('production_logs')
@@ -207,11 +216,13 @@ export class AnalyticsService {
                 actual_quantity,
                 units_lost_to_cycle,
                 downtime_minutes,
-                weight_wastage_kg
+                weight_wastage_kg,
+                machines!inner(factory_id)
             `);
 
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
+        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);
@@ -243,6 +254,7 @@ export class AnalyticsService {
     async getDashboardSummary(filters?: {
         start_date?: string;
         end_date?: string;
+        factory_id?: string;
     }) {
         let query = supabase
             .from('production_logs')
@@ -251,11 +263,13 @@ export class AnalyticsService {
                 units_lost_to_cycle,
                 weight_wastage_kg,
                 downtime_minutes,
-                flagged_for_review
+                flagged_for_review,
+                machines!inner(factory_id)
             `);
 
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
+        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);

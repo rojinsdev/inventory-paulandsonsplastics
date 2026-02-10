@@ -5,7 +5,7 @@ import { BarChart } from '@mui/x-charts/BarChart';
 import { formatNumber } from '@/lib/utils';
 import styles from './Chart.module.css';
 
-export default function MachinePerformance({ data }) {
+export default function MachinePerformance({ data, compact }) {
     const chartData = useMemo(() => {
         if (!data || !Array.isArray(data)) return [];
         return data
@@ -58,8 +58,8 @@ export default function MachinePerformance({ data }) {
                     },
                 ]}
                 layout="horizontal"
-                height={300}
-                margin={{ left: 100, right: 30, top: 40, bottom: 40 }}
+                height={compact ? 220 : 300}
+                margin={{ left: 100, right: 30, top: compact ? 20 : 40, bottom: compact ? 30 : 40 }}
             />
         </div>
     );

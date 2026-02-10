@@ -4,10 +4,13 @@ import { reportsService } from './reports.service';
 export class ReportsController {
     async getInventoryReport(req: Request, res: Response) {
         try {
-            const { from, to } = req.query;
+            const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+            const { from, to, factory_id } = req.query;
+
             const report = await reportsService.getInventoryReport({
-                from: from as string,
-                to: to as string
+                from: sanitize(from),
+                to: sanitize(to),
+                factory_id: sanitize(factory_id)
             });
             res.json(report);
         } catch (error: any) {
@@ -17,10 +20,13 @@ export class ReportsController {
 
     async getSalesReport(req: Request, res: Response) {
         try {
-            const { from, to } = req.query;
+            const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+            const { from, to, factory_id } = req.query;
+
             const report = await reportsService.getSalesReport({
-                from: from as string,
-                to: to as string
+                from: sanitize(from),
+                to: sanitize(to),
+                factory_id: sanitize(factory_id)
             });
             res.json(report);
         } catch (error: any) {

@@ -13,13 +13,14 @@ final productionSubmissionProvider =
   ref,
 ) {
   final repository = ref.watch(productionRepositoryProvider);
-  return ProductionSubmissionNotifier(repository);
+  return ProductionSubmissionNotifier(repository, ref);
 });
 
 class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<bool>> {
   final ProductionRepository _repository;
+  final Ref _ref;
 
-  ProductionSubmissionNotifier(this._repository)
+  ProductionSubmissionNotifier(this._repository, this._ref)
       : super(const AsyncValue.data(false));
 
   Future<void> submit({
@@ -55,9 +56,68 @@ class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<bool>> {
         downtimeReason: downtimeReason,
         date: date,
       );
+
+      // Update sticky data
+      _ref.read(lastEntryProvider.notifier).update(date, endTime);
+
       state = AsyncValue.data(saveAndAddAnother);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
   }
+
+  Future<void> submitCap({
+    required String capId,
+    required int shiftNumber,
+    required String startTime,
+    required String endTime,
+    required double totalWeightKg,
+    required double actualCycleTimeSeconds,
+    required double actualWeightGrams,
+    String? remarks,
+    required DateTime date,
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repository.submitCapProduction(
+        capId: capId,
+        shiftNumber: shiftNumber,
+        startTime: startTime,
+        endTime: endTime,
+        totalWeightKg: totalWeightKg,
+        actualCycleTimeSeconds: actualCycleTimeSeconds,
+        actualWeightGrams: actualWeightGrams,
+        remarks: remarks,
+        date: date,
+      );
+
+      // Update sticky data
+      _ref.read(lastEntryProvider.notifier).update(date, endTime);
+
+      state = const AsyncValue.data(false);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
 }
+
+// Sticky Start Time Logic
+class LastEntry {
+  final DateTime date;
+  final String endTime;
+
+  LastEntry({required this.date, required this.endTime});
+}
+
+class LastEntryNotifier extends StateNotifier<LastEntry?> {
+  LastEntryNotifier() : super(null);
+
+  void update(DateTime date, String endTime) {
+    state = LastEntry(date: date, endTime: endTime);
+  }
+}
+
+final lastEntryProvider =
+    StateNotifierProvider<LastEntryNotifier, LastEntry?>((ref) {
+  return LastEntryNotifier();
+});

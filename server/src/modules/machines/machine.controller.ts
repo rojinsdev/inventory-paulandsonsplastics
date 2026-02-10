@@ -9,6 +9,7 @@ const createMachineSchema = z.object({
     max_die_weight: z.number().nullable().optional(),
     daily_running_cost: z.number().min(0),
     status: z.enum(['active', 'inactive']).optional(),
+    factory_id: z.string().uuid('Invalid factory ID'),
 });
 
 export class MachineController {
@@ -28,7 +29,8 @@ export class MachineController {
 
     async list(req: Request, res: Response) {
         try {
-            const machines = await machineService.getAllMachines();
+            const factoryId = req.query.factory_id as string | undefined;
+            const machines = await machineService.getAllMachines(factoryId);
             res.json(machines);
         } catch (error: any) {
             res.status(500).json({ error: error.message });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { planningAPI } from '@/lib/api/planning';
 import { productsAPI } from '@/lib/api';
 import {
@@ -27,55 +28,49 @@ const FORECAST_METHODS = [
 
 export default function ForecastsPage() {
     const { setPageTitle } = useUI();
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [products, setProducts] = useState([]);
     const [selectedProduct, setSelectedProduct] = useState('');
     const [selectedMethod, setSelectedMethod] = useState('');
-    const [forecasts, setForecasts] = useState([]);
-    const [accuracySummary, setAccuracySummary] = useState(null);
 
-    useEffect(() => {
-        setPageTitle('Demand Forecasts');
-        loadProducts();
-    }, [setPageTitle]);
+    // Query for products
+    const { data: products = [] } = useQuery({
+        queryKey: ['products'],
+        queryFn: () => productsAPI.getAll().then(res => res || []),
+    });
 
-    useEffect(() => {
-        if (selectedProduct) {
-            loadForecasts();
-        }
-    }, [selectedProduct, selectedMethod]);
-
-    const loadProducts = async () => {
-        try {
-            const data = await productsAPI.getAll();
-            setProducts(data || []);
-            if (data && data.length > 0) {
-                setSelectedProduct(data[0].id);
-            }
-        } catch (err) {
-            setError(err.message);
-        }
-    };
-
-    const loadForecasts = async () => {
-        setLoading(true);
-        setError(null);
-        try {
+    // Query for forecasts
+    const { data: forecastData, isLoading: forecastsLoading, error: forecastError, refetch: refetchForecasts } = useQuery({
+        queryKey: ['forecasts', selectedProduct, selectedMethod],
+        queryFn: () => {
+            if (!selectedProduct) return null;
             const filters = {
                 product_id: selectedProduct,
                 ...(selectedMethod && { forecast_method: selectedMethod }),
             };
+            return planningAPI.getForecasts(filters);
+        },
+        enabled: !!selectedProduct,
+    });
 
-            const data = await planningAPI.getForecasts(filters);
-            setForecasts(data.forecasts || []);
-            setAccuracySummary(data.accuracy_summary || null);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
+    const loading = forecastsLoading;
+    const error = forecastError?.message;
+    const forecasts = forecastData?.forecasts || [];
+    const accuracySummary = forecastData?.accuracy_summary || null;
+
+    useEffect(() => {
+        setPageTitle('Demand Forecasts');
+    }, [setPageTitle]);
+
+    useEffect(() => {
+        if (products.length > 0 && !selectedProduct) {
+            setSelectedProduct(products[0].id);
         }
+    }, [products, selectedProduct]);
+
+    const loadForecasts = () => {
+        refetchForecasts();
     };
+
+
 
     const handleExport = () => {
         if (forecasts.length === 0) return;

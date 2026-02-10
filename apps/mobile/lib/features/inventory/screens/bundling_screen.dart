@@ -15,6 +15,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _quantityController = TextEditingController();
   String? _selectedProductId;
+  String _source = 'packed';
 
   @override
   void dispose() {
@@ -24,9 +25,11 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
-      ref
-          .read(inventoryOperationProvider.notifier)
-          .bundle(_selectedProductId!, int.parse(_quantityController.text));
+      ref.read(inventoryOperationProvider.notifier).bundle(
+            _selectedProductId!,
+            int.parse(_quantityController.text),
+            source: _source,
+          );
     }
   }
 
@@ -88,13 +91,17 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      Icons.layers_outlined,
+                      _source == 'packed'
+                          ? Icons.layers_outlined
+                          : Icons.inventory_2_outlined,
                       color: colorScheme.onTertiaryContainer,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
-                        'Record finished bundles from packed packets.',
+                        _source == 'packed'
+                            ? 'Record finished bundles from packed packets.'
+                            : 'Record finished bundles directly from loose items.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onTertiaryContainer,
                         ),
@@ -130,6 +137,39 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 error: (error, _) => Text(
                   'Error: $error',
                   style: const TextStyle(color: Colors.red),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Source Selector
+              Text(
+                'Bundling Source',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(
+                    value: 'packed',
+                    label: Text('From Packets'),
+                    icon: Icon(Icons.layers_outlined),
+                  ),
+                  ButtonSegment(
+                    value: 'semi_finished',
+                    label: Text('From Loose'),
+                    icon: Icon(Icons.inventory_2_outlined),
+                  ),
+                ],
+                selected: {_source},
+                onSelectionChanged: (Set<String> newSelection) {
+                  setState(() => _source = newSelection.first);
+                },
+                style: SegmentedButton.styleFrom(
+                  selectedBackgroundColor: colorScheme.tertiaryContainer,
+                  selectedForegroundColor: colorScheme.onTertiaryContainer,
                 ),
               ),
               const SizedBox(height: 24),

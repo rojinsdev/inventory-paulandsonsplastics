@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { apiLimiter, authLimiter } from './middleware/rateLimiter';
 import machineRoutes from './modules/machines/machine.routes';
 import productRoutes from './modules/products/product.routes';
 import productionRoutes from './modules/production/production.routes';
@@ -17,6 +18,10 @@ import dashboardRoutes from './modules/dashboard/dashboard.routes';
 import analyticsRoutes from './modules/analytics/analytics.routes';
 import planningRoutes from './modules/planning/planning.routes';
 import reportRoutes from './modules/reports/reports.routes';
+import factoryRoutes from './modules/factories/factory.routes';
+import capRoutes from './modules/inventory/cap.routes';
+import cashFlowRoutes from './modules/cash-flow/cash-flow.routes';
+
 
 
 
@@ -25,9 +30,19 @@ dotenv.config();
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+
+// Strict CORS Policy
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+}));
+
 app.use(morgan('dev'));
-app.use(express.json());
+app.use(express.json({ limit: '10kb' })); // Body parser limit to prevent DoS
+
+// Global Rate Limiter
+app.use('/api', apiLimiter);
 
 app.get('/', (req, res) => {
     res.json({ message: 'Inventory Production System API is running' });
@@ -38,7 +53,8 @@ app.get('/health', (req, res) => {
 });
 
 // Auth routes (no authentication required)
-app.use('/api/auth', authRoutes);
+// Apply stricter rate limiting to auth routes
+app.use('/api/auth', authLimiter, authRoutes);
 
 // Protected routes (authentication required - will be added per route)
 app.use('/api/machines', machineRoutes);
@@ -54,6 +70,14 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/planning', planningRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/factories', factoryRoutes);
+app.use('/api/caps', capRoutes);
+app.use('/api/cash-flow', cashFlowRoutes);
+
+// Global Error Handler
+import { errorHandler } from './middleware/errorHandler';
+app.use(errorHandler);
+
 
 
 export default app;

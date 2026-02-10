@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth';
 
 import { useSettings } from '@/contexts/SettingsContext';
+import { useFactory } from '@/contexts/FactoryContext';
 import { User, Bell, Zap, HelpCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AVAILABLE_QUICK_ACTIONS } from '@/lib/constants';
@@ -11,11 +12,13 @@ import SettingsModal from '../ui/SettingsModal';
 import ScreenGuide from '../ui/ScreenGuide';
 import { useGuide } from '@/contexts/GuideContext';
 import DateTimeWidget from '../ui/DateTimeWidget';
+import FactoryFilter from '../ui/FactoryFilter';
 import styles from './Header.module.css';
 
 export default function Header({ title }) {
     const { user } = useAuth();
     const { settings } = useSettings();
+    const { selectedFactory, setSelectedFactory } = useFactory();
     const [showSettings, setShowSettings] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
     const { guideContent, openGuide } = useGuide();
@@ -68,6 +71,14 @@ export default function Header({ title }) {
 
             {/* Actions */}
             <div className={styles.actions}>
+                {user?.role === 'admin' &&
+                    !pathname.includes('/orders') &&
+                    !pathname.includes('/deliveries') &&
+                    !pathname.includes('/payments') &&
+                    !pathname.includes('/reports/cash-flow') &&
+                    !pathname.includes('/customers') &&
+                    <FactoryFilter value={selectedFactory} onChange={setSelectedFactory} />}
+
                 <div ref={quickActionsRef} style={{ position: 'relative' }}>
                     <button
                         className={styles.iconBtn}

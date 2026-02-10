@@ -1,3 +1,7 @@
+.dashboard {
+    padding-bottom: 3rem;
+}
+
 /* Welcome Section */
 .welcomeSection {
     display: flex;
@@ -163,265 +167,194 @@
     color: var(--error-text, #dc2626);
 }
 
-/* Metrics Grid */
-.metricsGrid {
+/* Bento Grid Layout */
+.bentoGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
+    grid-auto-rows: minmax(160px, auto);
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
 
-/* Empty State */
-.emptyMetrics {
-    padding: 3rem 2rem;
-    text-align: center;
+.bentoCard {
     background: var(--surface);
-    border-radius: 1rem;
-    border: 1px solid var(--border);
-    margin-bottom: 2rem;
-}
-
-.emptyMetrics p {
-    color: var(--text-muted);
-    font-size: 0.9375rem;
-    margin: 0;
-}
-
-/* Charts Grid */
-.chartsGrid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-
-.chartCard {
-    background: var(--surface);
-    border-radius: 1rem;
-    border: 1px solid var(--border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    padding: 1.5rem;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.chartCard.fullWidth {
-    grid-column: 1 / -1;
-}
-
-:root[class~="dark"] .chartCard {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-.chartCard:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.chartHeader {
-    margin-bottom: 1rem;
-}
-
-.chartTitle {
-    font-size: 1.125rem;
-    font-weight: 600;
-    color: var(--text-main);
-    margin: 0 0 0.25rem 0;
-}
-
-.chartSubtitle {
-    font-size: 0.875rem;
-    color: var(--text-muted);
-}
-
-/* Flow Section */
-.flowSection {
-    margin-bottom: 2.5rem;
-    background: var(--surface);
-    border-radius: 1rem;
+    border-radius: 1.5rem;
     border: 1px solid var(--border);
     padding: 1.5rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.05),
+        0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
-.sectionHeader {
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border);
+:root[class~="dark"] .bentoCard {
+    background: var(--surface-elevated);
+    box-shadow:
+        0 10px 15px -3px rgba(0, 0, 0, 0.4),
+        0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    border-color: rgba(255, 255, 255, 0.05);
 }
 
-.sectionTitle {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--text-main);
-    margin: 0 0 0.25rem 0;
+.bentoCard:hover {
+    transform: translateY(-4px);
+    box-shadow:
+        0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    border-color: var(--primary-alpha);
 }
 
-.sectionSubtitle {
-    font-size: 0.875rem;
-    color: var(--text-muted);
+.span2x2 {
+    grid-column: span 2;
+    grid-row: span 2;
 }
 
-/* Bottom Section */
-.bottomSection {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+.span2x1 {
+    grid-column: span 2;
 }
 
-.activityCard,
-.actionsCard {
-    background: var(--surface);
-    border-radius: 1rem;
-    border: 1px solid var(--border);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    padding: 1.5rem;
+.span1x1 {
+    grid-column: span 1;
 }
 
-:root[class~="dark"] .activityCard,
-:root[class~="dark"] .actionsCard {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
-}
-
-.cardHeader {
+.cardIcon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     margin-bottom: 1rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border);
+    background: var(--primary-alpha);
+    color: var(--primary);
 }
 
 .cardTitle {
-    font-size: 1.125rem;
+    font-size: 0.875rem;
     font-weight: 600;
-    color: var(--text-main);
-    margin: 0;
-}
-
-.viewAllButton {
-    font-size: 0.875rem;
-    color: var(--primary);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.25rem;
-    transition: background-color 0.2s;
-}
-
-.viewAllButton:hover {
-    background: var(--slate-50);
-}
-
-:root[class~="dark"] .viewAllButton:hover {
-    background: var(--surface-elevated);
-}
-
-/* Actions Grid */
-.actionsGrid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.75rem;
-}
-
-.actionButton {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 1rem;
-    background: var(--slate-50);
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    color: var(--text-main);
-    text-align: left;
-    transition: all 0.2s;
-    cursor: pointer;
-    font-size: 0.875rem;
-    font-weight: 500;
-}
-
-:root[class~="dark"] .actionButton {
-    background: var(--surface-elevated);
-}
-
-.actionButton:hover {
-    background: var(--surface);
-    border-color: var(--primary);
-    color: var(--primary);
-    transform: translateX(4px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-/* Loading & Error States */
-.loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 4rem 2rem;
     color: var(--text-muted);
-    gap: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
 }
 
-.spinner {
-    animation: spin 1s linear infinite;
+.cardValue {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: var(--text-main);
+    line-height: 1;
+    margin-bottom: 0.5rem;
 }
 
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+.cardSubtitle {
+    font-size: 0.875rem;
+    color: var(--text-muted);
 }
 
-.error {
+.cardTrend {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.625rem;
+    border-radius: 2rem;
+    width: fit-content;
+    margin-top: 1rem;
+}
+
+.trendUp {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+}
+
+.trendDown {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+/* Charts Grid Overrides */
+.chartsGrid {
+    display: none;
+    /* Replaced by Bento Grid */
+}
+
+/* Flow Section - Removed per User Request */
+.flowSection {
+    display: none;
+}
+
+/* Business Health Styles */
+.healthGrid {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 2rem;
-    color: var(--error-text);
-    gap: 1rem;
-    text-align: center;
-    background-color: var(--error-bg);
-    border-radius: 1rem;
-    border: 1px solid var(--error-border, #fecaca);
+    gap: 1.25rem;
+    margin-top: 1.5rem;
 }
 
-/* Responsive Design */
-@media (max-width: 1200px) {
-    .chartsGrid {
-        grid-template-columns: 1fr;
-    }
+.healthItem {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
 
-    .metricsGrid {
+.healthLabel {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.healthValue {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.survivalHighlight {
+    margin-top: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--border);
+}
+
+.survivalHighlight .healthValue {
+    color: var(--primary);
+    font-size: 1.75rem;
+}
+
+.healthSubtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.financialIcon {
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366f1;
+}
+
+@media (max-width: 1200px) {
+    .bentoGrid {
         grid-template-columns: repeat(2, 1fr);
     }
 }
 
 @media (max-width: 768px) {
-    .welcomeSection {
-        flex-direction: column;
-    }
-
-    .metricsGrid {
+    .bentoGrid {
         grid-template-columns: 1fr;
+        grid-auto-rows: auto;
     }
 
-    .chartsGrid {
-        grid-template-columns: 1fr;
-    }
-
-    .bottomSection {
-        grid-template-columns: 1fr;
-    }
-
-    .timeSelector {
-        width: 100%;
-        justify-content: flex-start;
+    .span2x2,
+    .span2x1 {
+        grid-column: span 1;
+        grid-row: span 1;
     }
 }

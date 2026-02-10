@@ -1,0 +1,64 @@
+import { Request, Response } from 'express';
+import { capService } from '../inventory/cap.service';
+import { AuthRequest } from '../../middleware/auth';
+
+export class CapController {
+    async create(req: AuthRequest, res: Response) {
+        try {
+            const cap = await capService.createCap(req.body);
+            res.status(201).json(cap);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async list(req: Request, res: Response) {
+        try {
+            const factoryId = req.query.factory_id as string;
+            const caps = await capService.getAllCaps(factoryId);
+            res.json(caps);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getOne(req: Request, res: Response) {
+        try {
+            const cap = await capService.getCapById(req.params.id);
+            res.json(cap);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async update(req: AuthRequest, res: Response) {
+        try {
+            const cap = await capService.updateCap(req.params.id, req.body);
+            res.json(cap);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async delete(req: AuthRequest, res: Response) {
+        try {
+            await capService.deleteCap(req.params.id);
+            res.json({ success: true });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getBalances(req: Request, res: Response) {
+        try {
+            const factoryId = req.query.factory_id as string;
+            if (!factoryId) throw new Error('Factory ID required');
+            const balances = await capService.getCapStockBalances(factoryId);
+            res.json(balances);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+}
+
+export const capController = new CapController();

@@ -63,8 +63,8 @@
     padding: 10px 16px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: white;
-    color: var(--text-primary);
+    background: var(--surface);
+    color: var(--text-main);
     cursor: pointer;
     font-size: 14px;
     font-weight: 500;
@@ -94,7 +94,7 @@
     gap: 16px;
     align-items: center;
     padding: 16px;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
     margin-bottom: 24px;
@@ -121,8 +121,8 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
-    color: var(--text-primary);
-    background: white;
+    color: var(--text-main);
+    background: var(--surface);
     cursor: pointer;
     transition: all 0.2s;
     min-width: 200px;
@@ -148,7 +148,7 @@
 
 .statCard {
     padding: 20px;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
 }
@@ -179,7 +179,7 @@
 
 /* Chart */
 .chartContainer {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 24px;
@@ -187,7 +187,7 @@
 
 /* Table */
 .tableContainer {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
     overflow: hidden;
@@ -297,7 +297,7 @@
 }
 
 .methodCard {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 12px;
     overflow: hidden;

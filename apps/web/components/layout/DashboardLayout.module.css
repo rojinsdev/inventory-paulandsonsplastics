@@ -4,6 +4,12 @@
     background-color: var(--background);
     padding: 0.75rem;
     gap: 0.75rem;
+    transition: padding 0.2s ease, gap 0.2s ease;
+}
+
+.layout.compact {
+    padding: 0.4rem;
+    gap: 0.4rem;
 }
 
 .main {
@@ -12,6 +18,11 @@
     flex-direction: column;
     min-width: 0;
     gap: 0.75rem;
+    transition: gap 0.2s ease;
+}
+
+.layout.compact .main {
+    gap: 0.4rem;
 }
 
 .content {
@@ -23,6 +34,12 @@
     border-radius: 1rem;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     min-height: calc(100vh - 80px - 1.5rem - 0.75rem);
+    transition: padding 0.2s ease, border-radius 0.2s ease;
+}
+
+.content.compactContent {
+    padding: 1rem 1.5rem;
+    border-radius: 0.5rem;
 }
 
 :root[class~="dark"] .content {

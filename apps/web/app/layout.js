@@ -6,6 +6,9 @@ import { SettingsProvider } from '../contexts/SettingsContext';
 import { GuideProvider } from '../contexts/GuideContext';
 import { UIProvider } from '../contexts/UIContext';
 import NextTopLoader from 'nextjs-toploader';
+import QueryProvider from '../components/providers/QueryProvider';
+import RealtimeHandler from '../components/providers/RealtimeHandler';
+import { Toaster } from 'react-hot-toast';
 
 
 export const metadata = {
@@ -36,19 +39,23 @@ export default function RootLayout({ children }) {
           speed={200}
           shadow="0 0 10px #3b82f6,0 0 5px #3b82f6"
         />
-        <AuthProvider>
-          <ThemeProvider>
-            <MuiThemeProvider>
-              <SettingsProvider>
-                <GuideProvider>
-                  <UIProvider>
-                    {children}
-                  </UIProvider>
-                </GuideProvider>
-              </SettingsProvider>
-            </MuiThemeProvider>
-          </ThemeProvider>
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            <ThemeProvider>
+              <MuiThemeProvider>
+                <SettingsProvider>
+                  <GuideProvider>
+                    <UIProvider>
+                      <RealtimeHandler />
+                      <Toaster position="top-right" />
+                      {children}
+                    </UIProvider>
+                  </GuideProvider>
+                </SettingsProvider>
+              </MuiThemeProvider>
+            </ThemeProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Trash2, Loader2, Users, Phone, MapPin, Eye } from 'lucide-react';
 import { customersAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
@@ -9,15 +11,13 @@ import { useUI } from '@/contexts/UIContext';
 import styles from './page.module.css';
 
 export default function CustomersPage() {
+    const queryClient = useQueryClient();
+    const router = useRouter();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [customers, setCustomers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+
     const [modalOpen, setModalOpen] = useState(false);
     const [editingCustomer, setEditingCustomer] = useState(null);
-    const [saving, setSaving] = useState(false);
-
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
@@ -26,6 +26,37 @@ export default function CustomersPage() {
         gst_number: '',
         notes: '',
     });
+
+    // Queries
+    const { data: customers = [], isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['customers'],
+        queryFn: () => customersAPI.getAll(),
+    });
+
+    const error = queryError?.message;
+
+    // Mutations
+    const saveMutation = useMutation({
+        mutationFn: (data) => editingCustomer
+            ? customersAPI.update(editingCustomer.id, data)
+            : customersAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customers'] });
+            setModalOpen(false);
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id) => customersAPI.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customers'] });
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const saving = saveMutation.isPending;
+
 
     useEffect(() => {
         setPageTitle('Customers');
@@ -53,20 +84,9 @@ export default function CustomersPage() {
                 }
             ]
         });
-        loadCustomers();
     }, [registerGuide, setPageTitle]);
 
-    const loadCustomers = async () => {
-        try {
-            setLoading(true);
-            const data = await customersAPI.getAll();
-            setCustomers(Array.isArray(data) ? data : []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const handleCreate = () => {
         setEditingCustomer(null);
@@ -96,32 +116,12 @@ export default function CustomersPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setSaving(true);
-
-        try {
-            if (editingCustomer) {
-                await customersAPI.update(editingCustomer.id, formData);
-            } else {
-                await customersAPI.create(formData);
-            }
-            setModalOpen(false);
-            loadCustomers();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
+        saveMutation.mutate(formData);
     };
 
     const handleDelete = async (customer) => {
         if (!confirm(`Delete customer "${customer.name}"?`)) return;
-
-        try {
-            await customersAPI.delete(customer.id);
-            loadCustomers();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        deleteMutation.mutate(customer.id);
     };
 
     return (
@@ -163,7 +163,7 @@ export default function CustomersPage() {
                 ) : error ? (
                     <div className={styles.error}>
                         <p>Error: {error}</p>
-                        <button className="btn btn-secondary" onClick={loadCustomers}>
+                        <button className="btn btn-secondary" onClick={() => refetch()}>
                             Retry
                         </button>
                     </div>
@@ -218,7 +218,7 @@ export default function CustomersPage() {
                                         <div className={styles.actions}>
                                             <button
                                                 className="btn btn-sm btn-primary"
-                                                onClick={() => window.location.href = `/customers/${customer.id}`}
+                                                onClick={() => router.push(`/customers/${customer.id}`)}
                                                 title="View Profile"
                                             >
                                                 <Eye size={14} />

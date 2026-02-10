@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useUI } from '@/contexts/UIContext';
+import { useFactory } from '@/contexts/FactoryContext';
 import InventoryStateTable from './InventoryStateTable';
 import { inventoryAPI, productsAPI } from '@/lib/api';
 import { formatNumber } from '@/lib/utils';
@@ -32,6 +33,7 @@ const stateConfig = {
 export default function InventoryPageTemplate({ title, type, description, guide }) {
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
+    const { selectedFactory } = useFactory();
     const [data, setData] = useState([]);
 
     useEffect(() => {
@@ -51,14 +53,15 @@ export default function InventoryPageTemplate({ title, type, description, guide 
 
     useEffect(() => {
         loadData();
-    }, []);
+    }, [selectedFactory]);
 
     const loadData = async () => {
         try {
             setLoading(true);
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
             const [stockResult, productsResult] = await Promise.all([
-                inventoryAPI.getStock().catch(() => []),
-                productsAPI.getAll().catch(() => []),
+                inventoryAPI.getStock(params).catch(() => []),
+                productsAPI.getAll(params).catch(() => []),
             ]);
             if (Array.isArray(stockResult)) {
                 setData(stockResult);

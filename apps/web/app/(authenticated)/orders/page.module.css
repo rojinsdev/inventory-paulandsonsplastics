@@ -174,7 +174,69 @@
     padding: 0.75rem;
     background-color: var(--slate-50);
     border-radius: 0.5rem;
+    border-radius: 0.5rem;
     border: 1px solid var(--border);
+}
+
+.itemGrid {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 40px;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    background-color: var(--slate-50);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+}
+
+.productLabel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.factoryLabel {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.unitToggle {
+    display: flex;
+    background-color: var(--slate-100);
+    border-radius: 0.5rem;
+    padding: 0.25rem;
+    gap: 0.25rem;
+}
+
+.unitOption {
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+}
+
+.unitOptionActive {
+    background-color: white;
+    color: var(--primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+:root[class~="dark"] .unitToggle {
+    background-color: var(--surface-hover);
+}
+
+:root[class~="dark"] .unitOptionActive {
+    background-color: var(--surface-elevated);
+    color: var(--primary-light);
 }
 
 :root[class~="dark"] .itemRow {
@@ -303,6 +365,71 @@
 
 /* Modal Styles */
 /* Modal Styles */
+.modalBackdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    /* Ensure high z-index */
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    padding: 1rem;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.modal {
+    position: relative;
+    /* Ensure stacking context */
+    background-color: var(--surface);
+    border-radius: 1rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    max-width: 700px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Prevent body scroll spill */
+    animation: slideUp 0.3s ease-out;
+    z-index: 10000;
+}
+
+.modalWide {
+    max-width: 1000px;
+}
+
+:root[class~="dark"] .modal {
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .modalHeader {
     padding: 1.5rem;
     border-bottom: 1px solid var(--border);
@@ -311,6 +438,7 @@
     align-items: center;
     background-color: var(--surface);
     border-radius: 1rem 1rem 0 0;
+    flex-shrink: 0;
 }
 
 :root[class~="dark"] .modalHeader {
@@ -327,6 +455,154 @@
 .modalBody {
     padding: 1.5rem;
     background-color: var(--surface);
+    overflow-y: auto;
+    flex: 1;
+}
+
+:root[class~="dark"] .modalBody {
+    background-color: var(--surface);
+}
+
+/* Reverting document styles that were added */
+.sectionHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    margin-top: 2rem;
+    padding: 1rem 1.25rem;
+    background-color: var(--slate-50);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+}
+
+:root[class~="dark"] .sectionHeader {
+    background-color: var(--surface-hover);
+}
+
+.sectionTitleGroup {
+    display: flex;
+    flex-direction: column;
+}
+
+.itemHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    margin-top: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.sectionTitle {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.sectionSubtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0.25rem 0 0 0;
+}
+
+.itemHeaderActions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.modalFilterWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    background-color: var(--slate-100);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    animation: fadeIn 0.3s ease-out;
+}
+
+:root[class~="dark"] .modalFilterWrapper {
+    background-color: var(--surface-elevated);
+}
+
+.modalFactorySelect {
+    min-width: 180px;
+    height: 32px !important;
+}
+
+.modalFactorySelect :global(.CustomSelect_trigger__1) {
+    height: 32px !important;
+    padding: 0 0.5rem !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+.itemsList {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.itemRow {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding: 1rem;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.itemRow:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    border-color: var(--primary-light);
+}
+
+:root[class~="dark"] .itemRow {
+    background-color: var(--surface-elevated);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+:root[class~="dark"] .itemRow:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.productSelect {
+    flex: 2;
+}
+
+.unitSelect {
+    flex: 1;
+}
+
+.quantityInput {
+    width: 100px;
+}
+
+.removeBtn {
+    padding: 0.5rem;
+    background: none;
+    border: none;
+    color: var(--error);
+    cursor: pointer;
+    border-radius: 0.375rem;
+    transition: all 0.2s;
+    margin-top: 0.25rem;
+}
+
+.removeBtn:hover {
+    background-color: var(--error-bg);
+}
+
+.formField {
+    margin-bottom: 1.25rem;
 }
 
 .modalFooter {
@@ -337,6 +613,7 @@
     justify-content: flex-end;
     gap: 0.75rem;
     border-radius: 0 0 1rem 1rem;
+    flex-shrink: 0;
 }
 
 :root[class~="dark"] .modalFooter {
@@ -376,6 +653,13 @@
 
 .formGroup:last-child {
     margin-bottom: 0;
+}
+
+.formGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
 }
 
 .formLabel {
@@ -452,29 +736,36 @@
     cursor: not-allowed;
 }
 
-.cancelButton {
-    padding: 0.625rem 1rem;
-    background-color: var(--slate-100);
+.cancelButton,
+.secondaryButton {
+    padding: 0.625rem 1.25rem;
+    background-color: transparent;
     border: 1px solid var(--border);
     border-radius: 0.75rem;
-    color: var(--text-main);
+    color: var(--text-muted);
     font-size: 0.875rem;
     font-weight: 500;
     cursor: pointer;
     transition: all var(--transition-fast);
 }
 
-:root[class~="dark"] .cancelButton {
-    background-color: var(--surface-elevated);
+:root[class~="dark"] .cancelButton,
+:root[class~="dark"] .secondaryButton {
+    background-color: transparent;
+    border-color: rgba(255, 255, 255, 0.1);
 }
 
-.cancelButton:hover {
-    background-color: var(--slate-200);
-    border-color: var(--primary);
+.cancelButton:hover,
+.secondaryButton:hover {
+    background-color: var(--slate-50);
+    border-color: var(--text-muted);
+    color: var(--text-main);
 }
 
-:root[class~="dark"] .cancelButton:hover {
+:root[class~="dark"] .cancelButton:hover,
+:root[class~="dark"] .secondaryButton:hover {
     background-color: var(--surface-hover);
+    border-color: rgba(255, 255, 255, 0.2);
 }
 
 .addItemButton {
@@ -504,6 +795,167 @@
 
 :root[class~="dark"] .addItemButton:hover {
     background-color: var(--surface-hover);
+}
+
+/* Responsive */
+/* Table Card */
+.tableCard {
+    background-color: var(--surface);
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+:root[class~="dark"] .tableCard {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.tableWrapper {
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.table thead {
+    background-color: var(--slate-50);
+    border-bottom: 1px solid var(--border);
+}
+
+:root[class~="dark"] .table thead {
+    background-color: var(--surface-elevated);
+}
+
+.table th {
+    padding: 1rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-main);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table td {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-main);
+}
+
+.table tbody tr:hover {
+    background-color: var(--slate-50);
+}
+
+:root[class~="dark"] .table tbody tr:hover {
+    background-color: var(--surface-elevated);
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.idCell {
+    font-family: monospace;
+    color: var(--text-muted);
+}
+
+.dateCell {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+/* Badges */
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.badgePrimary {
+    background-color: var(--info-bg);
+    color: var(--info-text);
+}
+
+.badgeWarning {
+    background-color: var(--warning-bg);
+    color: var(--warning-text);
+}
+
+.badgeSuccess {
+    background-color: var(--success-bg);
+    color: var(--success-text);
+}
+
+.badgeError {
+    background-color: var(--error-bg);
+    color: var(--error-text);
+}
+
+.badgeGray {
+    background-color: var(--slate-100);
+    color: var(--slate-700);
+}
+
+:root[class~="dark"] .badgeGray {
+    background-color: var(--surface-elevated);
+    color: var(--text-muted);
+}
+
+/* Preparation Status Display */
+.prepStatus {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.prepDone {
+    color: var(--success);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.prepPending {
+    color: var(--warning);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.prepInfo {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: 1.5rem;
+}
+
+/* Empty State */
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+    gap: 1rem;
+    text-align: center;
+}
+
+.emptyState svg {
+    opacity: 0.5;
+}
+
+.emptyHint {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin: 0;
 }
 
 /* Responsive */

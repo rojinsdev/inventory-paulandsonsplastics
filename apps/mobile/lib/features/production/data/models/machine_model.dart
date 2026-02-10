@@ -13,10 +13,10 @@ class Machine {
 
   factory Machine.fromJson(Map<String, dynamic> json) {
     return Machine(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      type: json['type'] as String,
-      status: json['status'] as String,
+      id: json['id'] as String? ?? '',
+      name: json['name'] as String? ?? 'Unknown',
+      type: json['type'] as String? ?? '',
+      status: json['status'] as String? ?? 'offline',
     );
   }
 }

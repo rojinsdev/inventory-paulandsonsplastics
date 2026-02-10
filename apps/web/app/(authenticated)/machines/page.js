@@ -1,25 +1,38 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Factory, Loader2, X, RefreshCw } from 'lucide-react';
 import { machinesAPI } from '@/lib/api';
+import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatCurrency, cn } from '@/lib/utils';
 import { useUI } from '@/contexts/UIContext';
+import CustomSelect from '@/components/ui/CustomSelect';
+import FactorySelect from '@/components/ui/FactorySelect';
 import styles from './page.module.css';
 
-const MACHINE_TYPES = ['extruder', 'cutting', 'printing', 'packing'];
-const MACHINE_CATEGORIES = ['small', 'large', 'other'];
+const MACHINE_TYPES = [
+    { value: 'extruder', label: 'Extruder' },
+    { value: 'cutting', label: 'Cutting' },
+    { value: 'printing', label: 'Printing' },
+    { value: 'packing', label: 'Packing' },
+];
+
+const MACHINE_CATEGORIES = [
+    { value: 'small', label: 'Small' },
+    { value: 'large', label: 'Large' },
+    { value: 'other', label: 'Other' },
+];
 
 export default function MachinesPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [machines, setMachines] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const { selectedFactory, factories } = useFactory();
+
     const [modalOpen, setModalOpen] = useState(false);
     const [editingMachine, setEditingMachine] = useState(null);
-    const [saving, setSaving] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -29,7 +42,53 @@ export default function MachinesPage() {
         max_die_weight: '',
         daily_running_cost: '7000',
         status: 'active',
+        factory_id: '',
     });
+
+    // Queries
+    const { data: machines = [], isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['machines', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
+            return machinesAPI.getAll(params).then(res => Array.isArray(res) ? res : []);
+        },
+    });
+
+    const error = queryError?.message;
+
+    // Mutations
+    const saveMutation = useMutation({
+        mutationFn: (data) => editingMachine
+            ? machinesAPI.update(editingMachine.id, data)
+            : machinesAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['machines'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            setModalOpen(false);
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: (id) => machinesAPI.delete(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['machines'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const statusMutation = useMutation({
+        mutationFn: ({ id, status }) => machinesAPI.update(id, { status }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['machines'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const saving = saveMutation.isPending;
+
 
     // Load machines
     useEffect(() => {
@@ -62,21 +121,9 @@ export default function MachinesPage() {
                 }
             ]
         });
-        loadMachines();
     }, [registerGuide, setPageTitle]);
 
-    const loadMachines = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const data = await machinesAPI.getAll();
-            setMachines(Array.isArray(data) ? data : []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     // Open modal for create
     const handleCreate = () => {
@@ -88,6 +135,7 @@ export default function MachinesPage() {
             max_die_weight: '',
             daily_running_cost: '7000',
             status: 'active',
+            factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
         });
         setModalOpen(true);
     };
@@ -102,6 +150,7 @@ export default function MachinesPage() {
             max_die_weight: machine.max_die_weight || '',
             daily_running_cost: machine.daily_running_cost || '7000',
             status: machine.status || 'active',
+            factory_id: machine.factory_id || '',
         });
         setModalOpen(true);
     };
@@ -109,52 +158,28 @@ export default function MachinesPage() {
     // Handle form submit
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setSaving(true);
 
-        try {
-            const payload = {
-                ...formData,
-                max_die_weight: formData.max_die_weight ? Number(formData.max_die_weight) : null,
-                daily_running_cost: Number(formData.daily_running_cost),
-            };
+        const payload = {
+            ...formData,
+            max_die_weight: formData.max_die_weight ? Number(formData.max_die_weight) : null,
+            daily_running_cost: Number(formData.daily_running_cost),
+        };
 
-            if (editingMachine) {
-                await machinesAPI.update(editingMachine.id, payload);
-            } else {
-                await machinesAPI.create(payload);
-            }
-
-            setModalOpen(false);
-            loadMachines();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
+        saveMutation.mutate(payload);
     };
 
     // Handle delete
     const handleDelete = async (machine) => {
         if (!confirm(`Delete machine "${machine.name}"?`)) return;
-
-        try {
-            await machinesAPI.delete(machine.id);
-            loadMachines();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        deleteMutation.mutate(machine.id);
     };
 
     // Toggle status
     const handleToggleStatus = async (machine) => {
-        try {
-            await machinesAPI.update(machine.id, {
-                status: machine.status === 'active' ? 'inactive' : 'active',
-            });
-            loadMachines();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        statusMutation.mutate({
+            id: machine.id,
+            status: machine.status === 'active' ? 'inactive' : 'active',
+        });
     };
 
     // Calculate stats
@@ -223,7 +248,7 @@ export default function MachinesPage() {
                     <div className={styles.error}>
                         <Factory size={24} />
                         <p>{error}</p>
-                        <button className={styles.retryButton} onClick={loadMachines}>
+                        <button className={styles.retryButton} onClick={() => refetch()}>
                             <RefreshCw size={16} />
                             Retry
                         </button>
@@ -246,6 +271,7 @@ export default function MachinesPage() {
                             <thead>
                                 <tr>
                                     <th>Name</th>
+                                    <th>Factory</th>
                                     <th>Type</th>
                                     <th>Category</th>
                                     <th>Daily Cost</th>
@@ -257,6 +283,7 @@ export default function MachinesPage() {
                                 {machines.map((machine) => (
                                     <tr key={machine.id}>
                                         <td className={styles.nameCell}>{machine.name}</td>
+                                        <td className="text-muted text-sm">{machine.factories?.name || '—'}</td>
                                         <td>
                                             <span className={cn(styles.badge, styles[`badge${getTypeBadge(machine.type)}`])}>
                                                 {machine.type}
@@ -314,6 +341,15 @@ export default function MachinesPage() {
                         <form onSubmit={handleSubmit}>
                             <div className={styles.modalBody}>
                                 <div className={styles.formGroup}>
+                                    <label className={styles.formLabel}>Factory *</label>
+                                    <FactorySelect
+                                        value={formData.factory_id}
+                                        onChange={(val) => setFormData({ ...formData, factory_id: val })}
+                                        disabled={!!editingMachine}
+                                    />
+                                </div>
+
+                                <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Name *</label>
                                     <input
                                         type="text"
@@ -328,32 +364,20 @@ export default function MachinesPage() {
                                 <div className={styles.formRow}>
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Type *</label>
-                                        <select
-                                            className={styles.formSelect}
+                                        <CustomSelect
+                                            options={MACHINE_TYPES}
                                             value={formData.type}
-                                            onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                                        >
-                                            {MACHINE_TYPES.map((type) => (
-                                                <option key={type} value={type}>
-                                                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => setFormData({ ...formData, type: val })}
+                                        />
                                     </div>
 
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Category *</label>
-                                        <select
-                                            className={styles.formSelect}
+                                        <CustomSelect
+                                            options={MACHINE_CATEGORIES}
                                             value={formData.category}
-                                            onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                        >
-                                            {MACHINE_CATEGORIES.map((cat) => (
-                                                <option key={cat} value={cat}>
-                                                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onChange={(val) => setFormData({ ...formData, category: val })}
+                                        />
                                     </div>
                                 </div>
 
@@ -385,14 +409,14 @@ export default function MachinesPage() {
 
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Status</label>
-                                    <select
-                                        className={styles.formSelect}
+                                    <CustomSelect
+                                        options={[
+                                            { value: 'active', label: 'Active' },
+                                            { value: 'inactive', label: 'Inactive' }
+                                        ]}
                                         value={formData.status}
-                                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                                    >
-                                        <option value="active">Active</option>
-                                        <option value="inactive">Inactive</option>
-                                    </select>
+                                        onChange={(val) => setFormData({ ...formData, status: val })}
+                                    />
                                 </div>
                             </div>
 

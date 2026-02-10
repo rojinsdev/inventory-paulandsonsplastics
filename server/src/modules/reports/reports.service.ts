@@ -1,18 +1,30 @@
 import { supabase } from '../../config/supabase';
 
 export class ReportsService {
-    async getInventoryReport(filters: { from?: string; to?: string }) {
+    async getInventoryReport(filters: { from?: string; to?: string; factory_id?: string }) {
         // Fetch all stock balances
-        const { data: balances, error: balanceError } = await supabase
+        let balancesQuery = supabase
             .from('stock_balances')
             .select('*');
+
+        if (filters.factory_id) {
+            balancesQuery = balancesQuery.eq('factory_id', filters.factory_id);
+        }
+
+        const { data: balances, error: balanceError } = await balancesQuery;
 
         if (balanceError) throw new Error(balanceError.message);
 
         // Fetch all products to ensure we cover all of them
-        const { data: products, error: productError } = await supabase
+        let productsQuery = supabase
             .from('products')
             .select('id, name, size');
+
+        if (filters.factory_id) {
+            productsQuery = productsQuery.eq('factory_id', filters.factory_id);
+        }
+
+        const { data: products, error: productError } = await productsQuery;
 
         if (productError) throw new Error(productError.message);
 
@@ -57,7 +69,7 @@ export class ReportsService {
         };
     }
 
-    async getSalesReport(filters: { from?: string; to?: string }) {
+    async getSalesReport(filters: { from?: string; to?: string; factory_id?: string }) {
         let query = supabase
             .from('sales_orders')
             .select(`
@@ -67,8 +79,11 @@ export class ReportsService {
                 created_at,
                 sales_order_items (
                     product_id,
-                    quantity_bundles,
-                    unit_price
+                    quantity,
+                    unit_price,
+                    products (
+                        factory_id
+                    )
                 )
             `);
 
@@ -78,8 +93,8 @@ export class ReportsService {
         const { data: orders, error } = await query;
         if (error) throw new Error(error.message);
 
-        let total_orders = orders.length;
-        let unique_customers = new Set(orders.map(o => o.customer_id)).size;
+        let total_orders = 0;
+        let unique_customers = new Set<string>();
         let total_bundles = 0;
         let total_revenue = 0;
 
@@ -87,22 +102,41 @@ export class ReportsService {
         const productStats: Record<string, number> = {};
 
         orders.forEach(order => {
-            if (!customerStats[order.customer_id]) {
-                customerStats[order.customer_id] = { order_count: 0, total_bundles: 0 };
-            }
-            customerStats[order.customer_id].order_count++;
+            let hasRelevantItems = false;
 
             order.sales_order_items.forEach((item: any) => {
-                total_bundles += item.quantity_bundles;
-                total_revenue += item.quantity_bundles * (item.unit_price || 0);
+                // Filter by factory if provided
+                if (filters.factory_id && item.products?.factory_id !== filters.factory_id) {
+                    return;
+                }
 
-                customerStats[order.customer_id].total_bundles += item.quantity_bundles;
+                hasRelevantItems = true;
+                total_bundles += item.quantity;
+                total_revenue += item.quantity * (item.unit_price || 0);
+
+                if (!customerStats[order.customer_id]) {
+                    customerStats[order.customer_id] = { order_count: 0, total_bundles: 0 };
+                }
+
+                // We increment order_count for customer later to avoid double counting per order?
+                // Actually, the original code incremented it here? No, original had logic outside item loop.
+                // Let's handle customer stats carefully.
+                customerStats[order.customer_id].total_bundles += item.quantity;
 
                 if (!productStats[item.product_id]) {
                     productStats[item.product_id] = 0;
                 }
-                productStats[item.product_id] += item.quantity_bundles;
+                productStats[item.product_id] += item.quantity;
             });
+
+            if (hasRelevantItems) {
+                total_orders++;
+                unique_customers.add(order.customer_id);
+                // Increment order count for this customer
+                if (customerStats[order.customer_id]) {
+                    customerStats[order.customer_id].order_count++;
+                }
+            }
         });
 
         const top_customers = Object.entries(customerStats)
@@ -115,7 +149,7 @@ export class ReportsService {
 
         return {
             total_orders,
-            unique_customers,
+            unique_customers: unique_customers.size,
             total_bundles,
             total_revenue,
             top_customers,

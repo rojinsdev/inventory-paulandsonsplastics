@@ -1,8 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
-import { usersAPI } from '@/lib/api';
+import { usersAPI, factoriesAPI } from '@/lib/api';
+// Fallback for factoriesAPI if not exported from main api file yet
+import { factoriesAPI as factoriesAPIArgs } from '@/lib/api-factories';
+const factoriesClient = factoriesAPI.getAll ? factoriesAPI : factoriesAPIArgs;
 import { cn } from '@/lib/utils';
 import {
     Users,
@@ -13,74 +17,125 @@ import {
     AlertCircle,
     CheckCircle,
     Loader2,
+    Edit,
 } from 'lucide-react';
 import styles from './page.module.css';
 
 export default function UsersPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+
+    // Queries
+    const { data: users, isLoading: loading, error: queryError, refetch } = useQuery({
+        queryKey: ['users'],
+        queryFn: () => usersAPI.getAll(),
+    });
+
+    const { data: factories = [] } = useQuery({
+        queryKey: ['factories'],
+        queryFn: () => factoriesClient.getAll(),
+    });
+
+    const error = queryError?.message;
+
+    // Mutations
+    const createMutation = useMutation({
+        mutationFn: (data) => usersAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            setShowModal(false);
+            resetForm();
+        },
+        onError: (err) => setFormError(err.message)
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }) => usersAPI.update(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            setShowModal(false);
+            resetForm();
+        },
+        onError: (err) => setFormError(err.message)
+    });
+
+    const toggleMutation = useMutation({
+        mutationFn: ({ id, active }) => active ? usersAPI.deactivate(id) : usersAPI.activate(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+        },
+        onError: (err) => alert('Failed to update user status: ' + err.message)
+    });
+
     const [showModal, setShowModal] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [selectedUserId, setSelectedUserId] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
         email: '',
         password: '',
         role: 'production_manager',
+        factory_id: '',
     });
     const [formError, setFormError] = useState(null);
-    const [formLoading, setFormLoading] = useState(false);
-    const [actionLoading, setActionLoading] = useState(null);
+
+    const formLoading = createMutation.isPending || updateMutation.isPending;
+    const actionLoading = toggleMutation.isPending ? toggleMutation.variables?.id : null;
+
 
     useEffect(() => {
         setPageTitle('User Management');
-        fetchUsers();
     }, [setPageTitle]);
 
-    const fetchUsers = async () => {
-        try {
-            setLoading(true);
-            const data = await usersAPI.getAll();
-            setUsers(data);
-            setError(null);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
+    const resetForm = () => {
+        setFormData({ name: '', email: '', password: '', role: 'production_manager', factory_id: '' });
+        setIsEditMode(false);
+        setSelectedUserId(null);
+        setFormError(null);
     };
 
     const handleCreate = async (e) => {
         e.preventDefault();
         setFormError(null);
-        setFormLoading(true);
 
-        try {
-            await usersAPI.create(formData);
-            setShowModal(false);
-            setFormData({ name: '', email: '', password: '', role: 'production_manager' });
-            fetchUsers();
-        } catch (err) {
-            setFormError(err.message);
-        } finally {
-            setFormLoading(false);
+        // Prepare data
+        const payload = { ...formData };
+        if (payload.factory_id === '') payload.factory_id = null;
+
+        if (isEditMode) {
+            // For update, exclude email and password if empty
+            const updatePayload = {
+                name: payload.name,
+                factory_id: payload.factory_id, // include factory_id for updates
+            };
+            // Note: API might not support email/password update here depending on implementation
+            // Checking API, update supports name and factory_id.
+            updateMutation.mutate({ id: selectedUserId, data: updatePayload });
+        } else {
+            createMutation.mutate(payload);
         }
     };
 
+    const handleEdit = (user) => {
+        setIsEditMode(true);
+        setSelectedUserId(user.id);
+        setFormData({
+            name: user.name || '',
+            email: user.email || '',
+            password: '', // Password not editable/visible
+            role: user.role,
+            factory_id: user.factory_id || '',
+        });
+        setShowModal(true);
+    };
+
+    const getFactoryName = (factoryId) => {
+        if (!factoryId) return 'All Factories';
+        return factories.find(f => f.id === factoryId)?.name || 'Unknown Factory';
+    };
+
     const handleToggleActive = async (user) => {
-        setActionLoading(user.id);
-        try {
-            if (user.active) {
-                await usersAPI.deactivate(user.id);
-            } else {
-                await usersAPI.activate(user.id);
-            }
-            fetchUsers();
-        } catch (err) {
-            alert('Failed to update user status: ' + err.message);
-        } finally {
-            setActionLoading(null);
-        }
+        toggleMutation.mutate({ id: user.id, active: user.active });
     };
 
     const formatDate = (dateString) => {
@@ -99,7 +154,7 @@ export default function UsersPage() {
                 <div>
                     <p className="text-muted">Manage production managers who can access the mobile app</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
                     <Plus size={18} />
                     Add User
                 </button>
@@ -132,6 +187,7 @@ export default function UsersPage() {
                                     <th>Name</th>
                                     <th>Email</th>
                                     <th>Role</th>
+                                    <th>Factory</th>
                                     <th>Status</th>
                                     <th>Created</th>
                                     <th>Actions</th>
@@ -155,6 +211,15 @@ export default function UsersPage() {
                                             </span>
                                         </td>
                                         <td>
+                                            {user.role === 'production_manager' ? (
+                                                <span className="text-sm font-medium">
+                                                    {getFactoryName(user.factory_id)}
+                                                </span>
+                                            ) : (
+                                                <span className="text-muted text-sm">—</span>
+                                            )}
+                                        </td>
+                                        <td>
                                             <span className={cn('badge', user.active ? 'badge-success' : 'badge-error')}>
                                                 {user.active ? 'Active' : 'Inactive'}
                                             </span>
@@ -163,6 +228,14 @@ export default function UsersPage() {
                                         <td>
                                             {user.role !== 'admin' && (
                                                 <div className={styles.actions}>
+                                                    <button
+                                                        className="edit-btn"
+                                                        onClick={() => handleEdit(user)}
+                                                        title="Edit User"
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                                                    >
+                                                        <Edit size={18} className="text-muted" />
+                                                    </button>
                                                     <button
                                                         className={cn('toggle', user.active && 'active')}
                                                         onClick={() => handleToggleActive(user)}
@@ -184,7 +257,7 @@ export default function UsersPage() {
                 <div className="modal-backdrop" onClick={() => setShowModal(false)}>
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2>Add Production Manager</h2>
+                            <h2>{isEditMode ? 'Edit User' : 'Add Production Manager'}</h2>
                             <button className={styles.closeBtn} onClick={() => setShowModal(false)}>
                                 ×
                             </button>
@@ -214,16 +287,18 @@ export default function UsersPage() {
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label className="form-label">Password</label>
+                                    <label className="form-label">Password {isEditMode && <span className="text-muted text-sm">(Leave blank to keep unchanged)</span>}</label>
                                     <input
                                         type="password"
                                         className="input"
                                         value={formData.password}
                                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                        placeholder="Minimum 8 characters"
+                                        placeholder={isEditMode ? "Enter new password to change" : "Minimum 8 characters"}
                                         minLength={8}
-                                        required
+                                        required={!isEditMode}
+                                        disabled={isEditMode} // Disable password change for now as API doesn't support it in update
                                     />
+                                    {isEditMode && <p className="text-xs text-muted mt-1">Password changes are not supported directly here.</p>}
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Role</label>
@@ -236,6 +311,25 @@ export default function UsersPage() {
                                         <option value="admin">Admin</option>
                                     </select>
                                 </div>
+
+                                {formData.role === 'production_manager' && (
+                                    <div className="form-group">
+                                        <label className="form-label">Assigned Factory</label>
+                                        <select
+                                            className="select"
+                                            value={formData.factory_id}
+                                            onChange={(e) => setFormData({ ...formData, factory_id: e.target.value })}
+                                            required={formData.role === 'production_manager'}
+                                        >
+                                            <option value="">Select a factory...</option>
+                                            {factories.map((factory) => (
+                                                <option key={factory.id} value={factory.id}>
+                                                    {factory.name} ({factory.code})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
 
                                 {formError && (
                                     <div className={styles.formError}>
@@ -261,10 +355,10 @@ export default function UsersPage() {
                                     {formLoading ? (
                                         <>
                                             <Loader2 size={16} className={styles.spinner} />
-                                            Creating...
+                                            {isEditMode ? 'Updating...' : 'Creating...'}
                                         </>
                                     ) : (
-                                        'Create User'
+                                        isEditMode ? 'Update User' : 'Create User'
                                     )}
                                 </button>
                             </div>

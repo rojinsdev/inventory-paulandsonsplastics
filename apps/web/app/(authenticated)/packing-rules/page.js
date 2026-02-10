@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Save, Loader2, Package, Boxes, Info, RefreshCw } from 'lucide-react';
 import { settingsAPI } from '@/lib/api';
@@ -8,17 +9,47 @@ import { useGuide } from '@/contexts/GuideContext';
 import styles from './page.module.css';
 
 export default function PackingRulesPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState(null);
     const [success, setSuccess] = useState(false);
 
-    const [settings, setSettings] = useState({
+    const [settingsState, setSettingsState] = useState({
         default_items_per_packet: 100,
         default_packets_per_bundle: 50,
     });
+
+    // Queries
+    const { data: settingsData, isLoading: loading, error: queryError, refetch: loadSettings } = useQuery({
+        queryKey: ['system-settings'],
+        queryFn: () => settingsAPI.get(),
+    });
+
+    const error = queryError?.message;
+
+    // Sync remote data to local state for editing
+    useEffect(() => {
+        if (settingsData) {
+            setSettingsState({
+                default_items_per_packet: settingsData.default_items_per_packet || 100,
+                default_packets_per_bundle: settingsData.default_packets_per_bundle || 50,
+            });
+        }
+    }, [settingsData]);
+
+    // Mutations
+    const saveMutation = useMutation({
+        mutationFn: (data) => settingsAPI.update(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['system-settings'] });
+            setSuccess(true);
+            setTimeout(() => setSuccess(false), 3000);
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const saving = saveMutation.isPending;
+
 
     // Load settings
     useEffect(() => {
@@ -47,41 +78,10 @@ export default function PackingRulesPage() {
                 }
             ]
         });
-        loadSettings();
     }, [registerGuide, setPageTitle]);
 
-    const loadSettings = async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            const data = await settingsAPI.get();
-            if (data) {
-                setSettings({
-                    default_items_per_packet: data.default_items_per_packet || 100,
-                    default_packets_per_bundle: data.default_packets_per_bundle || 50,
-                });
-            }
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleSave = async () => {
-        setSaving(true);
-        setError(null);
-        setSuccess(false);
-
-        try {
-            await settingsAPI.update(settings);
-            setSuccess(true);
-            setTimeout(() => setSuccess(false), 3000);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setSaving(false);
-        }
+        saveMutation.mutate(settingsState);
     };
 
     return (
@@ -143,10 +143,10 @@ export default function PackingRulesPage() {
                                         <input
                                             type="number"
                                             className={styles.settingInput}
-                                            value={settings.default_items_per_packet}
+                                            value={settingsState.default_items_per_packet}
                                             onChange={(e) =>
-                                                setSettings({
-                                                    ...settings,
+                                                setSettingsState({
+                                                    ...settingsState,
                                                     default_items_per_packet: Number(e.target.value),
                                                 })
                                             }
@@ -171,10 +171,10 @@ export default function PackingRulesPage() {
                                         <input
                                             type="number"
                                             className={styles.settingInput}
-                                            value={settings.default_packets_per_bundle}
+                                            value={settingsState.default_packets_per_bundle}
                                             onChange={(e) =>
-                                                setSettings({
-                                                    ...settings,
+                                                setSettingsState({
+                                                    ...settingsState,
                                                     default_packets_per_bundle: Number(e.target.value),
                                                 })
                                             }

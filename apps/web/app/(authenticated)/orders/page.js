@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Plus, Loader2, ShoppingCart, Eye, Trash2, Filter, Clock, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { ordersAPI, customersAPI, productsAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatDate, cn } from '@/lib/utils';
+import { useFactory } from '@/contexts/FactoryContext';
+import CustomSelect from '@/components/ui/CustomSelect';
+import FactorySelect from '@/components/ui/FactorySelect';
 import styles from './page.module.css';
 
 const ORDER_STATUSES = [
@@ -16,77 +20,113 @@ const ORDER_STATUSES = [
     { value: 'cancelled', label: 'Cancelled' },
 ];
 
+const UNIT_OPTIONS = [
+    { value: 'bundle', label: 'Bundles' },
+    { value: 'packet', label: 'Packets' },
+    { value: 'loose', label: 'Loose Items' },
+];
+
 export default function OrdersPage() {
+    const queryClient = useQueryClient();
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const [orders, setOrders] = useState([]);
-    const [customers, setCustomers] = useState([]);
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const { selectedFactory, factories } = useFactory();
+
     const [modalOpen, setModalOpen] = useState(false);
     const [viewOrder, setViewOrder] = useState(null);
-    const [saving, setSaving] = useState(false);
     const [statusFilter, setStatusFilter] = useState('');
 
-    // Form State
+    const [modalFactoryFilter, setModalFactoryFilter] = useState('');
     const [formData, setFormData] = useState({
         customer_id: '',
         items: [],
         notes: '',
+        factory_id: '',
     });
+
+    // Queries
+    const { data: orders = [], isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery({
+        queryKey: ['orders', statusFilter, selectedFactory],
+        queryFn: () => {
+            const params = {
+                ...(statusFilter ? { status: statusFilter } : {}),
+                ...(selectedFactory ? { factory_id: selectedFactory } : {}),
+            };
+            return ordersAPI.getAll(Object.keys(params).length > 0 ? params : undefined).then(res => Array.isArray(res) ? res : []);
+        },
+    });
+
+    const { data: customers = [] } = useQuery({
+        queryKey: ['customers'],
+        queryFn: () => customersAPI.getAll().then(res => Array.isArray(res) ? res : []),
+    });
+
+    const { data: products = [] } = useQuery({
+        queryKey: ['products'], // Fetch all products for multi-factory support
+        queryFn: () => productsAPI.getAll().then(res => Array.isArray(res) ? res : []),
+    });
+
+    const loading = ordersLoading;
+    const error = ordersError?.message;
+
+    // Mutations
+    const createMutation = useMutation({
+        mutationFn: (data) => ordersAPI.create(data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            setModalOpen(false);
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const cancelMutation = useMutation({
+        mutationFn: (id) => ordersAPI.cancel(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        },
+        onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const saving = createMutation.isPending;
+    const currentOrderDate = new Date().toLocaleDateString();
+
+
 
     useEffect(() => {
         setPageTitle('Sales Orders');
         registerGuide({
-            title: "Sales Orders",
-            description: "End-to-end management of customer orders and inventory commitment.",
+            title: "Multi-Factory Sales Orders",
+            description: "Manage orders across all factories with real-time preparation tracking.",
             logic: [
                 {
-                    title: "The 'Reservation' Lock",
-                    explanation: "When you create an order, the system 'locks' the requested bundles. They are moved from 'Finished Goods' to 'Reserved Stock' so they cannot be sold to anyone else while the order is pending."
+                    title: "Horizontal Planning",
+                    explanation: "The new horizontal modal allows you to quickly build complex orders featuring products from different factories in one screen."
                 },
                 {
-                    title: "Multi-SKU Ordering",
-                    explanation: "One order can contain many different products (SKUs). The system automatically checks if you have enough 'Finished' bundles for each item before allowing the reservation."
+                    title: "Preparation Notifications",
+                    explanation: "When an order is created, product managers at each involved factory are notified. You'll see real-time updates as they 'Mark as Done' each item."
                 },
                 {
-                    title: "Release & Reversion",
-                    explanation: "If you cancel an order, the 'Reserved' stock is immediately unlocked and flows back into the 'Finished Goods' pool, making it available for other customers again."
+                    title: "Flexible Units",
+                    explanation: "Commit stock in Bundles, Packets, or even Loose items depending on the customer's specific needs."
                 }
             ],
             components: [
                 {
-                    name: "Order Workflow",
-                    description: "Tracks orders as they move through: Pending ➔ Reserved (Stock Locked) ➔ Delivered (Transaction Complete)."
+                    name: "Factory Routing",
+                    description: "Items are automatically routed to their respective factory managers based on product settings."
                 },
                 {
-                    name: "Item Matrix",
-                    description: "Dynamic list for building orders with live feedback on bundle availability."
+                    name: "Preparation Status",
+                    description: "Real-time visual feedback on whether items have been picked/packed at the factory level."
                 }
             ]
         });
-        loadData();
-    }, [statusFilter, registerGuide]);
+    }, [registerGuide, setPageTitle]);
 
-    const loadData = async () => {
-        try {
-            setLoading(true);
-            const params = statusFilter ? { status: statusFilter } : undefined;
-            const [ordersData, customersData, productsData] = await Promise.all([
-                ordersAPI.getAll(params).catch(() => []),
-                customersAPI.getAll().catch(() => []),
-                productsAPI.getAll().catch(() => []),
-            ]);
-            setOrders(Array.isArray(ordersData) ? ordersData : []);
-            setCustomers(Array.isArray(customersData) ? customersData : []);
-            setProducts(Array.isArray(productsData) ? productsData : []);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const getCustomerName = (id) => customers.find((c) => c.id === id)?.name || 'Unknown';
     const getProductName = (id) => {
@@ -95,10 +135,12 @@ export default function OrdersPage() {
     };
 
     const handleCreate = () => {
+        setModalFactoryFilter('');
         setFormData({
             customer_id: customers[0]?.id || '',
-            items: [{ product_id: products[0]?.id || '', quantity_bundles: 1 }],
+            items: [{ product_id: '', quantity: 1, unit_type: 'bundle' }],
             notes: '',
+            delivery_date: new Date().toISOString().split('T')[0],
         });
         setModalOpen(true);
     };
@@ -106,7 +148,7 @@ export default function OrdersPage() {
     const handleAddItem = () => {
         setFormData({
             ...formData,
-            items: [...formData.items, { product_id: products[0]?.id || '', quantity_bundles: 1 }],
+            items: [...formData.items, { product_id: products[0]?.id || '', quantity: 1, unit_type: 'bundle' }],
         });
     };
 
@@ -127,49 +169,75 @@ export default function OrdersPage() {
             alert('Please add at least one item');
             return;
         }
-        setSaving(true);
 
-        try {
-            await ordersAPI.create({
-                customer_id: formData.customer_id,
-                items: formData.items.map((item) => ({
-                    product_id: item.product_id,
-                    quantity_bundles: Number(item.quantity_bundles), // Ensure number
-                })),
-                notes: formData.notes,
-            });
-            setModalOpen(false);
-            loadData();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        } finally {
-            setSaving(false);
-        }
+        createMutation.mutate({
+            customer_id: formData.customer_id,
+            delivery_date: formData.delivery_date,
+            items: formData.items.map((item) => ({
+                product_id: item.product_id,
+                quantity: Number(item.quantity),
+                unit_type: item.unit_type,
+            })),
+            notes: formData.notes,
+        });
     };
 
     const handleCancel = async (order) => {
         if (!confirm('Cancel this order? Reserved stock will be released.')) return;
-
-        try {
-            await ordersAPI.cancel(order.id);
-            loadData();
-        } catch (err) {
-            alert('Error: ' + err.message);
-        }
+        cancelMutation.mutate(order.id);
     };
 
     const getStatusBadge = (status) => {
         const badges = {
-            pending: 'badge-warning',
-            reserved: 'badge-primary',
-            delivered: 'badge-success',
-            cancelled: 'badge-gray',
+            pending: 'Warning',
+            reserved: 'Primary',
+            delivered: 'Success',
+            cancelled: 'Gray',
         };
-        return badges[status] || 'badge-gray';
+        return `badge${badges[status] || 'Gray'}`;
     };
 
     const totalOrders = orders.length;
     const pendingOrders = orders.filter((o) => o.status === 'pending' || o.status === 'reserved').length;
+
+    // Options for Selects
+    const customerOptions = useMemo(() => customers.map(c => ({
+        value: c.id,
+        label: c.name
+    })), [customers]);
+
+    const productOptions = useMemo(() => products.map(p => {
+        const factory = factories.find(f => f.id === p.factory_id);
+        const factoryName = factory ? factory.name : 'Unknown Factory';
+        return {
+            value: p.id,
+            label: `[${factoryName}] ${p.name} (${p.size}, ${p.color}) - Stock: ${p.stock_quantity || 0}`,
+            factory_id: p.factory_id,
+            factoryName
+        };
+    }), [products, factories]);
+
+    const getRowProductOptions = (selectedProductId) => {
+        if (!modalFactoryFilter) return productOptions;
+
+        // Filter options by factory
+        const filtered = productOptions.filter(opt => opt.factory_id === modalFactoryFilter);
+
+        // Ensure the currently selected product is ALWAYS in the list
+        if (selectedProductId && !filtered.find(opt => opt.value === selectedProductId)) {
+            const selectedOpt = productOptions.find(opt => opt.value === selectedProductId);
+            if (selectedOpt) {
+                return [selectedOpt, ...filtered];
+            }
+        }
+
+        return filtered;
+    };
+
+    const modalFactoryOptions = useMemo(() => [
+        { value: '', label: 'All Factories' },
+        ...factories.map(f => ({ value: f.id, label: f.name }))
+    ], [factories]);
 
     return (
         <>
@@ -177,7 +245,7 @@ export default function OrdersPage() {
                 <div>
                     <h1 className={styles.pageTitle}>Sales Orders</h1>
                     <p className={styles.pageDescription}>
-                        Manage customer orders and stock reservations
+                        Multi-factory order management and preparation tracking
                     </p>
                 </div>
                 <button
@@ -219,23 +287,19 @@ export default function OrdersPage() {
                 <div className={styles.filterRow}>
                     <div className={styles.filterGroup}>
                         <Filter size={16} className={styles.filterIcon} />
-                        <select
-                            className={styles.filterSelect}
+                        <CustomSelect
+                            options={ORDER_STATUSES}
                             value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                        >
-                            {ORDER_STATUSES.map((s) => (
-                                <option key={s.value} value={s.value}>
-                                    {s.label}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(val) => setStatusFilter(val)}
+                            placeholder="Filter Status"
+                            className={styles.filterSelect}
+                        />
                     </div>
                 </div>
             </div>
 
             {/* Content */}
-            <div className="card">
+            <div className={styles.tableCard}>
                 {loading ? (
                     <div className={styles.loading}>
                         <Loader2 size={24} className={styles.spinner} />
@@ -245,184 +309,226 @@ export default function OrdersPage() {
                     <div className={styles.error}>
                         <AlertCircle size={32} />
                         <p>Error: {error}</p>
-                        <button className="btn btn-secondary" onClick={loadData}>
+                        <button className={styles.retryButton} onClick={() => refetchOrders()}>
                             Retry
                         </button>
                     </div>
                 ) : orders.length === 0 ? (
-                    <div className="empty-state">
+                    <div className={styles.emptyState}>
                         <ShoppingCart size={48} />
                         <p>No orders found</p>
                         {customers.length === 0 || products.length === 0 ? (
-                            <p className="text-muted">Add customers and products first</p>
+                            <p className={styles.emptyHint}>Add customers and products first</p>
                         ) : (
-                            <button className="btn btn-primary" onClick={handleCreate}>
+                            <button className={styles.primaryButton} onClick={handleCreate}>
                                 Create First Order
                             </button>
                         )}
                     </div>
                 ) : (
-                    <table className="table">
-                        <thead>
-                            <tr>
-                                <th>Order ID</th>
-                                <th>Customer</th>
-                                <th>Items</th>
-                                <th>Total Bundles</th>
-                                <th>Status</th>
-                                <th>Date</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {orders.map((order) => (
-                                <tr key={order.id}>
-                                    <td className="font-medium">#{order.id?.slice(-6).toUpperCase()}</td>
-                                    <td>{getCustomerName(order.customer_id)}</td>
-                                    <td>{order.items?.length || order.sales_order_items?.length || 0} items</td>
-                                    <td>
-                                        {(order.items || order.sales_order_items || []).reduce(
-                                            (sum, item) => sum + (item.quantity_bundles || 0),
-                                            0
-                                        )}
-                                    </td>
-                                    <td>
-                                        <span className={cn('badge', getStatusBadge(order.status))}>
-                                            {order.status}
-                                        </span>
-                                    </td>
-                                    <td className="text-muted">{formatDate(order.created_at)}</td>
-                                    <td>
-                                        <div className={styles.actions}>
-                                            <button
-                                                className="btn btn-sm btn-outline"
-                                                onClick={() => setViewOrder(order)}
-                                                title="View Details"
-                                            >
-                                                <Eye size={14} />
-                                            </button>
-                                            {(order.status === 'pending' || order.status === 'reserved') && (
-                                                <button
-                                                    className="btn btn-sm btn-outline"
-                                                    onClick={() => handleCancel(order)}
-                                                    title="Cancel Order"
-                                                >
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </td>
+                    <div className={styles.tableWrapper}>
+                        <table className={styles.table}>
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Customer</th>
+                                    <th>Items</th>
+                                    <th>Delivery Date</th>
+                                    <th>Status</th>
+                                    <th>Date Created</th>
+                                    <th>Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {orders.map((order) => {
+                                    const items = order.sales_order_items || order.items || [];
+                                    const prepCount = items.filter(i => i.is_prepared).length;
+                                    const allPrepared = items.length > 0 && prepCount === items.length;
+
+                                    return (
+                                        <tr key={order.id}>
+                                            <td className={styles.idCell}>#{order.id?.slice(-6).toUpperCase()}</td>
+                                            <td>{getCustomerName(order.customer_id)}</td>
+                                            <td>
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span>{items.length} items</span>
+                                                    {items.length > 0 && (
+                                                        <span style={{ fontSize: '0.75rem', color: allPrepared ? 'var(--success)' : 'var(--warning)' }}>
+                                                            {prepCount}/{items.length} Prepared
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td>{order.delivery_date ? formatDate(order.delivery_date) : 'ASAP'}</td>
+                                            <td>
+                                                <span className={cn(styles.badge, styles[getStatusBadge(order.status)])}>
+                                                    {order.status}
+                                                </span>
+                                            </td>
+                                            <td className={styles.dateCell}>{formatDate(order.created_at)}</td>
+                                            <td>
+                                                <div className={styles.actions}>
+                                                    <button
+                                                        className={styles.actionButton}
+                                                        onClick={() => setViewOrder(order)}
+                                                        title="View Details"
+                                                    >
+                                                        <Eye size={14} />
+                                                    </button>
+                                                    {(order.status === 'pending' || order.status === 'reserved') && (
+                                                        <button
+                                                            className={styles.actionButton}
+                                                            onClick={() => handleCancel(order)}
+                                                            title="Cancel Order"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
             {/* Create Order Modal */}
             {modalOpen && (
-                <div className="modal-backdrop" onClick={() => setModalOpen(false)}>
-                    <div className="modal modal-lg" onClick={(e) => e.stopPropagation()}>
+                <div className={styles.modalBackdrop} onClick={() => setModalOpen(false)}>
+                    <div className={cn(styles.modal, styles.modalWide)} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2>New Sales Order</h2>
+                            <h2 className={styles.modalTitle}>New Sales Order</h2>
                             <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
                         <form onSubmit={handleSubmit}>
                             <div className={styles.modalBody}>
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Customer *</label>
-                                    <select
-                                        className={styles.formSelect}
-                                        value={formData.customer_id}
-                                        onChange={(e) => setFormData({ ...formData, customer_id: e.target.value })}
-                                        required
-                                    >
-                                        <option value="">Select Customer</option>
-                                        {customers.map((c) => (
-                                            <option key={c.id} value={c.id}>
-                                                {c.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                <div className={styles.formGrid}>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Customer</label>
+                                        <CustomSelect
+                                            options={customers.map(c => ({ value: c.id, label: c.name }))}
+                                            value={formData.customer_id}
+                                            onChange={(val) => setFormData({ ...formData, customer_id: val })}
+                                            placeholder="Select Customer"
+                                        />
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Delivery Goal</label>
+                                        <input
+                                            type="date"
+                                            className={styles.itemInput}
+                                            style={{ width: '100%' }}
+                                            value={formData.delivery_date}
+                                            onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
 
-                                {/* Order Items */}
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Order Items *</label>
+                                <div className={styles.sectionHeader}>
+                                    <div className={styles.sectionTitleGroup}>
+                                        <h3 className={styles.sectionTitle}>General Options</h3>
+                                        <p className={styles.sectionSubtitle}>Filter products or add notes</p>
+                                    </div>
+                                    <div className={styles.modalFilterWrapper}>
+                                        <Filter size={14} className={styles.filterIcon} />
+                                        <select
+                                            value={modalFactoryFilter}
+                                            onChange={(e) => setModalFactoryFilter(e.target.value)}
+                                            className={styles.modalFactorySelect}
+                                        >
+                                            <option value="">All Factories</option>
+                                            {factories.map(f => (
+                                                <option key={f.id} value={f.id}>{f.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className={styles.itemHeader}>
+                                    <div className={styles.sectionTitleGroup}>
+                                        <h3 className={styles.sectionTitle}>Order Items</h3>
+                                        <p className={styles.sectionSubtitle}>Add products and quantities</p>
+                                    </div>
+                                    <button type="button" className={styles.addItemButton} onClick={handleAddItem}>
+                                        <Plus size={16} />
+                                        <span>Add Item</span>
+                                    </button>
+                                </div>
+
+                                <div className={styles.itemsList}>
                                     {formData.items.map((item, index) => (
                                         <div key={index} className={styles.itemRow}>
-                                            <select
-                                                className={styles.itemSelect}
-                                                value={item.product_id}
-                                                onChange={(e) => handleItemChange(index, 'product_id', e.target.value)}
-                                                required
-                                            >
-                                                {products.map((p) => (
-                                                    <option key={p.id} value={p.id}>
-                                                        {p.name} ({p.size}, {p.color}) - Stock: {p.stock_quantity || 0}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="number"
-                                                className={styles.itemInput}
-                                                value={item.quantity_bundles}
-                                                onChange={(e) => handleItemChange(index, 'quantity_bundles', e.target.value)}
-                                                min="1"
-                                                required
-                                                placeholder="Bundles"
-                                            />
-                                            <span className={styles.itemUnit}>bundles</span>
+                                            <div className={styles.productSelect}>
+                                                <CustomSelect
+                                                    options={getRowProductOptions(item.product_id)}
+                                                    value={item.product_id}
+                                                    onChange={(val) => handleItemChange(index, 'product_id', val)}
+                                                    placeholder="Select Product"
+                                                />
+                                            </div>
+                                            <div className={styles.unitSelect}>
+                                                <CustomSelect
+                                                    options={UNIT_OPTIONS}
+                                                    value={item.unit_type}
+                                                    onChange={(val) => handleItemChange(index, 'unit_type', val)}
+                                                    placeholder="Unit"
+                                                />
+                                            </div>
+                                            <div className={styles.quantityInput}>
+                                                <input
+                                                    type="number"
+                                                    className={styles.formSelect}
+                                                    value={item.quantity}
+                                                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                                                    placeholder="Qty"
+                                                    min="1"
+                                                    required
+                                                />
+                                            </div>
                                             {formData.items.length > 1 && (
                                                 <button
                                                     type="button"
-                                                    className={styles.removeItemBtn}
+                                                    className={styles.removeBtn}
                                                     onClick={() => handleRemoveItem(index)}
-                                                    title="Remove item"
                                                 >
-                                                    <X size={16} />
+                                                    <X size={18} />
                                                 </button>
                                             )}
                                         </div>
                                     ))}
-                                    <button
-                                        type="button"
-                                        className={styles.addItemButton}
-                                        onClick={handleAddItem}
-                                    >
-                                        <Plus size={14} />
-                                        Add Another Product
-                                    </button>
                                 </div>
 
-                                <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Notes</label>
+                                <div className={styles.formGroup} style={{ marginTop: '1.5rem' }}>
+                                    <label className={styles.formLabel}>Additional Notes</label>
                                     <textarea
                                         className={styles.formTextarea}
                                         value={formData.notes}
                                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                        rows={2}
-                                        placeholder="Internal notes or special instructions..."
+                                        rows={3}
+                                        placeholder="Special instructions or notes..."
                                     />
                                 </div>
                             </div>
 
                             <div className={styles.modalFooter}>
-                                <button type="button" className={styles.cancelButton} onClick={() => setModalOpen(false)}>
-                                    Cancel
+                                <button type="button" className={styles.secondaryButton} onClick={() => setModalOpen(false)}>
+                                    Discard Draft
                                 </button>
                                 <button type="submit" className={styles.submitButton} disabled={saving}>
                                     {saving ? (
                                         <>
                                             <Loader2 size={16} className={styles.spinner} />
-                                            Checking Stock...
+                                            Creating Order...
                                         </>
                                     ) : (
                                         <>
                                             <CheckCircle2 size={16} />
-                                            Create & Reserve
+                                            Create Order
                                         </>
                                     )}
                                 </button>
@@ -434,53 +540,95 @@ export default function OrdersPage() {
 
             {/* View Order Modal */}
             {viewOrder && (
-                <div className="modal-backdrop" onClick={() => setViewOrder(null)}>
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                <div className={styles.modalBackdrop} onClick={() => setViewOrder(null)}>
+                    <div className={cn(styles.modal, styles.modalWide)} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2>Order #{viewOrder.id?.slice(-6).toUpperCase()}</h2>
+                            <h2 className={styles.modalTitle}>Order Details #{viewOrder.id?.slice(-6).toUpperCase()}</h2>
                             <button onClick={() => setViewOrder(null)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
                         <div className={styles.modalBody}>
-                            <div className={styles.orderDetail}>
-                                <strong>Customer:</strong> {getCustomerName(viewOrder.customer_id)}
+                            <div className={styles.formGrid}>
+                                <div>
+                                    <div className={styles.orderDetail}>
+                                        <strong>Customer:</strong> {getCustomerName(viewOrder.customer_id)}
+                                    </div>
+                                    <div className={styles.orderDetail}>
+                                        <strong>Status:</strong>{' '}
+                                        <span className={cn(styles.badge, styles[getStatusBadge(viewOrder.status)])}>
+                                            {viewOrder.status}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className={styles.orderDetail}>
+                                        <strong>Order Date:</strong> {formatDate(viewOrder.created_at)}
+                                    </div>
+                                    <div className={styles.orderDetail}>
+                                        <strong>Delivery Goal:</strong> {viewOrder.delivery_date ? formatDate(viewOrder.delivery_date) : 'ASAP'}
+                                    </div>
+                                </div>
                             </div>
-                            <div className={styles.orderDetail}>
-                                <strong>Status:</strong>{' '}
-                                <span className={cn('badge', getStatusBadge(viewOrder.status))}>
-                                    {viewOrder.status}
-                                </span>
-                            </div>
-                            <div className={styles.orderDetail}>
-                                <strong>Date:</strong> {formatDate(viewOrder.created_at)}
-                            </div>
+
                             {viewOrder.notes && (
                                 <div className={styles.orderDetail}>
                                     <strong>Notes:</strong> {viewOrder.notes}
                                 </div>
                             )}
 
-                            <h4 style={{ marginTop: '1.5rem', marginBottom: '0.75rem', fontWeight: 600 }}>Items</h4>
-                            <table className="table">
-                                <thead>
-                                    <tr>
-                                        <th>Product</th>
-                                        <th style={{ textAlign: 'right' }}>Quantity</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {(viewOrder.items || viewOrder.sales_order_items || []).map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td>{getProductName(item.product_id)}</td>
-                                            <td style={{ textAlign: 'right' }}>{item.quantity_bundles} bundles</td>
+                            <h4 style={{ marginTop: '1.5rem', marginBottom: '1rem', fontWeight: 600 }}>Involved Factory Preparation</h4>
+                            <div className={styles.tableWrapper}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>Factory</th>
+                                            <th style={{ textAlign: 'center' }}>Quantity</th>
+                                            <th style={{ textAlign: 'center' }}>Unit</th>
+                                            <th style={{ textAlign: 'right' }}>Preparation Status</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {(viewOrder.sales_order_items || viewOrder.items || []).map((item, idx) => {
+                                            const p = products.find(prod => prod.id === item.product_id);
+                                            const f = factories.find(fac => fac.id === p?.factory_id);
+
+                                            return (
+                                                <tr key={idx}>
+                                                    <td>{p?.name || 'Unknown'}</td>
+                                                    <td>{f?.name || 'Unknown'}</td>
+                                                    <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                                                    <td style={{ textAlign: 'center' }}>{item.unit_type || 'bundle'}</td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                        <div className={styles.prepStatus}>
+                                                            {item.is_prepared ? (
+                                                                <div className={styles.prepDone}>
+                                                                    <CheckCircle2 size={16} />
+                                                                    <span>Done</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className={styles.prepPending}>
+                                                                    <Clock size={16} />
+                                                                    <span>Pending</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {item.is_prepared && item.prepared_at && (
+                                                            <div className={styles.prepInfo}>
+                                                                Ready on {formatDate(item.prepared_at)}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                         <div className={styles.modalFooter}>
-                            <button className={styles.cancelButton} onClick={() => setViewOrder(null)}>
+                            <button className={styles.secondaryButton} onClick={() => setViewOrder(null)}>
                                 Close
                             </button>
                         </div>

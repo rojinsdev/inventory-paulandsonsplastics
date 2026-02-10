@@ -6,7 +6,7 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import styles from './Chart.module.css';
 
-export default function ProductionChart({ data, timePeriod }) {
+export default function ProductionChart({ data, timePeriod, compact }) {
     const { chartData, comparisons } = useMemo(() => {
         if (!data || !Array.isArray(data)) return { chartData: [], comparisons: null };
 
@@ -102,22 +102,48 @@ export default function ProductionChart({ data, timePeriod }) {
                                 date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' }),
                         },
                     ]}
+                    yAxis={[
+                        { id: 'production', label: 'Bundles' },
+                        { id: 'efficiency', label: 'Efficiency %', position: 'right', max: 100, min: 0 }
+                    ]}
                     series={[
                         {
                             dataKey: 'actual',
                             label: 'Actual Production',
                             color: '#3b82f6',
-                            valueFormatter: (value) => formatNumber(value),
+                            valueFormatter: (value) => `${formatNumber(value)} bundles`,
+                            yAxisId: 'production'
                         },
                         {
+                            type: 'line',
                             dataKey: 'theoretical',
                             label: 'Theoretical Max',
-                            color: '#6366f1',
-                            valueFormatter: (value) => formatNumber(value),
+                            color: '#94a3b8',
+                            valueFormatter: (value) => `${formatNumber(value)} bundles`,
+                            yAxisId: 'production',
+                            strokeDasharray: '5 5',
                         },
-                    ]}
-                    height={300}
-                    margin={{ left: 50, right: 30, top: 40, bottom: 40 }}
+                        {
+                            type: 'line',
+                            dataKey: 'efficiency',
+                            label: 'Efficiency %',
+                            color: '#10b981',
+                            valueFormatter: (value) => `${value}%`,
+                            yAxisId: 'efficiency'
+                        },
+                        // Add Yesterday Pace line if available
+                        comparisons?.vsYesterday ? {
+                            type: 'line',
+                            dataKey: 'yesterdayPace',
+                            label: 'Yesterday Pace',
+                            color: '#f59e0b', // Amber/Yellow for pace reference
+                            valueFormatter: (value) => `${formatNumber(value)} bundles`,
+                            yAxisId: 'production',
+                            strokeDasharray: '3 3',
+                        } : null
+                    ].filter(Boolean)}
+                    height={compact ? 220 : 300}
+                    margin={{ left: 60, right: 60, top: compact ? 20 : 40, bottom: compact ? 30 : 40 }}
                     slotProps={{
                         legend: {
                             direction: 'row',

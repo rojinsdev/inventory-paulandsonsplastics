@@ -23,7 +23,7 @@ The system is built as a modular monorepo:
 | :--- | :--- | :--- |
 | **Backend API** | Node.js (Express) | Core logic, inventory state machine, role-based access. |
 | **Database** | PostgreSQL (Supabase) | Relational data, Row Level Security (RLS). |
-| **Web Portal** | Next.js | Admin dashboard, master configuration, sales management. |
+| **Web Portal** | Next.js, TanStack Query, Supabase Realtime | Admin dashboard, live monitoring, master configuration. |
 | **Mobile App** | Flutter | Simple daily production entry for factory floor staff. |
 
 ---
@@ -91,8 +91,9 @@ Detailed documentation is available in the `docs/` directory:
 *   **General:**
     *   [Business Requirements](docs/general/BUSINESS_REQUIREMENTS.md)
     *   [System Workflows](docs/general/SYSTEM%20WORKFLOWS.md)
-*   **Mobile App:**
-    *   [Architecture & Features](docs/mobile_app/)
+*   **Web Portal:**
+    *   [Architecture Overview](docs/web-portal/00_OVERVIEW.md)
+    *   [Real-time & Caching](docs/web-portal/09_REALTIME_AND_CACHING.md)
 *   **Setup:**
     *   [Supabase & Tech Stack](docs/setup/)
 *   **Testing:**

@@ -31,7 +31,7 @@ export class PlanningService {
         let query = supabase
             .from('sales_order_items')
             .select(`
-                quantity_bundles,
+                quantity,
                 order_id,
                 product_id,
                 products!inner (
@@ -93,7 +93,7 @@ export class PlanningService {
             }
 
             const productTrend = productMap.get(productId)!;
-            productTrend.total_sold += item.quantity_bundles;
+            productTrend.total_sold += item.quantity;
 
             // Update monthly breakdown
             let monthData = productTrend.monthly_breakdown.find(m => m.month === month);
@@ -101,7 +101,7 @@ export class PlanningService {
                 monthData = { month, quantity: 0, orders: 0, is_spike: false };
                 productTrend.monthly_breakdown.push(monthData);
             }
-            monthData.quantity += item.quantity_bundles;
+            monthData.quantity += item.quantity;
             monthData.orders += 1;
         });
 
@@ -534,7 +534,7 @@ export class PlanningService {
         const { data, error } = await supabase
             .from('sales_order_items')
             .select(`
-                quantity_bundles,
+                quantity,
                 sales_orders!inner (
                     order_date,
                     status
@@ -565,7 +565,7 @@ export class PlanningService {
             }
 
             const aggregate = monthMap.get(month)!;
-            aggregate.quantity += item.quantity_bundles;
+            aggregate.quantity += item.quantity;
             aggregate.orders += 1;
         });
 

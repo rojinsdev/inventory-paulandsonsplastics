@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../production/providers/production_request_provider.dart';
+import '../../production/providers/sales_order_provider.dart';
 import '../providers/inventory_provider.dart';
+import '../widgets/stock_summary_card.dart';
 
 class InventoryHubScreen extends ConsumerWidget {
   const InventoryHubScreen({super.key});
@@ -10,24 +13,27 @@ class InventoryHubScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final stockAsync = ref.watch(inventoryStockProvider);
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(inventoryStockProvider);
+          ref.invalidate(productionRequestsProvider);
+          ref.invalidate(pendingOrdersProvider);
         },
         child: CustomScrollView(
           slivers: [
             SliverAppBar.large(
               title: Text(
-                'Inventory',
+                'Operations',
                 style: theme.textTheme.headlineLarge?.copyWith(
                   color: colorScheme.onSurface,
                 ),
               ),
               backgroundColor: colorScheme.surface,
               scrolledUnderElevation: 0,
+              floating: true,
+              pinned: true,
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -35,62 +41,125 @@ class InventoryHubScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Stock Summary Section (Read-Only)
                     Text(
-                      'Current Stock',
+                      'Monitoring',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
-
-                    stockAsync.when(
-                      loading: () => const _StockLoadingCard(),
-                      error: (e, _) => _StockErrorCard(
-                        error: e.toString(),
-                        onRetry: () => ref.invalidate(inventoryStockProvider),
-                      ),
-                      data: (stocks) => stocks.isEmpty
-                          ? const _StockEmptyCard()
-                          : _StockSummaryCard(stocks: stocks),
+                    const SizedBox(height: 16),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final stockAsync = ref.watch(inventoryStockProvider);
+                        return stockAsync.when(
+                          data: (stocks) => stocks.isEmpty
+                              ? const StockEmptyCard()
+                              : StockSummaryCard(
+                                  stocks: stocks,
+                                  onTap: () => context.push('/stock-details'),
+                                ),
+                          loading: () => const StockLoadingCard(),
+                          error: (err, stack) => StockErrorCard(
+                            error: err.toString(),
+                            onRetry: () =>
+                                ref.invalidate(inventoryStockProvider),
+                          ),
+                        );
+                      },
                     ),
-
                     const SizedBox(height: 32),
-
                     Text(
-                      'Actions',
+                      'Logistics & Requests',
                       style: theme.textTheme.titleMedium?.copyWith(
                         color: colorScheme.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final requestsState =
+                            ref.watch(productionRequestsProvider);
+                        final pendingCount = requestsState.when(
+                          data: (items) => items
+                              .where((item) => item.status == 'pending')
+                              .length,
+                          loading: () => null,
+                          error: (_, __) => null,
+                        );
 
-                    // Expressive Cards
-                    _InventoryActionCard(
-                      title: 'Packing Entry',
-                      subtitle: 'Convert Semi-Finished to Packed goods',
-                      icon: Icons.inventory_2_outlined,
-                      containerColor: colorScheme.secondaryContainer,
-                      onTap: () => context.push('/inventory/pack'),
+                        return _InventoryActionCard(
+                          title: 'Production Requests',
+                          subtitle: pendingCount != null
+                              ? '$pendingCount requests pending'
+                              : 'Manage factory requests',
+                          icon: Icons.assignment_outlined,
+                          containerColor: colorScheme.secondaryContainer,
+                          onTap: () => context.push('/production/requests'),
+                          trailing: pendingCount != null && pendingCount > 0
+                              ? Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.error,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    pendingCount.toString(),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: colorScheme.onError,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
+                    Consumer(
+                      builder: (context, ref, child) {
+                        final ordersState = ref.watch(pendingOrdersProvider);
+                        final pendingCount = ordersState.when(
+                          data: (items) =>
+                              items.where((item) => !item.isPrepared).length,
+                          loading: () => null,
+                          error: (_, __) => null,
+                        );
 
-                    _InventoryActionCard(
-                      title: 'Bundling Entry',
-                      subtitle: 'Convert Packed goods to Finished bundles',
-                      icon: Icons.layers_outlined,
-                      containerColor: colorScheme.tertiaryContainer,
-                      onTap: () => context.push('/inventory/bundle'),
+                        return _InventoryActionCard(
+                          title: 'Order Prep',
+                          subtitle: pendingCount != null
+                              ? '$pendingCount items to pack'
+                              : 'Mark orders as prepared',
+                          icon: Icons.checklist_rtl_outlined,
+                          containerColor: colorScheme.primaryContainer,
+                          onTap: () => context.push('/production/preparation'),
+                          trailing: pendingCount != null && pendingCount > 0
+                              ? Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: colorScheme.error,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Text(
+                                    pendingCount.toString(),
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: colorScheme.onError,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
-
                     _InventoryActionCard(
                       title: 'Raw Materials',
-                      subtitle: 'Check stock & report consumption',
+                      subtitle: 'Check stock & consumption',
                       icon: Icons.grain_outlined,
-                      containerColor: colorScheme.primaryContainer,
+                      containerColor: colorScheme.tertiaryContainer,
                       onTap: () => context.push('/inventory/raw-materials'),
                     ),
                     const SizedBox(height: 80),
@@ -105,220 +174,13 @@ class InventoryHubScreen extends ConsumerWidget {
   }
 }
 
-/// Read-only stock summary card
-class _StockSummaryCard extends StatelessWidget {
-  final List<InventoryStock> stocks;
-
-  const _StockSummaryCard({required this.stocks});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    // Aggregate totals
-    int totalSemiFinished = 0;
-    int totalPacked = 0;
-    int totalBundled = 0;
-
-    for (final stock in stocks) {
-      totalSemiFinished += stock.semiFinishedQty;
-      totalPacked += stock.packedQty;
-      totalBundled += stock.bundledQty;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: _StockTile(
-                  label: 'Semi-Finished',
-                  value: totalSemiFinished,
-                  icon: Icons.precision_manufacturing_outlined,
-                  color: colorScheme.tertiary,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _StockTile(
-                  label: 'Packed',
-                  value: totalPacked,
-                  icon: Icons.inventory_2_outlined,
-                  color: colorScheme.secondary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _StockTile(
-                  label: 'Bundled',
-                  value: totalBundled,
-                  icon: Icons.layers_outlined,
-                  color: colorScheme.primary,
-                ),
-              ),
-              const Expanded(child: SizedBox()),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StockTile extends StatelessWidget {
-  final String label;
-  final int value;
-  final IconData icon;
-  final Color color;
-
-  const _StockTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value.toString(),
-          style: theme.textTheme.headlineMedium?.copyWith(
-            color: colorScheme.onSurface,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StockLoadingCard extends StatelessWidget {
-  const _StockLoadingCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Container(
-      height: 140,
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-  }
-}
-
-class _StockErrorCard extends StatelessWidget {
-  final String error;
-  final VoidCallback onRetry;
-
-  const _StockErrorCard({required this.error, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.error_outline, color: colorScheme.onErrorContainer),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Unable to load stock',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onErrorContainer,
-              ),
-            ),
-          ),
-          IconButton(
-            onPressed: onRetry,
-            icon: Icon(Icons.refresh, color: colorScheme.onErrorContainer),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StockEmptyCard extends StatelessWidget {
-  const _StockEmptyCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.inventory, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Text(
-            'No stock data available',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _InventoryActionCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
   final Color containerColor;
   final VoidCallback onTap;
+  final Widget? trailing;
 
   const _InventoryActionCard({
     required this.title,
@@ -326,6 +188,7 @@ class _InventoryActionCard extends StatelessWidget {
     required this.icon,
     required this.containerColor,
     required this.onTap,
+    this.trailing,
   });
 
   @override
@@ -378,6 +241,10 @@ class _InventoryActionCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 16),
                 Icon(icon, size: 40, color: onContainerColor),
+                if (trailing != null) ...[
+                  const SizedBox(width: 12),
+                  trailing!,
+                ],
               ],
             ),
           ),

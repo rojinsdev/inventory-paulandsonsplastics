@@ -3,6 +3,8 @@ import { supabase } from '../../config/supabase';
 import { z } from 'zod';
 import { authenticate, requireRole } from '../../middleware/auth';
 import { AuditService } from '../audit/audit.service';
+import { AppError } from '../../utils/AppError';
+import logger from '../../config/logger';
 
 const auditService = new AuditService();
 
@@ -14,7 +16,7 @@ const loginSchema = z.object({
     password: z.string().min(6),
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', async (req, res, next) => {
     try {
         const { email, password } = loginSchema.parse(req.body);
 
@@ -25,35 +27,39 @@ router.post('/login', async (req, res) => {
         });
 
         if (error) {
-            return res.status(401).json({
-                error: 'Authentication failed',
-                message: error.message
-            });
+            logger.warn(`Login failed for ${email}: ${error.message}`);
+            throw new AppError(error.message, 401);
         }
 
         // Fetch user profile to get role
-        console.log('🔍 Fetching profile for user ID:', data.user.id);
+        logger.info(`Fetching profile for user ID: ${data.user.id}`);
         const { data: profile, error: profileError } = await supabase
             .from('user_profiles')
-            .select('id, email, name, role, active')
+            .select('id, email, name, role, active, factory_id')
             .eq('id', data.user.id)
             .single();
 
-        console.log('📊 Profile query result:', { profile, profileError });
-
         if (profileError || !profile) {
-            console.error('❌ Profile fetch failed:', profileError);
-            return res.status(401).json({
-                error: 'Authentication failed',
-                message: 'User profile not found'
-            });
+            logger.error(`Profile fetch failed for ${data.user.id}: ${profileError?.message}`);
+            throw new AppError('User profile not found', 401);
         }
 
         if (!profile.active) {
-            return res.status(403).json({
-                error: 'Account deactivated',
-                message: 'Your account has been deactivated. Contact administrator.'
-            });
+            logger.warn(`Deactivated user attempted login: ${email}`);
+            throw new AppError('Your account has been deactivated. Contact administrator.', 403);
+        }
+
+        // Check if user has factory assigned and get its name
+        let factoryName = null;
+        if (profile.factory_id) {
+            const { data: factory } = await supabase
+                .from('factories')
+                .select('name')
+                .eq('id', profile.factory_id)
+                .single();
+            if (factory) {
+                factoryName = factory.name;
+            }
         }
 
         // Return user data with token
@@ -63,6 +69,8 @@ router.post('/login', async (req, res) => {
                 email: profile.email,
                 name: profile.name,
                 role: profile.role,
+                factory_id: profile.factory_id,
+                factory_name: factoryName,
             },
             session: {
                 access_token: data.session.access_token,
@@ -78,14 +86,10 @@ router.post('/login', async (req, res) => {
             'user',
             profile.id,
             { email: profile.email },
-            req.ip
+            req.ip || 'unknown'
         );
-    } catch (error: any) {
-        if (error instanceof z.ZodError) {
-            return res.status(400).json({ error: error.issues });
-        }
-        console.error('Login error:', error);
-        res.status(500).json({ error: 'Login failed' });
+    } catch (error) {
+        next(error);
     }
 });
 
@@ -159,6 +163,7 @@ const createUserSchema = z.object({
     password: z.string().min(8, 'Password must be at least 8 characters'),
     name: z.string().min(2, 'Name is required'),
     role: z.enum(['admin', 'production_manager']).default('production_manager'),
+    factory_id: z.string().uuid().optional().nullable(),
 });
 
 // Create user (Admin only)
@@ -189,6 +194,7 @@ router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
                 name,
                 role,
                 active: true,
+                factory_id: role === 'production_manager' ? (req.body.factory_id || null) : null,
             })
             .select()
             .single();
@@ -218,6 +224,7 @@ router.post('/users', authenticate, requireRole('admin'), async (req, res) => {
                 email: profile.email,
                 name: profile.name,
                 role: profile.role,
+                factory_id: profile.factory_id,
                 active: profile.active,
                 created_at: profile.created_at,
             },
@@ -236,7 +243,7 @@ router.get('/users', authenticate, requireRole('admin'), async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('user_profiles')
-            .select('id, email, name, role, active, created_at, updated_at')
+            .select('id, email, name, role, factory_id, active, created_at, updated_at')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -254,7 +261,7 @@ router.get('/users/:id', authenticate, requireRole('admin'), async (req, res) =>
 
         const { data, error } = await supabase
             .from('user_profiles')
-            .select('id, email, name, role, active, created_at, updated_at')
+            .select('id, email, name, role, factory_id, active, created_at, updated_at')
             .eq('id', id)
             .single();
 
@@ -334,6 +341,7 @@ router.patch('/users/:id/activate', authenticate, requireRole('admin'), async (r
 // Update user (Admin only) - for name changes
 const updateUserSchema = z.object({
     name: z.string().min(2).optional(),
+    factory_id: z.string().uuid().optional().nullable(),
 });
 
 router.patch('/users/:id', authenticate, requireRole('admin'), async (req, res) => {

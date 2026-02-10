@@ -9,17 +9,24 @@ const DEFAULT_SETTINGS = {
     notifications: true,
     compactMode: false,
     visibleMetrics: {
-        todayProduction: true,
+        // Production
+        productionAchievement: true,
+        outputToday: true,
+        overallEfficiency: true,
         activeMachines: true,
-        avgEfficiency: true,
         costRecovered: true,
+
+        // Inventory
+        inventoryAlerts: true,
         finishedGoods: true,
         rawMaterial: true,
-        lowStockAlerts: true,
         stockValue: true,
-        pendingOrders: true,
+
+        // Sales / Financials
+        businessHealthCard: true,
+        revenuePerformance: true,
+        ordersQueue: true,
         todayDeliveries: true,
-        weekRevenue: true,
         activeCustomers: true,
     },
     quickActions: {

@@ -50,7 +50,23 @@ async function refreshToken() {
 async function fetchAPI(endpoint, options = {}) {
     // Ensure all endpoints are prefixed with /api
     const apiEndpoint = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
-    const url = `${API_BASE_URL}${apiEndpoint}`;
+
+    // Clean up query parameters if they exist
+    let finalUrl = `${API_BASE_URL}${apiEndpoint}`;
+    if (finalUrl.includes('?')) {
+        const [base, search] = finalUrl.split('?');
+        const params = new URLSearchParams(search);
+        const cleanParams = new URLSearchParams();
+        params.forEach((value, key) => {
+            if (value !== 'undefined' && value !== 'null' && value !== '') {
+                cleanParams.append(key, value);
+            }
+        });
+        const cleanSearch = cleanParams.toString();
+        finalUrl = base + (cleanSearch ? `?${cleanSearch}` : '');
+    }
+
+    const url = finalUrl;
 
     let token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
 
@@ -63,6 +79,7 @@ async function fetchAPI(endpoint, options = {}) {
     const config = {
         ...options,
         headers: getHeaders(token),
+        cache: 'no-store', // Prevent browser caching
     };
 
     try {
@@ -84,8 +101,17 @@ async function fetchAPI(endpoint, options = {}) {
         }
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.message || `HTTP ${response.status}`);
+            const errorData = await response.json().catch(() => ({}));
+            let errorMessage = errorData.message || errorData.error;
+
+            // Handle Zod validation errors (array of issues)
+            if (Array.isArray(errorMessage)) {
+                errorMessage = errorMessage.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
+            } else if (typeof errorMessage === 'object' && errorMessage !== null) {
+                errorMessage = JSON.stringify(errorMessage);
+            }
+
+            throw new Error(errorMessage || `HTTP ${response.status}`);
         }
 
         return await response.json();
@@ -97,7 +123,7 @@ async function fetchAPI(endpoint, options = {}) {
 
 // ============ MACHINES ============
 export const machinesAPI = {
-    getAll: () => fetchAPI('/machines'),
+    getAll: (params) => fetchAPI(`/machines${params ? '?' + new URLSearchParams(params) : ''}`),
     getById: (id) => fetchAPI(`/machines/${id}`),
     create: (data) => fetchAPI('/machines', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => fetchAPI(`/machines/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -106,7 +132,7 @@ export const machinesAPI = {
 
 // ============ PRODUCTS ============
 export const productsAPI = {
-    getAll: () => fetchAPI('/products'),
+    getAll: (params) => fetchAPI(`/products${params ? '?' + new URLSearchParams(params) : ''}`),
     getById: (id) => fetchAPI(`/products/${id}`),
     create: (data) => fetchAPI('/products', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => fetchAPI(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -115,7 +141,7 @@ export const productsAPI = {
 
 // ============ MACHINE-PRODUCTS (DIE MAPPINGS) ============
 export const dieMappingsAPI = {
-    getAll: () => fetchAPI('/machine-products'),
+    getAll: (params) => fetchAPI(`/machine-products${params ? '?' + new URLSearchParams(params) : ''}`),
     create: (data) => fetchAPI('/machine-products', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => fetchAPI(`/machine-products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => fetchAPI(`/machine-products/${id}`, { method: 'DELETE' }),
@@ -123,14 +149,16 @@ export const dieMappingsAPI = {
 
 // ============ INVENTORY ============
 export const inventoryAPI = {
-    getStock: () => fetchAPI('/inventory/stock'),
-    getAvailable: () => fetchAPI('/inventory/available'),
-    getRawMaterials: () => fetchAPI('/inventory/raw-materials'),
+    getStock: (params) => fetchAPI(`/inventory/stock${params ? '?' + new URLSearchParams(params) : ''}`),
+    getAvailable: (params) => fetchAPI(`/inventory/available${params ? '?' + new URLSearchParams(params) : ''}`),
+    getRawMaterials: (params) => fetchAPI(`/inventory/raw-materials${params ? '?' + new URLSearchParams(params) : ''}`),
     createRawMaterial: (data) => fetchAPI('/inventory/raw-materials', { method: 'POST', body: JSON.stringify(data) }),
+    updateRawMaterial: (id, data) => fetchAPI(`/inventory/raw-materials/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     adjustStock: (data) => fetchAPI('/inventory/adjust', { method: 'POST', body: JSON.stringify(data) }),
     adjustRawMaterial: (id, data) => fetchAPI(`/inventory/raw-materials/${id}/adjust`, { method: 'POST', body: JSON.stringify(data) }),
     getTransactions: (params) => fetchAPI(`/inventory/transactions${params ? '?' + new URLSearchParams(params) : ''}`),
 };
+
 
 // ============ CUSTOMERS ============
 export const customersAPI = {
@@ -164,12 +192,21 @@ export const ordersAPI = {
     create: (data) => fetchAPI('/orders', { method: 'POST', body: JSON.stringify(data) }),
     deliver: (id) => fetchAPI(`/orders/${id}/deliver`, { method: 'PUT' }),
     cancel: (id) => fetchAPI(`/orders/${id}/cancel`, { method: 'PUT' }),
+    processDelivery: (id, data) => fetchAPI(`/orders/${id}/process-delivery`, { method: 'POST', body: JSON.stringify(data) }),
+    recordPayment: (id, data) => fetchAPI(`/orders/${id}/record-payment`, { method: 'POST', body: JSON.stringify(data) }),
+    getCustomerPaymentHistory: (customerId) => fetchAPI(`/orders/customers/${customerId}/payment-history`),
+    getPendingPayments: (params) => fetchAPI(`/orders/pending-payments${params ? '?' + new URLSearchParams(params) : ''}`),
 };
 
 // ============ PRODUCTION ============
 export const productionAPI = {
     getLogs: (params) => fetchAPI(`/production/logs${params ? '?' + new URLSearchParams(params) : ''}`),
     getDashboard: () => fetchAPI('/production/dashboard'),
+    getRequests: (params) => fetchAPI(`/production/requests${params ? '?' + new URLSearchParams(params) : ''}`),
+    updateRequestStatus: (id, status) => fetchAPI(`/production/requests/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status })
+    }),
 };
 
 // ============ DASHBOARD ============
@@ -232,5 +269,41 @@ export const usersAPI = {
         body: JSON.stringify(data)
     }),
     activate: (id) => fetchAPI(`/auth/users/${id}/activate`, { method: 'PATCH' }),
+    activate: (id) => fetchAPI(`/auth/users/${id}/activate`, { method: 'PATCH' }),
     deactivate: (id) => fetchAPI(`/auth/users/${id}/deactivate`, { method: 'PATCH' }),
+};
+
+// ============ FACTORIES ============
+export const factoriesAPI = {
+    getAll: () => fetchAPI('/factories'),
+    getById: (id) => fetchAPI(`/factories/${id}`),
+    create: (data) => fetchAPI('/factories', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/factories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    toggle: (id, active) => fetchAPI(`/factories/${id}/toggle`, { method: 'PATCH', body: JSON.stringify({ active }) }),
+    delete: (id) => fetchAPI(`/factories/${id}`, { method: 'DELETE' }),
+    getStats: (id) => fetchAPI(`/factories/${id}/stats`),
+};
+
+// ============ CAPS ============
+export const capsAPI = {
+    getAll: (params) => fetchAPI(`/caps${params ? '?' + new URLSearchParams(params) : ''}`),
+    getById: (id) => fetchAPI(`/caps/${id}`),
+    create: (data) => fetchAPI('/caps', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/caps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => fetchAPI(`/caps/${id}`, { method: 'DELETE' }),
+
+    // Cap Production
+    getProductionLogs: (params) => fetchAPI(`/production/caps/logs${params ? '?' + new URLSearchParams(params) : ''}`),
+    submitProduction: (data) => fetchAPI('/production/caps/submit', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// ============ CASH FLOW ============
+export const cashFlowAPI = {
+    getDailySheet: (params) => fetchAPI(`/cash-flow/daily${params ? '?' + new URLSearchParams(params) : ''}`),
+    getAnalytics: (params) => fetchAPI(`/cash-flow/analytics${params ? '?' + new URLSearchParams(params) : ''}`),
+    logEntry: (data) => fetchAPI('/cash-flow/entry', { method: 'POST', body: JSON.stringify(data) }),
+    getCategories: () => fetchAPI('/cash-flow/categories'),
+    createCategory: (data) => fetchAPI('/cash-flow/categories', { method: 'POST', body: JSON.stringify(data) }),
+    updateCategory: (id, data) => fetchAPI(`/cash-flow/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteCategory: (id) => fetchAPI(`/cash-flow/categories/${id}`, { method: 'DELETE' }),
 };
