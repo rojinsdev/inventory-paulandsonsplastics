@@ -40,6 +40,15 @@ export class CashFlowController {
         }
     }
 
+    async logTransfer(req: Request, res: Response) {
+        try {
+            await cashFlowService.logTransfer(req.body);
+            res.status(201).json({ message: 'Transfer logged successfully' });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
     async getCategories(req: Request, res: Response) {
         try {
             const data = await cashFlowService.getCategories();
@@ -73,6 +82,16 @@ export class CashFlowController {
             const { id } = req.params;
             await cashFlowService.deleteCategory(id);
             res.json({ message: 'Category deleted successfully' });
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getBalances(req: Request, res: Response) {
+        try {
+            const { factory_id } = req.query;
+            const balances = await cashFlowService.getBalances(factory_id as string);
+            res.json(balances);
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }

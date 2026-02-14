@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase';
+import { randomUUID } from 'crypto';
 
 export interface CashFlowLogDTO {
     date?: string;
@@ -100,6 +101,46 @@ export class CashFlowService {
     }
 
     /**
+     * Log an internal transfer between payment modes
+     */
+    async logTransfer(data: { date?: string; amount: number; fromMode: string; toMode: string; notes?: string; factory_id?: string }) {
+        const outCatId = await this.getCategoryId('Self Transfer (Out)', 'expense');
+        const inCatId = await this.getCategoryId('Self Transfer (In)', 'income');
+
+        const date = data.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const transferRef = randomUUID();
+
+        const logs = [
+            {
+                date,
+                category_id: outCatId,
+                factory_id: data.factory_id,
+                amount: data.amount,
+                payment_mode: data.fromMode,
+                reference_id: transferRef,
+                notes: `From ${data.fromMode} to ${data.toMode}${data.notes ? ': ' + data.notes : ''}`,
+                is_automatic: true
+            },
+            {
+                date,
+                category_id: inCatId,
+                factory_id: data.factory_id,
+                amount: data.amount,
+                payment_mode: data.toMode,
+                reference_id: transferRef,
+                notes: `To ${data.toMode} from ${data.fromMode}${data.notes ? ': ' + data.notes : ''}`,
+                is_automatic: true
+            }
+        ];
+
+        const { error } = await supabase
+            .from('cash_flow_logs')
+            .insert(logs);
+
+        if (error) throw new Error(`Failed to log transfer: ${error.message}`);
+    }
+
+    /**
      * Get daily cash flow sheet
      */
     async getDailySheet(date: string, factoryId?: string) {
@@ -160,39 +201,87 @@ export class CashFlowService {
 
         // Aggregate for charts
         const dailyTrends: Record<string, { income: number; expense: number }> = {};
-        const categoryBreakdown: Record<string, number> = {};
+        const incomeBreakdown: Record<string, number> = {};
+        const expenseBreakdown: Record<string, number> = {};
+        const paymentModeBreakdown: Record<string, number> = { 'Cash': 0, 'Bank': 0, 'Cheque': 0 };
+
         let totalIncome = 0;
         let totalExpense = 0;
 
         data.forEach(log => {
             const dateStr = log.date;
             const amount = Number(log.amount);
-            const type = log.cash_flow_categories?.type; // Optional chain in case of bad join
+            const type = log.cash_flow_categories?.type;
             const catName = log.cash_flow_categories?.name || 'Unknown';
+            const paymentMode = log.payment_mode || 'Cash';
 
             if (!dailyTrends[dateStr]) dailyTrends[dateStr] = { income: 0, expense: 0 };
 
+            // Exclude transfers from P&L Totals
+            const isTransfer = catName.includes('Self Transfer');
+
             if (type === 'income') {
-                dailyTrends[dateStr].income += amount;
-                totalIncome += amount;
+                if (!isTransfer) {
+                    dailyTrends[dateStr].income += amount;
+                    totalIncome += amount;
+                    incomeBreakdown[catName] = (incomeBreakdown[catName] || 0) + amount;
+                }
             } else {
-                dailyTrends[dateStr].expense += amount;
-                totalExpense += amount;
+                if (!isTransfer) {
+                    dailyTrends[dateStr].expense += amount;
+                    totalExpense += amount;
+                    expenseBreakdown[catName] = (expenseBreakdown[catName] || 0) + amount;
+                }
             }
 
-            categoryBreakdown[catName] = (categoryBreakdown[catName] || 0) + amount;
+            paymentModeBreakdown[paymentMode] = (paymentModeBreakdown[paymentMode] || 0) + (type === 'income' ? amount : -amount);
         });
 
-        // Calculate previous period for trends (Simplified: just returning 0 change for now or could implement real comparison)
-        // For "Today", we could compare to "Yesterday". For "Month", to "Last Month".
-        // Leaving complex trend calculation for next step if requested, keeping it simple for now.
+        // Calculate KPIs
+        const netCashFlow = totalIncome - totalExpense;
+        const savingsRate = totalIncome > 0 ? (netCashFlow / totalIncome) * 100 : 0;
+
+        // Calculate Burn Rate (Average Daily Expense)
+        let daysInPeriod = 1;
+        if (!params.date) {
+            const year = params.year || new Date().getFullYear();
+            const month = params.month || new Date().getMonth() + 1;
+            const today = new Date();
+            if (year === today.getFullYear() && month === today.getMonth() + 1) {
+                daysInPeriod = today.getDate(); // Use current day of month for current month
+            } else {
+                daysInPeriod = new Date(year, month, 0).getDate(); // Use total days for past months
+            }
+        }
+        const avgDailyExpense = totalExpense / daysInPeriod;
+
+        // Simple Forecast for the rest of the month (only if monthly view)
+        let forecast = null;
+        if (!params.date) {
+            const year = params.year || new Date().getFullYear();
+            const month = params.month || new Date().getMonth() + 1;
+            const today = new Date();
+            if (year === today.getFullYear() && month === today.getMonth() + 1) {
+                const totalDays = new Date(year, month, 0).getDate();
+                const remainingDays = totalDays - today.getDate();
+                forecast = {
+                    projectedExpense: totalExpense + (avgDailyExpense * remainingDays),
+                    projectedNet: netCashFlow - (avgDailyExpense * remainingDays) // Assuming income is already realized
+                };
+            }
+        }
 
         return {
             totalIncome,
             totalExpense,
-            netCashFlow: totalIncome - totalExpense,
+            netCashFlow,
+            savingsRate,
+            avgDailyExpense,
+            forecast,
             dailyTrends: Object.entries(dailyTrends).map(([date, values]) => ({ date, ...values })),
-            categoryBreakdown: Object.entries(categoryBreakdown).map(([name, value]) => ({ name, value })),
+            incomeBreakdown: Object.entries(incomeBreakdown).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            expenseBreakdown: Object.entries(expenseBreakdown).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            paymentModeBreakdown: Object.entries(paymentModeBreakdown).map(([name, value]) => ({ name, value })),
             transactions: data // Return raw data for frontend hourly processing
         };
     }
@@ -255,6 +344,41 @@ export class CashFlowService {
             .eq('id', id);
         if (error) throw new Error(error.message);
         return true;
+    }
+    async getBalances(factoryId?: string) {
+        let query = supabase
+            .from('cash_flow_logs')
+            .select(`
+                amount,
+                payment_mode,
+                cash_flow_categories(type)
+            `);
+
+        if (factoryId) {
+            query = query.eq('factory_id', factoryId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw new Error(error.message);
+
+        const balances: Record<string, number> = { 'Cash': 0, 'Bank': 0, 'Cheque': 0 };
+
+        data.forEach((log: any) => {
+            const mode = log.payment_mode || 'Cash';
+            const type = log.cash_flow_categories?.type;
+            const amount = Number(log.amount);
+
+            if (type === 'income') {
+                balances[mode] = (balances[mode] || 0) + amount;
+            } else {
+                balances[mode] = (balances[mode] || 0) - amount;
+            }
+        });
+
+        return Object.keys(balances).map(name => ({
+            name,
+            balance: balances[name]
+        }));
     }
 }
 
