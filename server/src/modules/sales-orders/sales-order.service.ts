@@ -19,7 +19,7 @@ export interface CreateSalesOrderDTO {
 }
 
 export interface UpdateOrderStatusDTO {
-    status: 'reserved' | 'delivered' | 'cancelled';
+    status: 'reserved' | 'delivered' | 'cancelled' | 'pending';
     user_id: string; // Added: Track which admin updated the status
 }
 
@@ -35,9 +35,10 @@ export class SalesOrderService {
                 status: 'pending',
                 notes: data.notes,
                 created_by: data.user_id, // Track which admin created the order
+                order_date: new Date().toISOString().split('T')[0] // Explicitly set order date
             })
             .select()
-            .single();
+            .maybeSingle();
 
         if (orderError) throw new Error(orderError.message);
 
@@ -352,13 +353,14 @@ export class SalesOrderService {
                 )
             `)
             .eq('id', id)
-            .single();
+            .maybeSingle();
 
         if (error) throw new Error(error.message);
+        if (!data) return null;
         return data;
     }
 
-    async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled', userId: string) {
+    async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled' | 'pending', userId: string) {
         const order = await this.getOrderById(id);
 
         if (status === 'delivered' && order.status !== 'reserved') {
@@ -727,24 +729,34 @@ export class SalesOrderService {
     async getPendingPayments(filters?: {
         customer_id?: string;
         is_overdue?: boolean;
+        status?: string;
     }) {
         let query = supabase
             .from('sales_orders')
             .select(`
                 *,
                 customers(name, phone, email),
-                sales_order_items(*, products(name))
+                sales_order_items(*, products(name)),
+                payments(*)
             `)
             .eq('status', 'delivered')
-            .gt('balance_due', 0)
             .order('credit_deadline', { ascending: true, nullsFirst: false });
 
         if (filters?.customer_id) {
             query = query.eq('customer_id', filters.customer_id);
         }
 
-        if (filters?.is_overdue) {
+        if (filters?.status === 'overdue' || filters?.is_overdue) {
             query = query.eq('is_overdue', true);
+        } else if (filters?.status === 'pending') {
+            query = query.gt('balance_due', 0);
+        } else if (filters?.status === 'paid') {
+            query = query.eq('balance_due', 0);
+        } else if (!filters?.status || filters.status === 'all') {
+            // No additional filter on balance_due for 'all'
+        } else {
+            // Default to pending if not specified or unknown
+            query = query.gt('balance_due', 0);
         }
 
         const { data, error } = await query;
@@ -758,6 +770,10 @@ export class SalesOrderService {
 
         // Can only delete cancelled orders or reserved orders
         const order = await this.getOrderById(id);
+
+        if (!order) {
+            throw new Error('Order not found');
+        }
 
         if (order.status === 'delivered') {
             throw new Error('Cannot delete delivered orders');
@@ -793,7 +809,7 @@ export class SalesOrderService {
         // Find orders that should be marked as overdue
         const { data: overdueOrders, error: selectError } = await supabase
             .from('sales_orders')
-            .select('id, customer_id, balance_due, credit_deadline')
+            .select('id, customer_id, balance_due, credit_deadline, created_by')
             .eq('payment_mode', 'credit')
             .gt('balance_due', 0)
             .lt('credit_deadline', today)
@@ -814,7 +830,25 @@ export class SalesOrderService {
 
         if (updateError) throw new Error(updateError.message);
 
-        console.log(`[Overdue Check] Marked ${overdueOrders.length} orders as overdue`);
+        // Create notifications for each overdue order
+        const notifications = overdueOrders.map(order => ({
+            user_id: order.created_by, // Notify the creator
+            title: 'Overdue Payment Alert',
+            message: `Order #${order.id.slice(-6).toUpperCase()} is overdue. Balance: ₹${order.balance_due}. Deadline was ${order.credit_deadline}.`,
+            type: 'overdue_payment',
+            metadata: { order_id: order.id, customer_id: order.customer_id }
+        }));
+
+        const { error: notifyError } = await supabase
+            .from('notifications')
+            .insert(notifications);
+
+        if (notifyError) {
+            console.error(`[Overdue Check] Failed to create notifications: ${notifyError.message}`);
+            // Don't throw here to avoid failing the script if only notifications fail
+        }
+
+        console.log(`[Overdue Check] Marked ${overdueOrders.length} orders as overdue and sent notifications`);
 
         return {
             count: overdueOrders.length,

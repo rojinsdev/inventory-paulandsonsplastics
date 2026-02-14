@@ -36,13 +36,14 @@ export default function OrdersPage() {
     const [viewOrder, setViewOrder] = useState(null);
     const [statusFilter, setStatusFilter] = useState('');
 
-    const [modalFactoryFilter, setModalFactoryFilter] = useState('');
     const [formData, setFormData] = useState({
         customer_id: '',
         items: [],
         notes: '',
-        factory_id: '',
+        order_date: new Date().toISOString().split('T')[0],
     });
+
+
 
     // Queries
     const { data: orders = [], isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery({
@@ -135,12 +136,11 @@ export default function OrdersPage() {
     };
 
     const handleCreate = () => {
-        setModalFactoryFilter('');
         setFormData({
             customer_id: customers[0]?.id || '',
-            items: [{ product_id: '', quantity: 1, unit_type: 'bundle' }],
+            items: [{ product_id: products[0]?.id || '', quantity: 1, unit_type: 'bundle' }],
             notes: '',
-            delivery_date: new Date().toISOString().split('T')[0],
+            order_date: new Date().toISOString().split('T')[0],
         });
         setModalOpen(true);
     };
@@ -151,6 +151,8 @@ export default function OrdersPage() {
             items: [...formData.items, { product_id: products[0]?.id || '', quantity: 1, unit_type: 'bundle' }],
         });
     };
+
+
 
     const handleRemoveItem = (index) => {
         const newItems = formData.items.filter((_, i) => i !== index);
@@ -172,7 +174,7 @@ export default function OrdersPage() {
 
         createMutation.mutate({
             customer_id: formData.customer_id,
-            delivery_date: formData.delivery_date,
+            delivery_date: formData.order_date || new Date().toISOString().split('T')[0],
             items: formData.items.map((item) => ({
                 product_id: item.product_id,
                 quantity: Number(item.quantity),
@@ -209,198 +211,190 @@ export default function OrdersPage() {
     const productOptions = useMemo(() => products.map(p => {
         const factory = factories.find(f => f.id === p.factory_id);
         const factoryName = factory ? factory.name : 'Unknown Factory';
+
         return {
             value: p.id,
-            label: `[${factoryName}] ${p.name} (${p.size}, ${p.color}) - Stock: ${p.stock_quantity || 0}`,
+            label: `[${factoryName}] ${p.name} (${p.size}, ${p.color})`,
             factory_id: p.factory_id,
-            factoryName
+            factoryName,
+            stock: 0 // Mock stock for now
         };
     }), [products, factories]);
 
-    const getRowProductOptions = (selectedProductId) => {
-        if (!modalFactoryFilter) return productOptions;
 
-        // Filter options by factory
-        const filtered = productOptions.filter(opt => opt.factory_id === modalFactoryFilter);
 
-        // Ensure the currently selected product is ALWAYS in the list
-        if (selectedProductId && !filtered.find(opt => opt.value === selectedProductId)) {
-            const selectedOpt = productOptions.find(opt => opt.value === selectedProductId);
-            if (selectedOpt) {
-                return [selectedOpt, ...filtered];
-            }
-        }
 
-        return filtered;
-    };
-
-    const modalFactoryOptions = useMemo(() => [
-        { value: '', label: 'All Factories' },
-        ...factories.map(f => ({ value: f.id, label: f.name }))
-    ], [factories]);
 
     return (
-        <>
-            <div className={styles.pageHeader}>
-                <div>
-                    <h1 className={styles.pageTitle}>Sales Orders</h1>
-                    <p className={styles.pageDescription}>
-                        Multi-factory order management and preparation tracking
-                    </p>
+        <div className={styles.container}>
+            {loading ? (
+                <div className={styles.loaderContainer}>
+                    <Loader2 className={styles.spinner} />
                 </div>
-                <button
-                    className={styles.addButton}
-                    onClick={handleCreate}
-                    disabled={customers.length === 0 || products.length === 0}
-                >
-                    <Plus size={18} />
-                    <span>New Order</span>
-                </button>
-            </div>
-
-            {/* Stats */}
-            <div className={styles.statsRow}>
-                <div className={styles.statCard}>
-                    <div className={styles.statIcon}>
-                        <ShoppingCart size={28} />
-                    </div>
-                    <div className={styles.statContent}>
-                        <div className={styles.statValue}>{totalOrders}</div>
-                        <div className={styles.statLabel}>Total Orders</div>
-                        <div className={styles.statSublabel}>All time</div>
-                    </div>
-                </div>
-                <div className={styles.statCard}>
-                    <div className={styles.statIcon}>
-                        <Clock size={28} />
-                    </div>
-                    <div className={styles.statContent}>
-                        <div className={styles.statValue}>{pendingOrders}</div>
-                        <div className={styles.statLabel}>Pending/Reserved</div>
-                        <div className={styles.statSublabel}>Awaiting delivery</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Filter */}
-            <div className={styles.filterBar}>
-                <div className={styles.filterRow}>
-                    <div className={styles.filterGroup}>
-                        <Filter size={16} className={styles.filterIcon} />
-                        <CustomSelect
-                            options={ORDER_STATUSES}
-                            value={statusFilter}
-                            onChange={(val) => setStatusFilter(val)}
-                            placeholder="Filter Status"
-                            className={styles.filterSelect}
-                        />
-                    </div>
-                </div>
-            </div>
-
-            {/* Content */}
-            <div className={styles.tableCard}>
-                {loading ? (
-                    <div className={styles.loading}>
-                        <Loader2 size={24} className={styles.spinner} />
-                        <span>Loading orders...</span>
-                    </div>
-                ) : error ? (
-                    <div className={styles.error}>
-                        <AlertCircle size={32} />
-                        <p>Error: {error}</p>
-                        <button className={styles.retryButton} onClick={() => refetchOrders()}>
-                            Retry
+            ) : (
+                <>
+                    <div className={styles.pageHeader}>
+                        <div>
+                            <h1 className={styles.pageTitle}>Sales Orders</h1>
+                            <p className={styles.pageDescription}>
+                                Multi-factory order management and preparation tracking
+                            </p>
+                        </div>
+                        <button
+                            className={styles.addButton}
+                            onClick={handleCreate}
+                            disabled={customers.length === 0 || products.length === 0}
+                        >
+                            <Plus size={18} />
+                            <span>New Order</span>
                         </button>
                     </div>
-                ) : orders.length === 0 ? (
-                    <div className={styles.emptyState}>
-                        <ShoppingCart size={48} />
-                        <p>No orders found</p>
-                        {customers.length === 0 || products.length === 0 ? (
-                            <p className={styles.emptyHint}>Add customers and products first</p>
+
+                    {/* Stats */}
+                    <div className={styles.statsRow}>
+                        <div className={styles.statCard}>
+                            <div className={styles.statIcon}>
+                                <ShoppingCart size={28} />
+                            </div>
+                            <div className={styles.statContent}>
+                                <div className={styles.statValue}>{totalOrders}</div>
+                                <div className={styles.statLabel}>Total Orders</div>
+                                <div className={styles.statSublabel}>All time</div>
+                            </div>
+                        </div>
+                        <div className={styles.statCard}>
+                            <div className={styles.statIcon}>
+                                <Clock size={28} />
+                            </div>
+                            <div className={styles.statContent}>
+                                <div className={styles.statValue}>{pendingOrders}</div>
+                                <div className={styles.statLabel}>Pending/Reserved</div>
+                                <div className={styles.statSublabel}>Awaiting delivery</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Filter */}
+                    <div className={styles.filterBar}>
+                        <div className={styles.filterRow}>
+                            <div className={styles.filterGroup}>
+                                <Filter size={16} className={styles.filterIcon} />
+                                <CustomSelect
+                                    options={ORDER_STATUSES}
+                                    value={statusFilter}
+                                    onChange={(val) => setStatusFilter(val)}
+                                    placeholder="Filter Status"
+                                    className={styles.filterSelect}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className={styles.tableCard}>
+                        {loading ? (
+                            <div className={styles.loading}>
+                                <Loader2 size={24} className={styles.spinner} />
+                                <span>Loading orders...</span>
+                            </div>
+                        ) : error ? (
+                            <div className={styles.error}>
+                                <AlertCircle size={32} />
+                                <p>Error: {error}</p>
+                                <button className={styles.retryButton} onClick={() => refetchOrders()}>
+                                    Retry
+                                </button>
+                            </div>
+                        ) : orders.length === 0 ? (
+                            <div className={styles.emptyState}>
+                                <ShoppingCart size={48} />
+                                <p>No orders found</p>
+                                {customers.length === 0 || products.length === 0 ? (
+                                    <p className={styles.emptyHint}>Add customers and products first</p>
+                                ) : (
+                                    <button className={styles.primaryButton} onClick={handleCreate}>
+                                        Create First Order
+                                    </button>
+                                )}
+                            </div>
                         ) : (
-                            <button className={styles.primaryButton} onClick={handleCreate}>
-                                Create First Order
-                            </button>
+                            <div className={styles.tableWrapper}>
+                                <table className={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <th>Order ID</th>
+                                            <th>Customer</th>
+                                            <th>Items</th>
+                                            <th>Delivery Date</th>
+                                            <th>Status</th>
+                                            <th>Date Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {orders.map((order) => {
+                                            const items = order.sales_order_items || order.items || [];
+                                            const prepCount = items.filter(i => i.is_prepared).length;
+                                            const allPrepared = items.length > 0 && prepCount === items.length;
+
+                                            return (
+                                                <tr key={order.id}>
+                                                    <td className={styles.idCell}>#{order.id?.slice(-6).toUpperCase()}</td>
+                                                    <td>{getCustomerName(order.customer_id)}</td>
+                                                    <td>
+                                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                            <span>{items.length} items</span>
+                                                            {items.length > 0 && (
+                                                                <span style={{ fontSize: '0.75rem', color: allPrepared ? 'var(--success)' : 'var(--warning)' }}>
+                                                                    {prepCount}/{items.length} Prepared
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td>{order.delivery_date ? formatDate(order.delivery_date) : 'ASAP'}</td>
+                                                    <td>
+                                                        <span className={cn(styles.badge, styles[getStatusBadge(order.status)])}>
+                                                            {order.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className={styles.dateCell}>{formatDate(order.created_at)}</td>
+                                                    <td>
+                                                        <div className={styles.actions}>
+                                                            <button
+                                                                className={styles.actionButton}
+                                                                onClick={() => setViewOrder(order)}
+                                                                title="View Details"
+                                                            >
+                                                                <Eye size={14} />
+                                                            </button>
+                                                            {(order.status === 'pending' || order.status === 'reserved') && (
+                                                                <button
+                                                                    className={styles.actionButton}
+                                                                    onClick={() => handleCancel(order)}
+                                                                    title="Cancel Order"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
-                ) : (
-                    <div className={styles.tableWrapper}>
-                        <table className={styles.table}>
-                            <thead>
-                                <tr>
-                                    <th>Order ID</th>
-                                    <th>Customer</th>
-                                    <th>Items</th>
-                                    <th>Delivery Date</th>
-                                    <th>Status</th>
-                                    <th>Date Created</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {orders.map((order) => {
-                                    const items = order.sales_order_items || order.items || [];
-                                    const prepCount = items.filter(i => i.is_prepared).length;
-                                    const allPrepared = items.length > 0 && prepCount === items.length;
-
-                                    return (
-                                        <tr key={order.id}>
-                                            <td className={styles.idCell}>#{order.id?.slice(-6).toUpperCase()}</td>
-                                            <td>{getCustomerName(order.customer_id)}</td>
-                                            <td>
-                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                    <span>{items.length} items</span>
-                                                    {items.length > 0 && (
-                                                        <span style={{ fontSize: '0.75rem', color: allPrepared ? 'var(--success)' : 'var(--warning)' }}>
-                                                            {prepCount}/{items.length} Prepared
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td>{order.delivery_date ? formatDate(order.delivery_date) : 'ASAP'}</td>
-                                            <td>
-                                                <span className={cn(styles.badge, styles[getStatusBadge(order.status)])}>
-                                                    {order.status}
-                                                </span>
-                                            </td>
-                                            <td className={styles.dateCell}>{formatDate(order.created_at)}</td>
-                                            <td>
-                                                <div className={styles.actions}>
-                                                    <button
-                                                        className={styles.actionButton}
-                                                        onClick={() => setViewOrder(order)}
-                                                        title="View Details"
-                                                    >
-                                                        <Eye size={14} />
-                                                    </button>
-                                                    {(order.status === 'pending' || order.status === 'reserved') && (
-                                                        <button
-                                                            className={styles.actionButton}
-                                                            onClick={() => handleCancel(order)}
-                                                            title="Cancel Order"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
+                </>
+            )}
 
             {/* Create Order Modal */}
             {modalOpen && (
                 <div className={styles.modalBackdrop} onClick={() => setModalOpen(false)}>
                     <div className={cn(styles.modal, styles.modalWide)} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>New Sales Order</h2>
+                            <h2 className={styles.modalTitle}>Create Sales Order</h2>
                             <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
@@ -411,7 +405,7 @@ export default function OrdersPage() {
                                     <div className={styles.formGroup}>
                                         <label className={styles.formLabel}>Customer</label>
                                         <CustomSelect
-                                            options={customers.map(c => ({ value: c.id, label: c.name }))}
+                                            options={customerOptions}
                                             value={formData.customer_id}
                                             onChange={(val) => setFormData({ ...formData, customer_id: val })}
                                             placeholder="Select Customer"
@@ -421,40 +415,20 @@ export default function OrdersPage() {
                                         <label className={styles.formLabel}>Delivery Goal</label>
                                         <input
                                             type="date"
-                                            className={styles.itemInput}
-                                            style={{ width: '100%' }}
-                                            value={formData.delivery_date}
-                                            onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
+                                            className={styles.input}
+                                            value={formData.order_date}
+                                            onChange={(e) => setFormData({ ...formData, order_date: e.target.value })}
                                         />
                                     </div>
                                 </div>
 
-                                <div className={styles.sectionHeader}>
-                                    <div className={styles.sectionTitleGroup}>
-                                        <h3 className={styles.sectionTitle}>General Options</h3>
-                                        <p className={styles.sectionSubtitle}>Filter products or add notes</p>
-                                    </div>
-                                    <div className={styles.modalFilterWrapper}>
-                                        <Filter size={14} className={styles.filterIcon} />
-                                        <select
-                                            value={modalFactoryFilter}
-                                            onChange={(e) => setModalFactoryFilter(e.target.value)}
-                                            className={styles.modalFactorySelect}
-                                        >
-                                            <option value="">All Factories</option>
-                                            {factories.map(f => (
-                                                <option key={f.id} value={f.id}>{f.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-
                                 <div className={styles.itemHeader}>
-                                    <div className={styles.sectionTitleGroup}>
-                                        <h3 className={styles.sectionTitle}>Order Items</h3>
-                                        <p className={styles.sectionSubtitle}>Add products and quantities</p>
-                                    </div>
-                                    <button type="button" className={styles.addItemButton} onClick={handleAddItem}>
+                                    <h3 className={styles.sectionTitle}>Order Items</h3>
+                                    <button
+                                        type="button"
+                                        className={styles.addItemButton}
+                                        onClick={handleAddItem}
+                                    >
                                         <Plus size={16} />
                                         <span>Add Item</span>
                                     </button>
@@ -465,10 +439,21 @@ export default function OrdersPage() {
                                         <div key={index} className={styles.itemRow}>
                                             <div className={styles.productSelect}>
                                                 <CustomSelect
-                                                    options={getRowProductOptions(item.product_id)}
+                                                    options={productOptions}
                                                     value={item.product_id}
                                                     onChange={(val) => handleItemChange(index, 'product_id', val)}
                                                     placeholder="Select Product"
+                                                    searchable={false}
+                                                />
+                                            </div>
+                                            <div className={styles.quantityInput}>
+                                                <input
+                                                    type="number"
+                                                    className={styles.input}
+                                                    value={item.quantity}
+                                                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                                                    min="1"
+                                                    placeholder="Qty"
                                                 />
                                             </div>
                                             <div className={styles.unitSelect}>
@@ -477,59 +462,52 @@ export default function OrdersPage() {
                                                     value={item.unit_type}
                                                     onChange={(val) => handleItemChange(index, 'unit_type', val)}
                                                     placeholder="Unit"
+                                                    searchable={false}
                                                 />
                                             </div>
-                                            <div className={styles.quantityInput}>
-                                                <input
-                                                    type="number"
-                                                    className={styles.formSelect}
-                                                    value={item.quantity}
-                                                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                                                    placeholder="Qty"
-                                                    min="1"
-                                                    required
-                                                />
-                                            </div>
-                                            {formData.items.length > 1 && (
-                                                <button
-                                                    type="button"
-                                                    className={styles.removeBtn}
-                                                    onClick={() => handleRemoveItem(index)}
-                                                >
-                                                    <X size={18} />
-                                                </button>
-                                            )}
+                                            <button
+                                                type="button"
+                                                className={styles.removeBtn}
+                                                onClick={() => handleRemoveItem(index)}
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
 
                                 <div className={styles.formGroup} style={{ marginTop: '1.5rem' }}>
-                                    <label className={styles.formLabel}>Additional Notes</label>
+                                    <label className={styles.formLabel}>Special Notes</label>
                                     <textarea
                                         className={styles.formTextarea}
                                         value={formData.notes}
                                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                        placeholder="Add any specific delivery or packing instructions..."
                                         rows={3}
-                                        placeholder="Special instructions or notes..."
                                     />
                                 </div>
                             </div>
 
                             <div className={styles.modalFooter}>
-                                <button type="button" className={styles.secondaryButton} onClick={() => setModalOpen(false)}>
-                                    Discard Draft
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    onClick={() => setModalOpen(false)}
+                                >
+                                    Cancel
                                 </button>
-                                <button type="submit" className={styles.submitButton} disabled={saving}>
-                                    {saving ? (
+                                <button
+                                    type="submit"
+                                    className={styles.submitButton}
+                                    disabled={createMutation.isPending}
+                                >
+                                    {createMutation.isPending ? (
                                         <>
-                                            <Loader2 size={16} className={styles.spinner} />
-                                            Creating Order...
+                                            <Loader2 size={18} className={styles.spinner} />
+                                            <span>Creating...</span>
                                         </>
                                     ) : (
-                                        <>
-                                            <CheckCircle2 size={16} />
-                                            Create Order
-                                        </>
+                                        <span>Create Order</span>
                                     )}
                                 </button>
                             </div>
@@ -543,30 +521,36 @@ export default function OrdersPage() {
                 <div className={styles.modalBackdrop} onClick={() => setViewOrder(null)}>
                     <div className={cn(styles.modal, styles.modalWide)} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>Order Details #{viewOrder.id?.slice(-6).toUpperCase()}</h2>
+                            <h2 className={styles.modalTitle}>
+                                Order Details <span className={styles.orderIdEmphasis}>#{viewOrder.id?.slice(-6).toUpperCase()}</span>
+                            </h2>
                             <button onClick={() => setViewOrder(null)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
                         <div className={styles.modalBody}>
-                            <div className={styles.formGrid}>
-                                <div>
+                            <div className={styles.orderDetailsGrid}>
+                                <div className={styles.orderDetailColumn}>
                                     <div className={styles.orderDetail}>
-                                        <strong>Customer:</strong> {getCustomerName(viewOrder.customer_id)}
+                                        <span className={styles.detailLabel}>Customer</span>
+                                        <span className={styles.detailValue}>{getCustomerName(viewOrder.customer_id)}</span>
                                     </div>
                                     <div className={styles.orderDetail}>
-                                        <strong>Status:</strong>{' '}
+                                        <span className={styles.detailLabel}>Status</span>
                                         <span className={cn(styles.badge, styles[getStatusBadge(viewOrder.status)])}>
                                             {viewOrder.status}
                                         </span>
                                     </div>
                                 </div>
-                                <div>
+                                <div className={styles.verticalSeparator}></div>
+                                <div className={styles.orderDetailColumn}>
                                     <div className={styles.orderDetail}>
-                                        <strong>Order Date:</strong> {formatDate(viewOrder.created_at)}
+                                        <span className={styles.detailLabel}>Order Date</span>
+                                        <span className={styles.detailValue}>{formatDate(viewOrder.created_at)}</span>
                                     </div>
                                     <div className={styles.orderDetail}>
-                                        <strong>Delivery Goal:</strong> {viewOrder.delivery_date ? formatDate(viewOrder.delivery_date) : 'ASAP'}
+                                        <span className={styles.detailLabel}>Delivery Goal</span>
+                                        <span className={styles.detailValue}>{viewOrder.delivery_date ? formatDate(viewOrder.delivery_date) : 'ASAP'}</span>
                                     </div>
                                 </div>
                             </div>
@@ -582,11 +566,11 @@ export default function OrdersPage() {
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
-                                            <th>Product</th>
-                                            <th>Factory</th>
-                                            <th style={{ textAlign: 'center' }}>Quantity</th>
-                                            <th style={{ textAlign: 'center' }}>Unit</th>
-                                            <th style={{ textAlign: 'right' }}>Preparation Status</th>
+                                            <th className={styles.colProduct}>Product</th>
+                                            <th className={styles.colFactory}>Factory</th>
+                                            <th className={styles.colQuantity}>Quantity</th>
+                                            <th className={styles.colUnit}>Unit</th>
+                                            <th className={styles.colStatus}>Preparation Status</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -596,23 +580,25 @@ export default function OrdersPage() {
 
                                             return (
                                                 <tr key={idx}>
-                                                    <td>{p?.name || 'Unknown'}</td>
-                                                    <td>{f?.name || 'Unknown'}</td>
-                                                    <td style={{ textAlign: 'center' }}>{item.quantity}</td>
-                                                    <td style={{ textAlign: 'center' }}>{item.unit_type || 'bundle'}</td>
-                                                    <td style={{ textAlign: 'right' }}>
-                                                        <div className={styles.prepStatus}>
-                                                            {item.is_prepared ? (
-                                                                <div className={styles.prepDone}>
-                                                                    <CheckCircle2 size={16} />
-                                                                    <span>Done</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className={styles.prepPending}>
-                                                                    <Clock size={16} />
-                                                                    <span>Pending</span>
-                                                                </div>
-                                                            )}
+                                                    <td className={styles.colProduct}>{p?.name || 'Unknown'}</td>
+                                                    <td className={styles.colFactory}>{f?.name || 'Unknown'}</td>
+                                                    <td className={styles.colQuantity}>{item.quantity}</td>
+                                                    <td className={styles.colUnit}>{item.unit_type || 'bundle'}</td>
+                                                    <td className={styles.colStatus}>
+                                                        <div className={styles.prepStatusWrapper}>
+                                                            <div className={cn(styles.badge, item.is_prepared ? styles.badgeSuccess : styles.badgeWarning)}>
+                                                                {item.is_prepared ? (
+                                                                    <>
+                                                                        <CheckCircle2 size={14} />
+                                                                        <span>Done</span>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Clock size={14} className={styles.cautionIcon} />
+                                                                        <span>Pending</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                         {item.is_prepared && item.prepared_at && (
                                                             <div className={styles.prepInfo}>
@@ -635,6 +621,6 @@ export default function OrdersPage() {
                     </div>
                 </div>
             )}
-        </>
+        </div>
     );
 }

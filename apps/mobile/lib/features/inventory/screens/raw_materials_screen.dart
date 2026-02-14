@@ -71,9 +71,11 @@ class RawMaterialsScreen extends ConsumerWidget {
               final material = materials[index];
               return Card(
                 elevation: 0,
-                color: theme.colorScheme.surfaceContainer,
+                color: theme.colorScheme.surface,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                    borderRadius: BorderRadius.circular(32),
+                    side: BorderSide(
+                        color: theme.colorScheme.outline, width: 1.5)),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -247,6 +249,9 @@ class _AdjustStockModalState extends ConsumerState<_AdjustStockModal> {
             width: double.infinity,
             child: FilledButton(
               onPressed: isLoading ? null : _submit,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(double.infinity, 64),
+              ),
               child: isLoading
                   ? const SizedBox(
                       height: 20,

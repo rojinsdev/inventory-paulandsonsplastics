@@ -15,6 +15,12 @@ router.post('/bundle',
     requireRole('production_manager'),
     inventoryController.bundle
 );
+router.post('/unpack',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    inventoryController.unpack
+);
+
 
 // GET routes - Both roles can view
 router.get('/stock/:id',

@@ -8,10 +8,10 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 0.5rem 0.75rem;
+    padding: 0.5rem 1rem;
     background-color: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
+    border-radius: 0.75rem;
     color: var(--text-main);
     font-size: 0.875rem;
     cursor: pointer;
@@ -62,8 +62,8 @@
     z-index: 50;
     background-color: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 0.5rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     padding: 0;
     max-height: 320px;
     display: flex;

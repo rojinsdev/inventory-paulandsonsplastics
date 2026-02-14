@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../features/auth/providers/auth_provider.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/production/screens/dashboard_screen.dart';
 import '../../features/inventory/screens/inventory_hub_screen.dart';
@@ -16,12 +18,28 @@ import '../../features/production/screens/production_requests_screen.dart';
 import '../../features/production/screens/order_preparation_screen.dart';
 import '../../core/navigation/main_navigation.dart';
 
-class AppRouter {
-  static final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
 
-  static final router = GoRouter(
+final routerProvider = Provider<GoRouter>((ref) {
+  final authState = ref.watch(authStateProvider);
+
+  return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/login',
+    redirect: (context, state) {
+      final isLoggedIn = authState.asData?.value != null;
+      final isLoggingIn = state.uri.path == '/login';
+
+      if (!isLoggedIn) {
+        return isLoggingIn ? null : '/login';
+      }
+
+      if (isLoggingIn) {
+        return '/';
+      }
+
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/login',
@@ -115,4 +133,4 @@ class AppRouter {
       ),
     ],
   );
-}
+});

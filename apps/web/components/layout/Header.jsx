@@ -4,7 +4,7 @@ import { useAuth } from '@/lib/auth';
 
 import { useSettings } from '@/contexts/SettingsContext';
 import { useFactory } from '@/contexts/FactoryContext';
-import { User, Bell, Zap, HelpCircle } from 'lucide-react';
+import { User, Bell, Zap, HelpCircle, Calendar as CalendarIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AVAILABLE_QUICK_ACTIONS } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ import ScreenGuide from '../ui/ScreenGuide';
 import { useGuide } from '@/contexts/GuideContext';
 import DateTimeWidget from '../ui/DateTimeWidget';
 import FactoryFilter from '../ui/FactoryFilter';
+import OrderCalendarModal from '../ui/OrderCalendarModal';
 import styles from './Header.module.css';
 
 export default function Header({ title }) {
@@ -21,6 +22,7 @@ export default function Header({ title }) {
     const { selectedFactory, setSelectedFactory } = useFactory();
     const [showSettings, setShowSettings] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
+    const [showCalendar, setShowCalendar] = useState(false);
     const { guideContent, openGuide } = useGuide();
     const quickActionsRef = useRef(null);
     const router = useRouter();
@@ -78,6 +80,15 @@ export default function Header({ title }) {
                     !pathname.includes('/reports/cash-flow') &&
                     !pathname.includes('/customers') &&
                     <FactoryFilter value={selectedFactory} onChange={setSelectedFactory} />}
+
+                {/* Calendar Trigger - Visible everywhere */}
+                <button
+                    className={styles.iconBtn}
+                    onClick={() => setShowCalendar(true)}
+                    title="Order Calendar"
+                >
+                    <CalendarIcon size={20} />
+                </button>
 
                 <div ref={quickActionsRef} style={{ position: 'relative' }}>
                     <button
@@ -144,6 +155,7 @@ export default function Header({ title }) {
 
             {/* Modals */}
             <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            <OrderCalendarModal isOpen={showCalendar} onClose={() => setShowCalendar(false)} />
             <ScreenGuide />
         </header>
     );

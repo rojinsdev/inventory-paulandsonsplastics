@@ -180,16 +180,16 @@ class _ExpressiveCard extends StatelessWidget {
     }
 
     return Container(
-      height: 100,
+      height: 110, // Slightly taller for expressive feel
       decoration: BoxDecoration(
         color: containerColor,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(32), // Android 16 Expressive
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(32),
           child: Padding(
             padding: const EdgeInsets.all(20.0),
             child: Row(

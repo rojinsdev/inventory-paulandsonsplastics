@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/api/api_client.dart';
@@ -33,10 +34,17 @@ final authStateProvider =
 
 class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final AuthRepository _repository;
+  StreamSubscription? _sessionSubscription;
 
   AuthNotifier(this._repository) : super(const AsyncValue.loading()) {
     // Automatically try to restore session on creation
     _tryAutoLogin();
+
+    // Listen for session expiration events from ApiClient -> Repository
+    _sessionSubscription = _repository.onSessionExpired.listen((_) {
+      // Force logout on session expiration
+      state = const AsyncValue.data(null);
+    });
   }
 
   /// Attempt to restore session from stored token
@@ -63,5 +71,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> logout() async {
     await _repository.logout();
     state = const AsyncValue.data(null);
+  }
+
+  @override
+  void dispose() {
+    _sessionSubscription?.cancel();
+    super.dispose();
   }
 }

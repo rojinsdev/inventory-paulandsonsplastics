@@ -15,7 +15,7 @@ export default function PaymentsPage() {
     // State
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all'); // all, pending, overdue
+    const [statusFilter, setStatusFilter] = useState('pending'); // all, pending, overdue, paid
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [paymentForm, setPaymentForm] = useState({
@@ -27,16 +27,15 @@ export default function PaymentsPage() {
 
     // Queries
     const { data: pendingOrders = [], isLoading: ordersLoading } = useQuery({
-        queryKey: ['pending-payments', { status: statusFilter }],
+        queryKey: ['pending-payments', { status: statusFilter, customer: selectedCustomer }],
         queryFn: () => {
-            const params = {};
-            if (statusFilter === 'overdue') params.is_overdue = true;
-            else if (statusFilter === 'pending') params.balance_due_gt = 0;
+            const params = { status: statusFilter };
+            if (selectedCustomer) params.customer_id = selectedCustomer;
             return ordersAPI.getPendingPayments(params);
         },
     });
 
-    const { data: customers = [] } = useQuery({
+    const { data: customers = [], isLoading: customersLoading, error: customersError } = useQuery({
         queryKey: ['customers'],
         queryFn: () => customersAPI.getAll(),
     });
@@ -65,17 +64,15 @@ export default function PaymentsPage() {
                 order.order_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 order.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
 
-            const matchesCustomer = selectedCustomer === '' || order.customer_id === selectedCustomer;
-
-            return matchesSearch && matchesCustomer;
+            return matchesSearch;
         });
-    }, [pendingOrders, searchTerm, selectedCustomer]);
+    }, [pendingOrders, searchTerm]);
 
     // Calculate summary stats
     const stats = useMemo(() => {
         const totalOutstanding = filteredOrders.reduce((sum, order) => sum + (parseFloat(order.balance_due) || 0), 0);
         const overdueCount = filteredOrders.filter(order => order.is_overdue).length;
-        const totalOrders = filteredOrders.length;
+        const totalOrders = filteredOrders.filter(order => (parseFloat(order.balance_due) || 0) > 0).length;
 
         return { totalOutstanding, overdueCount, totalOrders };
     }, [filteredOrders]);
@@ -146,6 +143,7 @@ export default function PaymentsPage() {
                     <div className={styles.statContent}>
                         <p className={styles.statLabel}>Total Outstanding</p>
                         <p className={styles.statValue}>₹{stats.totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                        <p className={styles.statDescription}>Combined balance due from all orders</p>
                     </div>
                 </div>
 
@@ -156,6 +154,7 @@ export default function PaymentsPage() {
                     <div className={styles.statContent}>
                         <p className={styles.statLabel}>Pending Orders</p>
                         <p className={styles.statValue}>{stats.totalOrders}</p>
+                        <p className={styles.statDescription}>Active orders awaiting full payment</p>
                     </div>
                 </div>
 
@@ -166,6 +165,7 @@ export default function PaymentsPage() {
                     <div className={styles.statContent}>
                         <p className={styles.statLabel}>Overdue</p>
                         <p className={styles.statValue}>{stats.overdueCount}</p>
+                        <p className={styles.statDescription}>Orders past their payment due date</p>
                     </div>
                 </div>
             </div>
@@ -187,8 +187,14 @@ export default function PaymentsPage() {
                     value={selectedCustomer}
                     onChange={(e) => setSelectedCustomer(e.target.value)}
                     className={styles.filterSelect}
+                    disabled={customersLoading}
                 >
-                    <option value="">All Customers</option>
+                    <option value="">
+                        {customersLoading ? 'Loading customers...' :
+                            customersError ? 'Error loading customers' :
+                                customers.length === 0 ? 'No customers found' :
+                                    'All Customers'}
+                    </option>
                     {customers.map(customer => (
                         <option key={customer.id} value={customer.id}>
                             {customer.name}
@@ -204,6 +210,7 @@ export default function PaymentsPage() {
                     <option value="all">All Status</option>
                     <option value="pending">Pending</option>
                     <option value="overdue">Overdue</option>
+                    <option value="paid">Paid</option>
                 </select>
             </div>
 
@@ -228,13 +235,21 @@ export default function PaymentsPage() {
                             <tr>
                                 <td colSpan="9" className={styles.emptyState}>
                                     <CheckCircle2 size={48} />
-                                    <p>No pending payments found</p>
+                                    <p>
+                                        {statusFilter === 'paid'
+                                            ? 'No fully paid orders found. Orders appear here once balance_due reaches ₹0.'
+                                            : statusFilter === 'overdue'
+                                                ? 'No overdue payments found.'
+                                                : statusFilter === 'pending'
+                                                    ? 'No pending payments found.'
+                                                    : 'No pending payments found'}
+                                    </p>
                                 </td>
                             </tr>
                         ) : (
                             filteredOrders.map(order => (
                                 <tr key={order.id} className={order.is_overdue ? styles.overdueRow : ''}>
-                                    <td className={styles.orderNumber}>{order.order_number}</td>
+                                    <td className={styles.orderNumber}>#{order.id?.slice(-6).toUpperCase()}</td>
                                     <td>{order.customer?.name || 'N/A'}</td>
                                     <td>{new Date(order.order_date).toLocaleDateString('en-IN')}</td>
                                     <td>₹{parseFloat(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
@@ -253,6 +268,11 @@ export default function PaymentsPage() {
                                             <span className={styles.statusBadge} data-status="overdue">
                                                 <AlertCircle size={14} />
                                                 Overdue
+                                            </span>
+                                        ) : order.balance_due <= 0 ? (
+                                            <span className={styles.statusBadge} data-status="completed">
+                                                <CheckCircle2 size={14} />
+                                                Paid
                                             </span>
                                         ) : (
                                             <span className={styles.statusBadge} data-status="pending">
@@ -285,7 +305,7 @@ export default function PaymentsPage() {
                             <div>
                                 <h2 className={styles.modalTitle}>Record Payment</h2>
                                 <p className={styles.modalSubtitle}>
-                                    Order #{selectedOrder.order_number} - {selectedOrder.customer?.name}
+                                    Order #{selectedOrder.id?.slice(-6).toUpperCase()} - {selectedOrder.customer?.name}
                                 </p>
                             </div>
                             <button
@@ -311,6 +331,24 @@ export default function PaymentsPage() {
                                     <span>₹{parseFloat(selectedOrder.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                                 </div>
                             </div>
+
+                            {/* Payment History Section */}
+                            {selectedOrder.payments?.length > 0 && (
+                                <div className={styles.historySection}>
+                                    <h4 className={styles.historyTitle}>Payment History</h4>
+                                    <div className={styles.historyList}>
+                                        {selectedOrder.payments.map((p, idx) => (
+                                            <div key={p.id || idx} className={styles.historyItem}>
+                                                <div className={styles.historyHeader}>
+                                                    <span className={styles.historyDate}>{new Date(p.created_at).toLocaleDateString('en-IN')}</span>
+                                                    <span className={styles.historyMethod}>{p.payment_method}</span>
+                                                </div>
+                                                <div className={styles.historyAmount}>₹{parseFloat(p.amount).toLocaleString('en-IN')}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             <div className={styles.formGrid}>
                                 <div className={styles.formGroup}>
@@ -353,16 +391,6 @@ export default function PaymentsPage() {
                                     />
                                 </div>
 
-                                <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
-                                    <label>Notes</label>
-                                    <textarea
-                                        value={paymentForm.notes}
-                                        onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                                        className={styles.textarea}
-                                        rows="3"
-                                        placeholder="Add any notes about this payment..."
-                                    />
-                                </div>
                             </div>
 
                             <div className={styles.modalFooter}>
@@ -386,6 +414,6 @@ export default function PaymentsPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 }

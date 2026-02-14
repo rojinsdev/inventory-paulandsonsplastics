@@ -11,6 +11,8 @@ class AuthRepository {
 
   AuthRepository(this._apiClient, this._storage);
 
+  Stream<void> get onSessionExpired => _apiClient.onSessionExpired;
+
   /// Try to auto-login using stored token
   Future<User?> tryAutoLogin() async {
     final token = _storage.getString('access_token');

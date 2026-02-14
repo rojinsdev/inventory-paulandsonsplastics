@@ -105,7 +105,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     textAlign: TextAlign.center,
                     style: theme.textTheme.displaySmall?.copyWith(
                       color: colorScheme.onSurface,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -125,19 +124,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       labelText: 'Email Address',
                       hintText: 'name@paulandsons.com',
                       prefixIcon: const Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: colorScheme.outline),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: colorScheme.outline),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide:
-                            BorderSide(color: colorScheme.primary, width: 2),
-                      ),
                     ),
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
@@ -162,19 +148,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: () => setState(
                             () => _isPasswordVisible = !_isPasswordVisible),
                       ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: colorScheme.outline),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide(color: colorScheme.outline),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide:
-                            BorderSide(color: colorScheme.primary, width: 2),
-                      ),
                     ),
                     obscureText: !_isPasswordVisible,
                     textInputAction: TextInputAction.done,
@@ -191,9 +164,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: isLoading ? null : _login,
                     style: FilledButton.styleFrom(
                       minimumSize: const Size(double.infinity, 64),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(32),
-                      ),
                     ),
                     child: isLoading
                         ? SizedBox(

@@ -13,6 +13,14 @@ const bundleSchema = z.object({
     source: z.enum(['packed', 'semi_finished']).optional().default('packed'),
 });
 
+const unpackSchema = z.object({
+    product_id: z.string().uuid(),
+    quantity: z.number().int().positive(),
+    from_state: z.enum(['finished', 'packed']),
+    to_state: z.enum(['packed', 'semi_finished']),
+});
+
+
 export class InventoryController {
     async pack(req: Request, res: Response) {
         try {
@@ -41,6 +49,24 @@ export class InventoryController {
             }
         }
     }
+
+    async unpack(req: Request, res: Response) {
+        try {
+            const { product_id, quantity, from_state, to_state } = unpackSchema.parse(req.body);
+            await inventoryService.unpack(product_id, quantity, from_state, to_state);
+            res.status(200).json({ message: 'Unpacking successful' });
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: error.issues });
+            } else if (error.message.includes('Insufficient') || error.message.includes('Invalid unpack transition') || error.message.includes('Product not found')) {
+                res.status(400).json({ error: error.message });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
+
+
 
     async getStock(req: Request, res: Response) {
         try {

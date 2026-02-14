@@ -9,6 +9,7 @@ export default function CustomSelect({
     options = [],
     placeholder = 'Select option',
     disabled = false,
+    searchable = true,
     className
 }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -35,9 +36,10 @@ export default function CustomSelect({
         setSearchQuery('');
     };
 
-    const filteredOptions = options.filter(option =>
-        option.label.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredOptions = options.filter(option => {
+        const searchText = option.searchLabel || (typeof option.label === 'string' ? option.label : '');
+        return searchText.toLowerCase().includes(searchQuery.toLowerCase());
+    });
 
     useEffect(() => {
         if (isOpen && searchInputRef.current) {
@@ -63,33 +65,35 @@ export default function CustomSelect({
 
             {isOpen && !disabled && (
                 <div className={styles.dropdown} role="listbox">
-                    <div className={styles.searchContainer}>
-                        <div className={styles.searchWrapper}>
-                            <Search size={14} className={styles.searchIcon} />
-                            <input
-                                ref={searchInputRef}
-                                type="text"
-                                className={styles.searchInput}
-                                placeholder="Search products..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                            />
-                            {searchQuery && (
-                                <button
-                                    type="button"
-                                    className={styles.clearSearch}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSearchQuery('');
-                                        searchInputRef.current?.focus();
-                                    }}
-                                >
-                                    <X size={12} />
-                                </button>
-                            )}
+                    {searchable && (
+                        <div className={styles.searchContainer}>
+                            <div className={styles.searchWrapper}>
+                                <Search size={14} className={styles.searchIcon} />
+                                <input
+                                    ref={searchInputRef}
+                                    type="text"
+                                    className={styles.searchInput}
+                                    placeholder="Search..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                {searchQuery && (
+                                    <button
+                                        type="button"
+                                        className={styles.clearSearch}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSearchQuery('');
+                                            searchInputRef.current?.focus();
+                                        }}
+                                    >
+                                        <X size={12} />
+                                    </button>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                     <div className={styles.optionsList}>
                         {filteredOptions.length === 0 ? (
                             <div className={styles.item} style={{ cursor: 'default', color: 'var(--text-muted)' }}>
@@ -105,7 +109,7 @@ export default function CustomSelect({
                                     role="option"
                                     aria-selected={value === option.value}
                                 >
-                                    <span>{option.label}</span>
+                                    <div style={{ flex: 1 }}>{option.label}</div>
                                     {value === option.value && <Check size={16} className={styles.check} />}
                                 </button>
                             ))

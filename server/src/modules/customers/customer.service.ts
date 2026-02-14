@@ -145,6 +145,13 @@ export class CustomerService {
     // ============================================================================
 
     async getCustomerProfile(id: string): Promise<CustomerProfileResponse> {
+        // Trigger real-time recalculation to ensure fresh data
+        try {
+            await this.calculateCustomerAnalytics(id);
+        } catch (e) {
+            console.error(`Failed to recalculate analytics for customer ${id}:`, e);
+        }
+
         // Get customer basic info
         const { data: customer, error: customerError } = await supabase
             .from('customers')
@@ -173,6 +180,7 @@ export class CustomerService {
             `)
             .eq('customer_id', id)
             .order('order_date', { ascending: false })
+            .order('created_at', { ascending: false })
             .limit(10);
 
         // Get recent interactions (last 20)
@@ -207,6 +215,7 @@ export class CustomerService {
             `, { count: 'exact' })
             .eq('customer_id', id)
             .order('order_date', { ascending: false })
+            .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
         if (error) throw new Error(error.message);

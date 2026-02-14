@@ -86,7 +86,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: colorScheme.tertiaryContainer,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(32),
                 ),
                 child: Row(
                   children: [
@@ -170,6 +170,8 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 style: SegmentedButton.styleFrom(
                   selectedBackgroundColor: colorScheme.tertiaryContainer,
                   selectedForegroundColor: colorScheme.onTertiaryContainer,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(32)),
                 ),
               ),
               const SizedBox(height: 24),
@@ -217,6 +219,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 style: FilledButton.styleFrom(
                   backgroundColor: colorScheme.tertiary,
                   foregroundColor: colorScheme.onTertiary,
+                  minimumSize: const Size(double.infinity, 64),
                 ),
               ),
             ],

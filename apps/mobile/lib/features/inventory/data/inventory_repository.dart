@@ -128,4 +128,28 @@ class InventoryRepository {
       rethrow;
     }
   }
+
+  Future<void> unpack({
+    required String productId,
+    required int quantity,
+    required String fromState,
+    required String toState,
+  }) async {
+    try {
+      await _apiClient.client.post(
+        ApiConstants.inventoryUnpack,
+        data: {
+          'product_id': productId,
+          'quantity': quantity,
+          'from_state': fromState,
+          'to_state': toState,
+        },
+      );
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(e.response?.data['error'] ?? 'Unpacking failed');
+      }
+      rethrow;
+    }
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../widgets/unpack_modal.dart';
 import '../providers/inventory_provider.dart';
 
 class StockDetailScreen extends ConsumerStatefulWidget {
@@ -51,10 +52,11 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(24),
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(32),
                     border: Border.all(
-                      color: colorScheme.outlineVariant.withOpacity(0.5),
+                      color: colorScheme.outline,
+                      width: 1.5,
                     ),
                   ),
                   child: TextField(
@@ -226,7 +228,7 @@ class _ProductStockCard extends StatelessWidget {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: colorScheme.surface,
-                  borderRadius: BorderRadius.circular(24),
+                  borderRadius: BorderRadius.circular(32), // Expressive
                 ),
                 child: Row(
                   children: [
@@ -263,7 +265,88 @@ class _ProductStockCard extends StatelessWidget {
                 ),
               ),
             ),
+
+            // Action Buttons
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ActionButton(
+                      label: 'Unpack Items',
+                      icon: Icons.unarchive_outlined,
+                      color: colorScheme.primary,
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => UnpackModal(
+                            productId: stock.productId,
+                            productName: stock.productName,
+                            currentBundles: stock.bundledQty,
+                            currentPackets: stock.packedQty,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: color.withOpacity(0.2),
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

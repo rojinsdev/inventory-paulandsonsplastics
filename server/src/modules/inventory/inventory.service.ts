@@ -161,6 +161,95 @@ export class InventoryService {
             await this.deductCapInventory(cap_id, requiredQuantity, factory, `Deduction for direct bundling ${bundlesCreated} bundles of ${productId}`);
         }
     }
+
+    // 3. Unpack: Reverse Logistics (Bundle/Packet -> Packets/Loose)
+    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished') {
+        const { items_per_packet, packets_per_bundle, items_per_bundle, factory_id } = await getProductPackingDetails(productId);
+        const factory = factory_id || MAIN_FACTORY_ID;
+
+        // Validation: Cannot unpack to the same state
+        if (fromState === toState) {
+            throw new Error('Source and target states must be different');
+        }
+
+        // Specific valid transitions
+        if (fromState === 'finished' && toState === 'packed') {
+            // Bundle -> Packets
+        } else if (fromState === 'finished' && toState === 'semi_finished') {
+            // Bundle -> Loose
+        } else if (fromState === 'packed' && toState === 'semi_finished') {
+            // Packet -> Loose
+        } else {
+            throw new Error(`Invalid unpack transition: ${fromState} to ${toState}`);
+        }
+
+        const defaultItemsPerPacket = await SettingsService.getValue<number>('default_items_per_packet') || 12;
+        const defaultPacketsPerBundle = 50;
+        const defaultItemsPerBundle = 600;
+
+        let multiplier = 0;
+        if (fromState === 'finished') {
+            if (toState === 'packed') {
+                multiplier = packets_per_bundle || defaultPacketsPerBundle;
+            } else {
+                multiplier = items_per_bundle || defaultItemsPerBundle;
+            }
+        } else if (fromState === 'packed') {
+            multiplier = items_per_packet || defaultItemsPerPacket;
+        }
+
+        const yieldQuantity = quantityToUnpack * multiplier;
+
+        // 1. Check Source stock
+        const { data: sourceStock, error: fetchSourceError } = await supabase
+            .from('stock_balances')
+            .select('quantity')
+            .eq('product_id', productId)
+            .eq('state', fromState)
+            .eq('factory_id', factory)
+            .single();
+
+        if (fetchSourceError && fetchSourceError.code !== 'PGRST116') throw new Error(fetchSourceError.message);
+        if (!sourceStock || sourceStock.quantity < quantityToUnpack) {
+            throw new Error(`Insufficient ${fromState} stock. Need ${quantityToUnpack}, have ${sourceStock?.quantity || 0}`);
+        }
+
+        // 2. Deduct Source
+        const { error: deductError } = await supabase.from('stock_balances').upsert({
+            product_id: productId,
+            state: fromState,
+            factory_id: factory,
+            quantity: sourceStock.quantity - quantityToUnpack,
+            last_updated: new Date().toISOString()
+        }, { onConflict: 'product_id,state,factory_id' });
+
+        if (deductError) throw new Error(`Failed to deduct ${fromState} stock: ${deductError.message}`);
+
+        // 3. Add to Target
+        const { data: targetStock, error: fetchTargetError } = await supabase
+            .from('stock_balances')
+            .select('quantity')
+            .eq('product_id', productId)
+            .eq('state', toState)
+            .eq('factory_id', factory)
+            .single();
+
+        if (fetchTargetError && fetchTargetError.code !== 'PGRST116') throw new Error(fetchTargetError.message);
+
+        const { error: addError } = await supabase.from('stock_balances').upsert({
+            product_id: productId,
+            state: toState,
+            factory_id: factory,
+            quantity: (targetStock?.quantity || 0) + yieldQuantity,
+            last_updated: new Date().toISOString()
+        }, { onConflict: 'product_id,state,factory_id' });
+
+        if (addError) throw new Error(`Failed to add ${toState} stock: ${addError.message}`);
+
+        // Log Transaction
+        await this.logTransaction('unpack', productId, quantityToUnpack, fromState === 'finished' ? 'bundle' : 'packet', fromState, toState, factory, undefined, `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? 'bundle' : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`);
+    }
+
     public async logTransaction(
         type: string,
         entityId: string | null,

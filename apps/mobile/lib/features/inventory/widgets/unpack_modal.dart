@@ -1,0 +1,321 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../providers/inventory_provider.dart';
+
+class UnpackModal extends ConsumerStatefulWidget {
+  final String productId;
+  final String productName;
+  final int currentBundles;
+  final int currentPackets;
+
+  const UnpackModal({
+    super.key,
+    required this.productId,
+    required this.productName,
+    required this.currentBundles,
+    required this.currentPackets,
+  });
+
+  @override
+  ConsumerState<UnpackModal> createState() => _UnpackModalState();
+}
+
+class _UnpackModalState extends ConsumerState<UnpackModal> {
+  final _quantityController = TextEditingController();
+  String _fromState = 'finished';
+  String _toState = 'packed';
+  bool _isProcessing = false;
+
+  int get _availableStock =>
+      _fromState == 'finished' ? widget.currentBundles : widget.currentPackets;
+
+  bool get _isQuantityInvalid {
+    final qty = int.tryParse(_quantityController.text) ?? 0;
+    return qty > _availableStock;
+  }
+
+  bool get _isQuantityZero {
+    final qty = int.tryParse(_quantityController.text) ?? 0;
+    return qty <= 0;
+  }
+
+  @override
+  void dispose() {
+    _quantityController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleUnpack() async {
+    final qty = int.tryParse(_quantityController.text);
+    if (qty == null || qty <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid quantity')),
+      );
+      return;
+    }
+
+    setState(() => _isProcessing = true);
+    try {
+      await ref.read(inventoryRepositoryProvider).unpack(
+            productId: widget.productId,
+            quantity: qty,
+            fromState: _fromState,
+            toState: _toState,
+          );
+
+      if (mounted) {
+        ref.invalidate(inventoryStockProvider);
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unpacking successful')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 32,
+        top: 32,
+        left: 24,
+        right: 24,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.primaryContainer.withOpacity(0.4),
+                  shape: BoxShape.circle,
+                ),
+                child:
+                    Icon(Icons.unarchive_outlined, color: colorScheme.primary),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Unpack Items',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      widget.productName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Selection
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Convert From',
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Available: ${_fromState == 'finished' ? widget.currentBundles : widget.currentPackets} ${_fromState == 'finished' ? 'Bundles' : 'Packets'}',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: (_availableStock == 0)
+                      ? colorScheme.error
+                      : colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _SourceChip(
+                label: 'Bundle',
+                isSelected: _fromState == 'finished',
+                onSelected: () => setState(() {
+                  _fromState = 'finished';
+                  _toState = 'packed';
+                  _quantityController.clear();
+                }),
+              ),
+              const SizedBox(width: 12),
+              _SourceChip(
+                label: 'Packet',
+                isSelected: _fromState == 'packed',
+                onSelected: () => setState(() {
+                  _fromState = 'packed';
+                  _toState = 'semi_finished';
+                  _quantityController.clear();
+                }),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+          Text(
+            'To',
+            style: theme.textTheme.labelLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _toState,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(20),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            items: [
+              if (_fromState == 'finished')
+                const DropdownMenuItem(value: 'packed', child: Text('Packets')),
+              if (_fromState == 'finished' || _fromState == 'packed')
+                const DropdownMenuItem(
+                    value: 'semi_finished', child: Text('Loose Items')),
+            ],
+            onChanged: (value) => setState(() => _toState = value!),
+          ),
+
+          const SizedBox(height: 24),
+          Text(
+            'Quantity to Unpack',
+            style: theme.textTheme.labelLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _quantityController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            style: TextStyle(
+              color: _isQuantityInvalid ? colorScheme.error : null,
+            ),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Enter quantity...',
+              filled: true,
+              fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              errorText: _isQuantityInvalid ? 'Exceeds available stock' : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(20),
+                borderSide: BorderSide.none,
+              ),
+              suffixText: _fromState == 'finished' ? 'Bundles' : 'Packets',
+            ),
+          ),
+
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            height: 64,
+            child: ElevatedButton(
+              onPressed:
+                  (_isProcessing || _isQuantityInvalid || _isQuantityZero)
+                      ? null
+                      : _handleUnpack,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: colorScheme.primary,
+                foregroundColor: colorScheme.onPrimary,
+                disabledBackgroundColor:
+                    colorScheme.onSurface.withOpacity(0.12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                elevation: 0,
+              ),
+              child: _isProcessing
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : Text(
+                      _isQuantityInvalid
+                          ? 'Insufficient Stock'
+                          : 'Confirm Unpack',
+                      style: const TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onSelected;
+
+  const _SourceChip({
+    required this.label,
+    required this.isSelected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onSelected,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? colorScheme.primary
+                : colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            borderRadius: BorderRadius.circular(20),
+            border: isSelected
+                ? null
+                : Border.all(color: colorScheme.outline.withOpacity(0.2)),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                color:
+                    isSelected ? colorScheme.onPrimary : colorScheme.onSurface,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

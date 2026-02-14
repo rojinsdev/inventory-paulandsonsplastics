@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -6,6 +7,10 @@ import '../constants/api_constants.dart';
 class ApiClient {
   final Dio _dio;
   final SharedPreferences _storage;
+  final _sessionExpiredController = StreamController<void>.broadcast();
+  Completer<void>? _refreshCompleter;
+
+  Stream<void> get onSessionExpired => _sessionExpiredController.stream;
 
   ApiClient(this._storage)
       : _dio = Dio(
@@ -31,8 +36,36 @@ class ApiClient {
 
             final refreshToken = _storage.getString('refresh_token');
             if (refreshToken == null) {
+              _sessionExpiredController.add(null);
               return handler.next(e); // No refresh token, fail
             }
+
+            // --- LOCKING MECHANISM START ---
+            if (_refreshCompleter != null) {
+              // A refresh is already in progress, wait for it
+              debugPrint('⏳ Waiting for active token refresh...');
+              await _refreshCompleter!.future;
+
+              // After wait, retry with new token if available
+              final newToken = _storage.getString('access_token');
+              if (newToken != null) {
+                final options = e.requestOptions;
+                options.headers['Authorization'] = 'Bearer $newToken';
+                try {
+                  final cloneReq = await _dio.fetch(options);
+                  return handler.resolve(cloneReq);
+                } catch (retryError) {
+                  return handler.next(e);
+                }
+              } else {
+                // Refresh failed for the other request too
+                return handler.next(e);
+              }
+            }
+
+            // Start a new refresh
+            _refreshCompleter = Completer<void>();
+            // --- LOCKING MECHANISM END ---
 
             try {
               // Create a new Dio instance to avoid interceptor loops
@@ -59,6 +92,8 @@ class ApiClient {
                   }
 
                   debugPrint('✅ Token refreshed successfully');
+                  _refreshCompleter?.complete(); // Unlock
+                  _refreshCompleter = null;
 
                   // Retry the original request
                   final options = e.requestOptions;
@@ -70,10 +105,20 @@ class ApiClient {
               }
             } catch (refreshError) {
               debugPrint('❌ Token refresh failed: $refreshError');
-              // Optionally clear storage here, or let UI handle the 401
+              // Clear storage logic moved to AuthProvider via stream
+              // But we still clear here to be safe or rely on the listener
               await _storage.remove('access_token');
               await _storage.remove('refresh_token');
               await _storage.remove('user_data');
+
+              _sessionExpiredController.add(null); // Notify app to logout
+            } finally {
+              // Ensure completer is completed even on error to release waiters
+              if (_refreshCompleter != null &&
+                  !_refreshCompleter!.isCompleted) {
+                _refreshCompleter!.complete();
+                _refreshCompleter = null;
+              }
             }
           }
 
@@ -97,24 +142,16 @@ class ApiClient {
     final userJson = _storage.getString('user_data');
     if (userJson == null) return null;
 
-    // Simple parsing to avoid circular dependency with User model if possible,
-    // or import dart:convert
     try {
-      // Create a localized import or just regex if we want to avoid import issues,
-      // but simpler to just parse json.
-      // We need to import dart:convert at the top if not present.
-      // Looking at the file, it doesn't have dart:convert.
-      // I'll add the import first in a separate replacement or just use regex for simplicity
-      // as adding import changes line numbers at top.
-      // Actually, let's just use string manipulation or a dynamic map if we can't import easily.
-      // Wait, I can just use basic pattern matching since it's a JSON string.
-      // "factory_id":"..."
-
       final match = RegExp(r'"factory_id":"([^"]+)"').firstMatch(userJson);
       return match?.group(1);
     } catch (e) {
       debugPrint('Error parsing factory_id: $e');
       return null;
     }
+  }
+
+  void dispose() {
+    _sessionExpiredController.close();
   }
 }

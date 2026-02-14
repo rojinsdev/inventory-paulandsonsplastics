@@ -15,7 +15,7 @@ const createOrderSchema = z.object({
 });
 
 const updateStatusSchema = z.object({
-    status: z.enum(['reserved', 'delivered', 'cancelled']),
+    status: z.enum(['reserved', 'delivered', 'cancelled', 'pending']),
 });
 
 export class SalesOrderController {
@@ -190,7 +190,8 @@ export class SalesOrderController {
         try {
             const filters = {
                 customer_id: req.query.customer_id as string,
-                is_overdue: req.query.is_overdue === 'true'
+                is_overdue: req.query.is_overdue === 'true',
+                status: req.query.status as string
             };
             const payments = await salesOrderService.getPendingPayments(filters);
             res.json(payments);

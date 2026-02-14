@@ -18,7 +18,9 @@ class ApiConstants {
 
   static const String inventoryPack = '/inventory/pack';
   static const String inventoryBundle = '/inventory/bundle';
+  static const String inventoryUnpack = '/inventory/unpack';
   static const String inventoryStock = '/inventory/stock';
+
   static const String inventoryStockOverview = '/inventory/overview';
   static const String inventoryRawMaterials = '/inventory/raw-materials';
   static const String salesOrders = '/orders';

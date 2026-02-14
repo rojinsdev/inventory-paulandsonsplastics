@@ -50,7 +50,6 @@ const menuSections = [
                 label: 'Sales',
                 icon: ShoppingCart,
                 submenu: [
-                    { label: 'Live Stock', href: '/inventory/live' },
                     { label: 'Customers', href: '/customers' },
                     { label: 'Sales Orders', href: '/orders' },
                     { label: 'Deliveries', href: '/deliveries' },

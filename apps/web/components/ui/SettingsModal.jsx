@@ -182,7 +182,6 @@ export default function SettingsModal({ isOpen, onClose }) {
                                         onChange={(e) => updateSetting('defaultView', e.target.value)}
                                     >
                                         <option value="/">Dashboard</option>
-                                        <option value="/inventory/live">Live Stock</option>
                                         <option value="/orders">Sales Orders</option>
                                         <option value="/machines">Machines</option>
                                     </select>

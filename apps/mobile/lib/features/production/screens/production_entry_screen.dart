@@ -379,11 +379,11 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 onTap: () => _selectDate(context),
                 child: Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
                   decoration: BoxDecoration(
-                    color: colorScheme.surface.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: colorScheme.outlineVariant),
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(32),
+                    border: Border.all(color: colorScheme.outline, width: 1.5),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -450,7 +450,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                   visualDensity: VisualDensity.comfortable,
                   shape: WidgetStateProperty.all(
                     RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24)),
+                        borderRadius: BorderRadius.circular(32)),
                   ),
                   padding: WidgetStateProperty.all(
                     const EdgeInsets.symmetric(vertical: 20),
@@ -466,10 +466,13 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                     child: GestureDetector(
                       onTap: () => _selectTime(context, true),
                       child: Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 20),
                         decoration: BoxDecoration(
-                          border: Border.all(color: colorScheme.outline),
-                          borderRadius: BorderRadius.circular(12),
+                          color: colorScheme.surface,
+                          border: Border.all(
+                              color: colorScheme.outline, width: 1.5),
+                          borderRadius: BorderRadius.circular(32),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -492,10 +495,13 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                     child: GestureDetector(
                       onTap: () => _selectTime(context, false),
                       child: Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 20),
                         decoration: BoxDecoration(
-                          border: Border.all(color: colorScheme.outline),
-                          borderRadius: BorderRadius.circular(12),
+                          color: colorScheme.surface,
+                          border: Border.all(
+                              color: colorScheme.outline, width: 1.5),
+                          borderRadius: BorderRadius.circular(32),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -661,6 +667,9 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 onPressed: isSubmitting
                     ? null
                     : () => _submit(saveAndAddAnother: false),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 64),
+                ),
                 icon: isSubmitting
                     ? const SizedBox(
                         width: 20,
@@ -677,6 +686,11 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 onPressed: isSubmitting
                     ? null
                     : () => _submit(saveAndAddAnother: true),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 64),
+                  shape: const StadiumBorder(),
+                  side: BorderSide(color: colorScheme.outline, width: 1.5),
+                ),
                 icon: const Icon(Icons.add),
                 label: const Text('Save & Add Another (Die Change)'),
               ),
