@@ -1,109 +1,82 @@
 # Paul & Sons Plastics - Inventory & Production System
 
-> 🔒 **PRIVATE REPOSITORY** - Internal Use Only  
-> This software is a proprietary internal tool for Paul & Sons Plastics. It is **not** open-source software.
+An enterprise-grade, real-time management system for Paul & Sons Plastics. This monorepo contains the web dashboard, API server, and shared configurations for a multi-factory production environment.
 
-## 📖 System Overview
+## 🚀 Key Features
 
-This system is a custom **Inventory and Production Management Solution** designed to track factory operations from raw material to finished goods delivery. It acts as the single source of truth for production efficiency, stock levels, and daily cost recovery.
+### 🏭 Multi-Factory & Production
+- **Multi-Factory Support**: Manage multiple production sites from a single dashboard.
+- **Production Planning**: Advanced scheduling for machine runs and staff.
+- **Real-Time Visibility**: Track stock levels and machine status as they happen.
+- **Recipe & Packaging**: Manage product raw material mappings and multi-unit sales (Bundles, Bags, Boxes).
 
-**Core Objectives:**
-*   **Track Production Efficiency:** Compare machine actual output vs. theoretical capacity.
-*   **Manage Inventory Flow:** Strict state transitions: `Semi-Finished` → `Packed` → `Finished` → `Reserved` → `Delivered`.
-*   **Live Stock Visibility:** Real-time "Available to Promise" stock for the sales team.
-*   **Cost Analysis:** Daily verification of machine running costs (₹7k-8k/day) against output value.
+### 📊 Business Intelligence
+- **Customer Analytics**: Track VIP clients, buying patterns, and order history.
+- **Smart Stock Allocation**: Reserve stock for high-priority sales orders.
+- **Inventory Audit Logs**: Full traceability of every stock movement.
+- **Machine Efficiency**: Monitor production costs and recovery rates.
 
----
+### 🛡️ Security & Access
+- **Role-Based Access Control (RBAC)**: Distinct views for Admin, Factory Manager, and Staff.
+- **Row-Level Security (RLS)**: Data isolation powered by Supabase.
+- **Audit Trails**: Tracking who performed every action in the system.
 
 ## 🏗️ Architecture
 
-The system is built as a modular monorepo:
+This is a **Monorepo** built with modern web technologies:
 
-| Component | Tech Stack | Purpose |
-| :--- | :--- | :--- |
-| **Backend API** | Node.js (Express) | Core logic, inventory state machine, role-based access. |
-| **Database** | PostgreSQL (Supabase) | Relational data, Row Level Security (RLS). |
-| **Web Portal** | Next.js, TanStack Query, Supabase Realtime | Admin dashboard, live monitoring, master configuration. |
-| **Mobile App** | Flutter | Simple daily production entry for factory floor staff. |
+- **`apps/web`**: Next.js dashboard with a premium UI (Vercel).
+- **`server`**: Dockerized Node.js API server (Railway).
+- **`database`**: Supabase (PostgreSQL) with Real-time extensions and Auth.
 
----
+## 🌐 Infrastructure & Deployment
 
-## 👥 User Roles
+The system is deployed using a professional CI/CD pipeline:
 
-1.  **Admin / Owner (Web):**
-    *   Full access to all configurations (Machines, Products, Formulas).
-    *   Manages Sales Orders, sets reservations, and confirms deliveries.
-    *   Views financial and efficiency analytics.
+1.  **Work**: Push code to the `develop` branch on GitHub.
+2.  **Test**: Vercel creates a private "Preview" site for verification.
+3.  **Launch**: Merge code into the `main` branch.
+4.  **Auto-Deploy**:
+    - **Frontend**: Vercel updates the production site automatically.
+    - **Backend**: Railway builds a new **Docker** container and restarts the API with zero downtime.
+5.  **Database**: Managed via Supabase with production/dev environment separation.
 
-2.  **Production Manager (Mobile):**
-    *   Strictly operational access.
-    *   Enters daily production logs.
-    *   Manages packing and bundling workflows.
-    *   **No access** to sales data, customer info, or system settings.
+## 🛠️ Development Workflow
 
----
+To ensure system stability, we follow a strict branching model:
 
-## 🚀 Getting Started
+- **`develop` Branch**: Your active workshop. All new features and fixes happen here.
+- **`main` Branch**: The "Showroom." Only stable, production-ready code is pushed here.
+
+### Daily Routine:
+1.  Sync latest code: `git pull origin develop`
+2.  Work on features.
+3.  Commit & Push: `git add .`, `git commit -m "feat: description"`, `git push origin develop`.
+
+## ⚙️ Getting Started
 
 ### Prerequisites
-*   Node.js (v18+)
-*   npm or yarn
-*   Git
+- Node.js (v18+)
+- Docker (for local server development)
+- Supabase CLI
 
-### Installation
-1.  **Clone the repository:**
+### Setup
+1.  Clone the repository from the new business account:
     ```bash
-    git clone https://github.com/rojins0209/Paul-Sons-Plastics-Inventory.git
-    cd Paul-Sons-Plastics-Inventory
+    git clone https://github.com/rojinsdev/inventory-paulandsonsplastics.git
     ```
-
-2.  **Install dependencies:**
+2.  Install dependencies:
     ```bash
-    # Server
-    cd server
     npm install
-
-    # Web App
-    cd ../apps/web
-    npm install
-    
-    # Mobile App
-    cd ../apps/mobile
-    flutter pub get
     ```
+3.  Configure Environment Variables:
+    Create `.env` files in both `apps/web` and `server` based on the `.env.example` templates.
 
-3.  **Environment Setup:**
-    *   Create a `.env` file in the `server/` directory.
-    *   Create a `.env.local` file in the `apps/web/` directory.
-    *   Refer to [docs/setup/SUPABASE_SETUP.md](docs/setup/SUPABASE_SETUP.md) for variable keys.
-
-### Running the Application
-*   **Server:** `npm run dev` (Port 4000)
-*   **Web Portal:** `npm run dev` (Port 3000)
-*   **Mobile App:** `flutter run`
+## 📄 Documentation
+Detailed technical guides can be found in the `/docs` folder:
+- [Infrastructure Plan](file:///d:/WORKS/SAAS/PaulAndSonsPlastics/inventory-production-system/docs/setup/INFRASTRUCTURE_PLAN.md)
+- [Database Schema](file:///d:/WORKS/SAAS/PaulAndSonsPlastics/inventory-production-system/docs/database/README.md)
+- [System Workflows](file:///d:/WORKS/SAAS/PaulAndSonsPlastics/inventory-production-system/docs/general/SYSTEM%20WORKFLOWS.md)
 
 ---
-
-## 📂 Documentation
-
-Detailed documentation is available in the `docs/` directory:
-
-*   **General:**
-    *   [Business Requirements](docs/general/BUSINESS_REQUIREMENTS.md)
-    *   [System Workflows](docs/general/SYSTEM%20WORKFLOWS.md)
-*   **Web Portal:**
-    *   [Architecture Overview](docs/web-portal/00_OVERVIEW.md)
-    *   [Real-time & Caching](docs/web-portal/09_REALTIME_AND_CACHING.md)
-*   **Setup:**
-    *   [Supabase & Tech Stack](docs/setup/)
-*   **Testing:**
-    *   [API Testing Guides](docs/testing/)
-
----
-
-## ⚠️ Important Boundaries
-
-To maintain efficiency, this system intentionally **EXCLUDES**:
-*   ❌ Billing & Invoicing (Handled by Tally)
-*   ❌ GST Calculations
-*   ❌ HR / Payroll Management
+© 2026 Paul & Sons Plastics. Built for excellence in plastic manufacturing.
