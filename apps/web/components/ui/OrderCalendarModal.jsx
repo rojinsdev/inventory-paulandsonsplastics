@@ -32,7 +32,10 @@ export default function OrderCalendarModal({ isOpen, onClose }) {
     // But for now, client-side filtering is fine as per plan
     const { data: orders = [], isLoading } = useQuery({
         queryKey: ['orders', 'calendar', selectedFactory],
-        queryFn: () => ordersAPI.getAll(selectedFactory ? { factory_id: selectedFactory } : {}).then(res => Array.isArray(res) ? res : []),
+        queryFn: () => ordersAPI.getAll({
+            ...(selectedFactory ? { factory_id: selectedFactory } : {}),
+            size: 1000
+        }).then(res => res?.orders || (Array.isArray(res) ? res : [])),
         enabled: isOpen
     });
 

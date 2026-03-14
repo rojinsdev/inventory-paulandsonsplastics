@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase';
+import logger from '../../utils/logger';
 
 export class AuditService {
 
@@ -25,7 +26,7 @@ export class AuditService {
             });
 
         if (error) {
-            console.error('Failed to create audit log:', error);
+            logger.error('Failed to create audit log', { error: error.message, userId, action, entityType });
             // Don't throw, we don't want to block the main action if logging fails
         }
     }

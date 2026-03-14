@@ -26,12 +26,32 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
 
   // State
   String? _selectedMachineId;
-  String? _selectedProductId;
+  String? _selectedTemplateId;
+  String? _selectedProductId; // Represents the specific variant (Color)
   int _shiftNumber = 1; // 1 = Day (8AM-8PM), 2 = Night (8PM-8AM)
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 20, minute: 0);
   bool _isWeightBased = false; // Determined by product selection
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    final hour = now.hour;
+
+    // Shift 1: 08:00 to 19:59 (8 AM to 7:59 PM)
+    // Shift 2: 20:00 to 07:59 (8 PM to 7:59 AM)
+    if (hour >= 8 && hour < 20) {
+      _shiftNumber = 1;
+      _startTime = const TimeOfDay(hour: 8, minute: 0);
+      _endTime = const TimeOfDay(hour: 20, minute: 0);
+    } else {
+      _shiftNumber = 2;
+      _startTime = const TimeOfDay(hour: 20, minute: 0);
+      _endTime = const TimeOfDay(hour: 8, minute: 0);
+    }
+  }
 
   @override
   void dispose() {
@@ -62,6 +82,30 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
             hour: int.parse(parts[0]),
             minute: int.parse(parts[1]),
           );
+
+          // Auto-adjust end time if it's now before or same as start time
+          final startMinutes = _startTime.hour * 60 + _startTime.minute;
+          var endMinutes = _endTime.hour * 60 + _endTime.minute;
+
+          if (_shiftNumber == 2 && endMinutes < 480) {
+            endMinutes += 24 * 60; // Handle overnight for comparison
+          }
+
+          final effectiveStartMinutes =
+              (_shiftNumber == 2 && startMinutes < 480)
+                  ? startMinutes + 24 * 60
+                  : startMinutes;
+
+          if (effectiveStartMinutes >= endMinutes) {
+            // Move end time to 1 hour after start, or shift end
+            int newEndHour = (_startTime.hour + 1) % 24;
+            if (_shiftNumber == 1 && newEndHour > 20) newEndHour = 20;
+            if (_shiftNumber == 2 && newEndHour > 8 && newEndHour < 20) {
+              newEndHour = 8;
+            }
+
+            _endTime = TimeOfDay(hour: newEndHour, minute: _startTime.minute);
+          }
         });
       }
     } catch (e) {
@@ -143,6 +187,18 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
 
       // Calculate downtime minutes
       final shiftDuration = _calculateShiftDuration();
+
+      if (shiftDuration <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Invalid shift times: End time must be after start time'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       final actualCycleTime = double.parse(_actualCycleTimeController.text);
       final totalProduced =
           _isWeightBased ? null : int.parse(_totalProducedController.text);
@@ -351,7 +407,6 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
     });
 
     final machinesAsync = ref.watch(machinesProvider);
-    final productsAsync = ref.watch(productsProvider);
     final isSubmitting = ref.watch(productionSubmissionProvider).isLoading;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -548,35 +603,73 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Product Dropdown
-              productsAsync.when(
-                data: (products) => DropdownButtonFormField<String>(
-                  initialValue: _selectedProductId,
-                  decoration: const InputDecoration(
-                    labelText: 'Product',
-                    prefixIcon: Icon(Icons.inventory_2_outlined),
+              // Template Dropdown
+              ref.watch(productTemplatesProvider).when(
+                    data: (templates) => DropdownButtonFormField<String>(
+                      initialValue: _selectedTemplateId,
+                      decoration: const InputDecoration(
+                        labelText: 'Product Template',
+                        prefixIcon: Icon(Icons.category_outlined),
+                      ),
+                      items: templates
+                          .map((t) => DropdownMenuItem(
+                                value: t.id,
+                                child: Text(t.displayName),
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedTemplateId = value;
+                          _selectedProductId =
+                              null; // Clear variant on template change
+                        });
+                      },
+                      validator: (value) => value == null ? 'Required' : null,
+                    ),
+                    loading: () => const LinearProgressIndicator(),
+                    error: (error, _) => Text('Error: $error',
+                        style: const TextStyle(color: Colors.red)),
                   ),
-                  items: products
-                      .map((p) => DropdownMenuItem(
-                            value: p.id,
-                            child: Text(p.displayName),
-                          ))
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedProductId = value;
-                      // Check if weight-based (you'll need to add counting_method to Product model)
-                      final product = products.firstWhere((p) => p.id == value);
-                      _isWeightBased = product.countingMethod == 'weight_based';
-                    });
-                  },
-                  validator: (value) => value == null ? 'Required' : null,
-                ),
-                loading: () => const LinearProgressIndicator(),
-                error: (error, _) => Text('Error: $error',
-                    style: const TextStyle(color: Colors.red)),
-              ),
               const SizedBox(height: 24),
+
+              // Color Variant Dropdown (Visible only if Template is selected)
+              if (_selectedTemplateId != null) ...[
+                ref.watch(productTemplatesProvider).when(
+                      data: (templates) {
+                        final selectedTemplate = templates
+                            .firstWhere((t) => t.id == _selectedTemplateId);
+                        final variants = selectedTemplate.variants;
+
+                        return DropdownButtonFormField<String>(
+                          initialValue: _selectedProductId,
+                          decoration: const InputDecoration(
+                            labelText: 'Color Variant',
+                            prefixIcon: Icon(Icons.palette_outlined),
+                          ),
+                          items: variants
+                              .map((v) => DropdownMenuItem(
+                                    value: v.id,
+                                    child: Text(v.color),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedProductId = value;
+                              final product =
+                                  variants.firstWhere((v) => v.id == value);
+                              _isWeightBased =
+                                  product.countingMethod == 'weight_based';
+                            });
+                          },
+                          validator: (value) =>
+                              value == null ? 'Required' : null,
+                        );
+                      },
+                      loading: () => const SizedBox.shrink(),
+                      error: (error, _) => const SizedBox.shrink(),
+                    ),
+                const SizedBox(height: 24),
+              ],
 
               // Conditional: Weight-based OR Unit-count
               if (_isWeightBased) ...[

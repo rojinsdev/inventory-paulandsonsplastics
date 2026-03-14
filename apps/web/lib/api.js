@@ -1,58 +1,88 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+let refreshPromise = null;
+
 /**
  * Helper to refresh the access token
  */
-async function refreshToken() {
+export async function refreshToken() {
     if (typeof window === 'undefined') return null;
 
-    const refreshToken = localStorage.getItem('refresh_token');
-    if (!refreshToken) return null;
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshToken }),
-        });
-
-        if (!response.ok) {
-            throw new Error('Refresh failed');
-        }
-
-        const data = await response.json();
-        const newAccessToken = data.session?.access_token;
-        const newRefreshToken = data.session?.refresh_token;
-        const newExpiresAt = data.session?.expires_at;
-
-        if (newAccessToken) {
-            localStorage.setItem('auth_token', newAccessToken);
-            if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
-            if (newExpiresAt) localStorage.setItem('expires_at', newExpiresAt);
-            return newAccessToken;
-        }
-    } catch (error) {
-        console.error('Token refresh error:', error);
-        // Clear session on fatal refresh error
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('expires_at');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+    // Return existing promise if refresh is already in progress
+    if (refreshPromise) {
+        console.log('🔄 API: Token refresh already in progress, waiting...');
+        return refreshPromise;
     }
-    return null;
+
+    const refreshTokenString = localStorage.getItem('refresh_token');
+    if (!refreshTokenString) return null;
+
+    refreshPromise = (async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshTokenString }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Refresh failed');
+            }
+
+            const data = await response.json();
+            const newAccessToken = data.session?.access_token;
+            const newRefreshToken = data.session?.refresh_token;
+            const newExpiresAt = data.session?.expires_at;
+
+            if (newAccessToken) {
+                localStorage.setItem('auth_token', newAccessToken);
+                if (newRefreshToken) localStorage.setItem('refresh_token', newRefreshToken);
+                if (newExpiresAt) localStorage.setItem('expires_at', newExpiresAt);
+                return newAccessToken;
+            }
+        } catch (error) {
+            console.error('Token refresh error:', error);
+            // Clear session on fatal refresh error
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('expires_at');
+            localStorage.removeItem('user');
+            window.location.href = '/login';
+        } finally {
+            refreshPromise = null;
+        }
+        return null;
+    })();
+
+    return refreshPromise;
 }
 
 /**
  * Generic fetch wrapper with error handling and auto-refresh
  * All endpoints are prefixed with /api automatically
  */
-async function fetchAPI(endpoint, options = {}) {
+export async function fetchAPI(endpoint, options = {}) {
     // Ensure all endpoints are prefixed with /api
     const apiEndpoint = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`;
 
-    // Clean up query parameters if they exist
+    // Base URL for the request
     let finalUrl = `${API_BASE_URL}${apiEndpoint}`;
+
+    // Handle params object if provided
+    if (options.params) {
+        const params = new URLSearchParams();
+        Object.entries(options.params).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                params.append(key, value);
+            }
+        });
+        const queryString = params.toString();
+        if (queryString) {
+            finalUrl += (finalUrl.includes('?') ? '&' : '?') + queryString;
+        }
+    }
+
+    // Clean up query parameters if they exist (existing logic for manual strings)
     if (finalUrl.includes('?')) {
         const [base, search] = finalUrl.split('?');
         const params = new URLSearchParams(search);
@@ -147,6 +177,15 @@ export const dieMappingsAPI = {
     delete: (id) => fetchAPI(`/machine-products/${id}`, { method: 'DELETE' }),
 };
 
+// ============ PRODUCT TEMPLATES ============
+export const productTemplatesAPI = {
+    getAll: (params) => fetchAPI(`/products/templates${params ? '?' + new URLSearchParams(params) : ''}`),
+    getById: (id) => fetchAPI(`/products/templates/${id}`),
+    create: (data) => fetchAPI('/products/templates', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/products/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => fetchAPI(`/products/templates/${id}`, { method: 'DELETE' }),
+};
+
 // ============ INVENTORY ============
 export const inventoryAPI = {
     getStock: (params) => fetchAPI(`/inventory/stock${params ? '?' + new URLSearchParams(params) : ''}`),
@@ -157,6 +196,8 @@ export const inventoryAPI = {
     adjustStock: (data) => fetchAPI('/inventory/adjust', { method: 'POST', body: JSON.stringify(data) }),
     adjustRawMaterial: (id, data) => fetchAPI(`/inventory/raw-materials/${id}/adjust`, { method: 'POST', body: JSON.stringify(data) }),
     getTransactions: (params) => fetchAPI(`/inventory/transactions${params ? '?' + new URLSearchParams(params) : ''}`),
+    pack: (data) => fetchAPI('/inventory/pack', { method: 'POST', body: JSON.stringify(data) }),
+    bundle: (data) => fetchAPI('/inventory/bundle', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 
@@ -295,6 +336,12 @@ export const capsAPI = {
     // Cap Production
     getProductionLogs: (params) => fetchAPI(`/production/caps/logs${params ? '?' + new URLSearchParams(params) : ''}`),
     submitProduction: (data) => fetchAPI('/production/caps/submit', { method: 'POST', body: JSON.stringify(data) }),
+
+    // Cap Templates
+    getTemplates: (params) => fetchAPI(`/caps/templates${params ? '?' + new URLSearchParams(params) : ''}`),
+    createTemplate: (data) => fetchAPI('/caps/templates', { method: 'POST', body: JSON.stringify(data) }),
+    updateTemplate: (id, data) => fetchAPI(`/caps/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteTemplate: (id) => fetchAPI(`/caps/templates/${id}`, { method: 'DELETE' }),
 };
 
 // ============ CASH FLOW ============
@@ -308,4 +355,12 @@ export const cashFlowAPI = {
     createCategory: (data) => fetchAPI('/cash-flow/categories', { method: 'POST', body: JSON.stringify(data) }),
     updateCategory: (id, data) => fetchAPI(`/cash-flow/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteCategory: (id) => fetchAPI(`/cash-flow/categories/${id}`, { method: 'DELETE' }),
+};
+
+// ============ PACKING RULES ============
+export const packingRulesAPI = {
+    getByProduct: (productId, params) => fetchAPI(`/packing-rules/product/${productId}`, { params }),
+    create: (data) => fetchAPI('/packing-rules', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/packing-rules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id) => fetchAPI(`/packing-rules/${id}`, { method: 'DELETE' }),
 };

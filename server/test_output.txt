@@ -1,31 +1,12 @@
-npm verbose cli C:\Program Files\nodejs\node.exe C:\Users\Rojins\AppData\Roaming\npm\node_modules\npm\bin\npm-cli.js
-npm info using npm@11.0.0
-npm info using node@v22.19.0
-npm verbose title npm test src/modules/cash-flow/__tests__/cash-flow.service.test.ts
-npm verbose argv "test" "src/modules/cash-flow/__tests__/cash-flow.service.test.ts" "--loglevel" "verbose"
-npm verbose logfile logs-max:10 dir:C:\Users\Rojins\AppData\Local\npm-cache\_logs\2026-02-10T21_18_05_554Z-
-npm verbose logfile C:\Users\Rojins\AppData\Local\npm-cache\_logs\2026-02-10T21_18_05_554Z-debug-0.log
-
-> server@1.0.0 test
-> jest src/modules/cash-flow/__tests__/cash-flow.service.test.ts
-
-FAIL src/modules/cash-flow/__tests__/cash-flow.service.test.ts
-  ΓùÅ Test suite failed to run
-
-    src/modules/cash-flow/__tests__/cash-flow.service.test.ts:75:28 - error TS2532: Object is possibly 'undefined'.
-
-    75         const insertMock = mockFrom.mock.results.find(r => r.value.insert).value.insert;
-                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Test Suites: 1 failed, 1 total
-Tests:       0 total
-Snapshots:   0 total
-Time:        2.793 s
-Ran all test suites matching src/modules/cash-flow/__tests__/cash-flow.service.test.ts.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
-npm verbose cwd D:\WORKS\SAAS\PaulAndSonsPlastics\inventory-production-system\server
-npm verbose os Windows_NT 10.0.26200
-npm verbose node v22.19.0
-npm verbose npm  v11.0.0
-npm verbose exit 1
-npm verbose code 1
+≡ƒº¬ Starting Cap Raw Material Deduction Test...
+1. Creating Test Raw Material...
+   Γ£à Created RM: Test RM 1771146987117 (ID: 4975c54f-1f1c-4a97-99e0-0c86e7c7b7a8) with 100kg
+2. Creating Test Cap...
+   Γ£à Created Cap: Test Cap 1771146987117 (ID: 11acbae2-cd26-4fd2-8a8a-829d8cba030b) linked to RM
+3. Submitting Cap Production...
+5. Cleaning up...
+   Γ¥î Test Execution Failed: Error: Cap production log error: insert or update on table "cap_production_logs" violates foreign key constraint "cap_production_logs_user_id_fkey"
+    at ProductionService.submitCapProduction (D:\WORKS\SAAS\PaulAndSonsPlastics\inventory-production-system\server\src\modules\production\production.service.ts:602:29)
+    at processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async runTest (D:\WORKS\SAAS\PaulAndSonsPlastics\inventory-production-system\server\src\scripts\test-cap-raw-material.ts:52:9)
+   Γ£à Cleanup complete.

@@ -120,10 +120,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   // Email Input
                   TextFormField(
                     controller: _emailController,
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Email Address',
                       hintText: 'name@paulandsons.com',
-                      prefixIcon: const Icon(Icons.email_outlined),
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                     keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,

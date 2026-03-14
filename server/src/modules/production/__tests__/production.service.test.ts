@@ -111,12 +111,14 @@ describe('ProductionService', () => {
             true
         );
 
+        /* Deprecated: Automated FIFO allocation is disabled.
         expect(stockAllocationService.allocateStock).toHaveBeenCalledWith(
             'prod-1',
             'semi_finished',
             95,
             'fac-1'
         );
+        */
     });
 
     it('should throw error if insufficient raw material', async () => {

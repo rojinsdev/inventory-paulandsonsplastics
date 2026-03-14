@@ -36,16 +36,7 @@ const menuSections = [
     {
         section: 'MAIN',
         items: [
-            { label: 'Dashboard', href: '/', icon: LayoutDashboard },
-            {
-                label: 'Inventory',
-                icon: Boxes,
-                submenu: [
-                    { label: 'Internal Stock', href: '/inventory' },
-                    { label: 'Reserved', href: '/inventory/reserved' },
-                    { label: 'Raw Material', href: '/inventory/raw-materials' },
-                ],
-            },
+            { label: 'Home', href: '/', icon: LayoutDashboard },
             {
                 label: 'Sales',
                 icon: ShoppingCart,
@@ -57,14 +48,23 @@ const menuSections = [
                 ],
             },
             {
+                label: 'Inventory',
+                icon: Boxes,
+                submenu: [
+                    { label: 'Internal Stock', href: '/inventory' },
+                    { label: 'Reserved', href: '/inventory/reserved' },
+                    { label: 'Raw Material', href: '/inventory/raw-materials' },
+                ],
+            },
+            {
                 label: 'Production Config',
                 icon: Factory,
                 submenu: [
                     { label: 'Machines', href: '/machines' },
                     { label: 'Products', href: '/products' },
                     { label: 'Caps', href: '/inventory/caps' },
-                    { label: 'Dies & Cycle Time', href: '/die-mappings' },
                     { label: 'Packing Rules', href: '/packing-rules' },
+                    { label: 'Machine Mapping', href: '/die-mappings' },
                 ],
             },
         ]

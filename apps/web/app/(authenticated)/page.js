@@ -1,34 +1,26 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
-    Factory,
-    Package,
-    ShoppingCart,
-    Activity,
     TrendingUp,
+    ShoppingCart,
+    Package,
     AlertTriangle,
-    Boxes,
-    Users,
-    Truck,
-    DollarSign,
-
     RefreshCw,
-    Plus,
-    FileText,
-    X
+    ArrowRight,
+    Clock,
+    CheckCircle2,
+    Factory,
 } from 'lucide-react';
-import { dashboardAPI, cashFlowAPI } from '@/lib/api';
-import BentoMetric from '@/components/dashboard/BentoMetric';
-import BusinessHealthCard from '@/components/dashboard/BusinessHealthCard';
+import { dashboardAPI, ordersAPI, productionAPI } from '@/lib/api';
 import ProductionChart from '@/components/dashboard/ProductionChart';
-import { formatDate, formatCurrency, cn } from '@/lib/utils';
+import SalesChart from '@/components/dashboard/SalesChart';
+import { formatCurrency, cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth';
 import { useSettings } from '@/contexts/SettingsContext';
 import { useFactory } from '@/contexts/FactoryContext';
-import { useGuide } from '@/contexts/GuideContext';
 import { useUI } from '@/contexts/UIContext';
 import styles from './page.module.css';
 
@@ -36,418 +28,357 @@ const TIME_PERIODS = [
     { label: 'Today', value: 'today' },
     { label: 'This Week', value: 'week' },
     { label: 'This Month', value: 'month' },
-    { label: 'Custom', value: 'custom' }
 ];
 
-export default function Dashboard() {
+function getGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+}
+
+function timeAgo(dateStr) {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+}
+
+const STATUS_STYLES = {
+    pending: { label: 'Pending', cls: styles.statusPending },
+    confirmed: { label: 'Confirmed', cls: styles.statusConfirmed },
+    processing: { label: 'Processing', cls: styles.statusProcessing },
+    delivered: { label: 'Delivered', cls: styles.statusDelivered },
+    cancelled: { label: 'Cancelled', cls: styles.statusCancelled },
+};
+
+export default function Home() {
     const { user } = useAuth();
     const { settings } = useSettings();
     const { selectedFactory } = useFactory();
     const { setPageTitle } = useUI();
-    const { registerGuide } = useGuide();
-    const queryClient = useQueryClient();
     const router = useRouter();
 
     const [timePeriod, setTimePeriod] = useState('week');
-    const [showCustomDateRange, setShowCustomDateRange] = useState(false);
-    const [customStartDate, setCustomStartDate] = useState('');
-    const [customEndDate, setCustomEndDate] = useState('');
-    const [expandedSections, setExpandedSections] = useState({
-        production: true,
-        inventory: true,
-        sales: true
-    });
+
+    useEffect(() => {
+        setPageTitle('Home');
+    }, [setPageTitle]);
 
     const dateRange = useMemo(() => {
         const today = new Date();
         const todayStr = today.toISOString().split('T')[0];
-
         switch (timePeriod) {
             case 'today':
                 return { startDate: todayStr, endDate: todayStr };
             case 'week': {
                 const weekStart = new Date(today);
-                weekStart.setDate(today.getDate() - today.getDay() + 1); // Monday
+                weekStart.setDate(today.getDate() - today.getDay() + 1);
                 return { startDate: weekStart.toISOString().split('T')[0], endDate: todayStr };
             }
             case 'month': {
                 const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
                 return { startDate: monthStart.toISOString().split('T')[0], endDate: todayStr };
             }
-            case 'custom':
-                if (customStartDate && customEndDate) {
-                    return { startDate: customStartDate, endDate: customEndDate };
-                }
-                return { startDate: null, endDate: null };
             default:
                 return { startDate: null, endDate: null };
         }
-    }, [timePeriod, customStartDate, customEndDate]);
+    }, [timePeriod]);
 
-    const { data: dashboardData, isLoading: loading, error: queryError, refetch } = useQuery({
+    const { data: dashboardData, isLoading, refetch } = useQuery({
         queryKey: ['dashboard', dateRange, selectedFactory],
         queryFn: () => {
-            const params = dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : {};
-            if (selectedFactory) {
-                params.factory_id = selectedFactory;
-            }
+            const params = dateRange.startDate
+                ? { startDate: dateRange.startDate, endDate: dateRange.endDate }
+                : {};
+            if (selectedFactory) params.factory_id = selectedFactory;
             return dashboardAPI.getComprehensive(params);
         },
-        enabled: timePeriod !== 'custom' || (!!customStartDate && !!customEndDate),
     });
 
-    const error = queryError?.message;
-
-
-    useEffect(() => {
-        setPageTitle('Dashboard');
-    }, [setPageTitle]);
-
-    useEffect(() => {
-        registerGuide({
-            title: 'Factory Dashboard',
-            description: 'Real-time overview of production, inventory, and sales performance.',
-            logic: [
-                {
-                    title: 'Bento Command Center',
-                    explanation: 'An interactive grid showing production trends, financial health, and operational KPIs.'
-                },
-                {
-                    title: 'Financial Pulse',
-                    explanation: 'Real-time inflow and outflow tracking with survival balance calculation.'
-                },
-                {
-                    title: 'Priority Alerts',
-                    explanation: 'Critical stock levels and order delays highlighted for immediate action.'
-                }
-            ],
-            components: [
-                { name: 'Production Chart', description: 'Visual comparison of actual vs theoretical output.' },
-                { name: 'Business Health', description: 'High-level financial insights.' },
-                { name: 'Operational Metrics', description: 'Key performance indicators for efficiency and output.' }
-            ]
-        });
-    }, [registerGuide]);
-
-
-
-    const handleCustomDateApply = () => {
-        if (customStartDate && customEndDate) {
-            if (new Date(customStartDate) > new Date(customEndDate)) {
-                alert('Start date must be before end date');
-                return;
-            }
-            refetch();
-            setShowCustomDateRange(false);
-        }
-    };
-
-    const toggleSection = (section) => {
-        setExpandedSections(prev => ({
-            ...prev,
-            [section]: !prev[section]
-        }));
-    };
-
-
-
-    const { data: financeData } = useQuery({
-        queryKey: ['cash-flow-analytics', dateRange, selectedFactory],
+    const { data: pendingOrdersData } = useQuery({
+        queryKey: ['orders-pending', selectedFactory],
         queryFn: () => {
-            const params = dateRange.startDate ? { startDate: dateRange.startDate, endDate: dateRange.endDate } : {};
+            const params = { status: 'pending', limit: 5 };
             if (selectedFactory) params.factory_id = selectedFactory;
-            return cashFlowAPI.getAnalytics(params);
-        }
+            return ordersAPI.getAll(params);
+        },
     });
 
-    if (loading) {
-        return (
-            <div className={styles.loading}>
-                <RefreshCw className={styles.spinner} size={32} />
-                <span>Loading factory overview...</span>
-            </div>
-        );
-    }
-
-    if (error || (!loading && !dashboardData)) {
-        return (
-            <div className={styles.error}>
-                <p>{error || 'Failed to load dashboard data'}</p>
-                <button className="btn btn-secondary" onClick={() => refetch()}>
-                    Retry
-                </button>
-            </div>
-        );
-    }
+    const { data: productionLogsData } = useQuery({
+        queryKey: ['production-recent', selectedFactory],
+        queryFn: () => {
+            const params = { limit: 6 };
+            if (selectedFactory) params.factory_id = selectedFactory;
+            return productionAPI.getLogs(params);
+        },
+    });
 
     const {
-        production = { today: 0, averageEfficiency: 0 },
-        inventory = { lowStockAlerts: 0 },
+        production = { today: 0 },
+        inventory = { lowStockAlerts: 0, stockValue: 0 },
         sales = { thisWeekRevenue: 0, pendingOrders: 0 },
         productionTrends = [],
-        machinePerformance = [],
         salesTrends = [],
-        alerts: alertsData = {}
     } = dashboardData || {};
 
-    return (
-        <div className={cn(styles.dashboard, settings.compactMode && styles.compact)}>
-            <div className={styles.welcomeSection}>
-                <div>
-                    <h1 className={styles.welcomeTitle}>Hello, {user?.name || 'Admin'}!</h1>
-                    <p className={styles.welcomeSubtitle}>Here's your perfect operational overview</p>
-                </div>
-                <div className={styles.timeSelector}>
+    const firstName = user?.name?.split(' ')[0] || 'there';
+    const periodLabel = TIME_PERIODS.find(p => p.value === timePeriod)?.label ?? 'This Week';
 
-                    {TIME_PERIODS.map((period) => (
-                        <button
-                            key={period.value}
-                            className={`${styles.timeButton} ${timePeriod === period.value ? styles.active : ''}`}
-                            onClick={() => {
-                                setTimePeriod(period.value);
-                                if (period.value === 'custom') {
-                                    setShowCustomDateRange(true);
-                                } else {
-                                    setShowCustomDateRange(false);
-                                }
-                            }}
-                        >
-                            {period.label}
-                        </button>
-                    ))}
-                    <button className={styles.refreshButton} onClick={() => refetch()} title="Refresh">
-                        <RefreshCw size={16} />
+    const pendingOrders = Array.isArray(pendingOrdersData)
+        ? pendingOrdersData
+        : pendingOrdersData?.orders || pendingOrdersData?.data || [];
+
+    const recentLogs = Array.isArray(productionLogsData)
+        ? productionLogsData
+        : productionLogsData?.logs || productionLogsData?.data || [];
+
+    const kpis = [
+        {
+            id: 'revenue',
+            label: 'Revenue',
+            sublabel: periodLabel,
+            value: formatCurrency(sales.thisWeekRevenue),
+            icon: ShoppingCart,
+            color: 'indigo',
+            href: '/orders',
+        },
+        {
+            id: 'production',
+            label: 'Units Produced',
+            sublabel: 'Today',
+            value: production.today,
+            icon: TrendingUp,
+            color: 'green',
+            href: '/reports',
+        },
+        {
+            id: 'pending',
+            label: 'Pending Orders',
+            sublabel: 'Awaiting dispatch',
+            value: sales.pendingOrders,
+            icon: Package,
+            color: 'orange',
+            href: '/orders',
+        },
+        {
+            id: 'alerts',
+            label: 'Low Stock Alerts',
+            sublabel: 'Needs attention',
+            value: inventory.lowStockAlerts,
+            icon: AlertTriangle,
+            color: inventory.lowStockAlerts > 0 ? 'red' : 'green',
+            href: '/inventory',
+        },
+    ];
+
+    if (isLoading) {
+        return (
+            <div className={styles.loadingScreen}>
+                <RefreshCw size={24} className={styles.spinIcon} />
+                <span>Loading dashboard…</span>
+            </div>
+        );
+    }
+
+    return (
+        <div className={cn(styles.page, settings.compactMode && styles.compact)}>
+
+            {/* ── HEADER ─────────────────────────────────────────── */}
+            <div className={styles.header}>
+                <div className={styles.headerLeft}>
+                    <p className={styles.greeting}>{getGreeting()},</p>
+                    <h1 className={styles.name}>{firstName}</h1>
+                </div>
+                <div className={styles.headerRight}>
+                    <div className={styles.periodGroup}>
+                        {TIME_PERIODS.map(p => (
+                            <button
+                                key={p.value}
+                                className={cn(styles.periodBtn, timePeriod === p.value && styles.periodBtnActive)}
+                                onClick={() => setTimePeriod(p.value)}
+                            >
+                                {p.label}
+                            </button>
+                        ))}
+                    </div>
+                    <button className={styles.refreshBtn} onClick={() => refetch()} title="Refresh">
+                        <RefreshCw size={15} />
                     </button>
                 </div>
             </div>
 
-            {/* Custom Date Range Picker */}
-            {showCustomDateRange && (
-                <div className={styles.customDateRange}>
-                    <div className={styles.customDateContent}>
-                        <label>
-                            Start Date:
-                            <input
-                                type="date"
-                                value={customStartDate}
-                                onChange={(e) => setCustomStartDate(e.target.value)}
-                                max={new Date().toISOString().split('T')[0]}
-                            />
-                        </label>
-                        <label>
-                            End Date:
-                            <input
-                                type="date"
-                                value={customEndDate}
-                                onChange={(e) => setCustomEndDate(e.target.value)}
-                                max={new Date().toISOString().split('T')[0]}
-                            />
-                        </label>
+            {/* ── KPI CARDS ──────────────────────────────────────── */}
+            <div className={styles.kpiGrid}>
+                {kpis.map(kpi => {
+                    const Icon = kpi.icon;
+                    return (
                         <button
-                            className={styles.applyButton}
-                            onClick={handleCustomDateApply}
-                            disabled={!customStartDate || !customEndDate}
+                            key={kpi.id}
+                            className={cn(styles.kpiCard, styles[`kpi_${kpi.color}`])}
+                            onClick={() => router.push(kpi.href)}
                         >
-                            Apply
+                            <div className={styles.kpiTop}>
+                                <div className={cn(styles.kpiIconBox, styles[`icon_${kpi.color}`])}>
+                                    <Icon size={16} />
+                                </div>
+                                <ArrowRight size={14} className={styles.kpiArrow} />
+                            </div>
+                            <div className={styles.kpiValue}>{kpi.value}</div>
+                            <div className={styles.kpiMeta}>
+                                <span className={styles.kpiLabel}>{kpi.label}</span>
+                                <span className={styles.kpiSublabel}>{kpi.sublabel}</span>
+                            </div>
                         </button>
-                        <button
-                            className={styles.cancelButton}
-                            onClick={() => {
-                                setShowCustomDateRange(false);
-                                setTimePeriod('week');
-                            }}
-                        >
-                            <X size={16} />
-                        </button>
+                    );
+                })}
+            </div>
+
+            {/* ── CHARTS ──────────────────────────────────────────── */}
+            <div className={styles.chartGrid}>
+                <div className={styles.chartCard}>
+                    <div className={styles.chartHeader}>
+                        <div>
+                            <p className={styles.chartLabel}>PRODUCTION</p>
+                            <h3 className={styles.chartTitle}>Output Trend</h3>
+                        </div>
+                        <div className={styles.chartIcon} style={{ background: 'var(--indigo-100)', color: 'var(--indigo-600)' }}>
+                            <TrendingUp size={16} />
+                        </div>
+                    </div>
+                    <div className={styles.chartBody}>
+                        <ProductionChart data={productionTrends} timePeriod={timePeriod} compact={settings.compactMode} />
                     </div>
                 </div>
-            )}
 
-            {/* Bento Grid Command Center */}
-            <div className={styles.bentoGrid}>
-                {/* Production Achievement - 2x2 Hero */}
-                {settings.visibleMetrics.productionAchievement && (
-                    <div className={cn(styles.bentoCard, styles.span2x2)}>
-                        <div className={styles.cardHeaderArea}>
-                            <div className={styles.cardIcon}>
-                                <TrendingUp size={20} />
-                            </div>
-                            <h3 className={styles.cardTitle}>Production Achievement</h3>
-                            <span className={styles.cardSubtitle}>Actual output vs Theoretical capacity</span>
+                <div className={styles.chartCard}>
+                    <div className={styles.chartHeader}>
+                        <div>
+                            <p className={styles.chartLabel}>SALES</p>
+                            <h3 className={styles.chartTitle}>Revenue Trend</h3>
                         </div>
-                        <div style={{ height: '300px', marginTop: '1.5rem' }}>
-                            <ProductionChart data={productionTrends} timePeriod={timePeriod} compact={settings.compactMode} />
+                        <div className={styles.chartIcon} style={{ background: 'var(--orange-100)', color: 'var(--orange-600)' }}>
+                            <ShoppingCart size={16} />
                         </div>
                     </div>
-                )}
-
-                {/* Financial Pulse - 2x1 */}
-                {settings.visibleMetrics.businessHealthCard && (
-                    <BusinessHealthCard data={financeData} spanClass="span2x1" />
-                )}
-
-                {/* Revenue Insight - 1x1 */}
-                {settings.visibleMetrics.revenuePerformance && (
-                    <BentoMetric
-                        title="Revenue Performance"
-                        value={formatCurrency(sales.thisWeekRevenue)}
-                        subtitle="This period's total"
-                        icon={DollarSign}
-                        trend="+8.4%"
-                        isTrendUp={true}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/reports/sales')}
-                    />
-                )}
-
-                {/* Efficiency Gauge - 1x1 */}
-                {settings.visibleMetrics.overallEfficiency && (
-                    <BentoMetric
-                        title="Overall Efficiency"
-                        value={`${production.averageEfficiency}%`}
-                        subtitle="Factory performance score"
-                        icon={Activity}
-                        trend={production.averageEfficiency > 85 ? "+2.1%" : "-1.2%"}
-                        isTrendUp={production.averageEfficiency > 85}
-                        spanClass="span1x1"
-                    />
-                )}
-
-                {/* Pending Focus - 1x1 */}
-                {settings.visibleMetrics.ordersQueue && (
-                    <BentoMetric
-                        title="Orders in Queue"
-                        value={sales.pendingOrders}
-                        subtitle="Awaiting processing"
-                        icon={ShoppingCart}
-                        spanClass="span1x1"
-                        className={sales.pendingOrders > 10 ? styles.highPriority : ''}
-                        onClick={() => router.push('/orders?status=pending')}
-                    />
-                )}
-
-                {/* Achievement Score - 1x1 */}
-                {settings.visibleMetrics.outputToday && (
-                    <BentoMetric
-                        title="Output Today"
-                        value={production.today}
-                        subtitle="Bundles completed"
-                        icon={Package}
-                        trend="+120"
-                        isTrendUp={true}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/production')}
-                    />
-                )}
-
-                {/* Active Machines - 1x1 */}
-                {settings.visibleMetrics.activeMachines && (
-                    <BentoMetric
-                        title="Active Machines"
-                        value={production.activeMachines || 0}
-                        subtitle="Currently running"
-                        icon={Activity}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/machines')}
-                    />
-                )}
-
-                {/* Cost Recovered - 1x1 */}
-                {settings.visibleMetrics.costRecovered && (
-                    <BentoMetric
-                        title="Cost Recovered"
-                        value={formatCurrency(production.costRecovered || 0)}
-                        subtitle="Operational recovery"
-                        icon={DollarSign}
-                        spanClass="span1x1"
-                    />
-                )}
-
-                {/* Finished Goods - 1x1 */}
-                {settings.visibleMetrics.finishedGoods && (
-                    <BentoMetric
-                        title="Finished Goods"
-                        value={inventory.finishedGoods || 0}
-                        subtitle="Ready for dispatch"
-                        icon={Package}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/inventory/products')}
-                    />
-                )}
-
-                {/* Raw Material - 1x1 */}
-                {settings.visibleMetrics.rawMaterial && (
-                    <BentoMetric
-                        title="Raw Material"
-                        value={`${inventory.rawMaterial || 0} kg`}
-                        subtitle="Total stock on hand"
-                        icon={Boxes}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/inventory/raw-materials')}
-                    />
-                )}
-
-                {/* Stock Value - 1x1 */}
-                {settings.visibleMetrics.stockValue && (
-                    <BentoMetric
-                        title="Stock Value"
-                        value={formatCurrency(inventory.stockValue || 0)}
-                        subtitle="Estimated worth"
-                        icon={DollarSign}
-                        spanClass="span1x1"
-                    />
-                )}
-
-                {/* Today's Deliveries - 1x1 */}
-                {settings.visibleMetrics.todayDeliveries && (
-                    <BentoMetric
-                        title="Today's Deliveries"
-                        value={sales.todayDeliveries || 0}
-                        subtitle="Out for delivery"
-                        icon={Truck}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/deliveries')}
-                    />
-                )}
-
-                {/* Active Customers - 1x1 */}
-                {settings.visibleMetrics.activeCustomers && (
-                    <BentoMetric
-                        title="Active Customers"
-                        value={sales.activeCustomers || 0}
-                        subtitle="With recent activity"
-                        icon={Users}
-                        spanClass="span1x1"
-                        onClick={() => router.push('/customers')}
-                    />
-                )}
-
-                {/* Critical Stock alerts - 2x1 */}
-                {settings.visibleMetrics.inventoryAlerts && (
-                    <div className={cn(styles.bentoCard, styles.span2x1)}>
-                        <div className={styles.cardHeaderArea}>
-                            <div className={cn(styles.cardIcon, styles.alertIcon)}>
-                                <AlertTriangle size={20} />
-                            </div>
-                            <h3 className={styles.cardTitle}>Inventory Alerts</h3>
-                            <span className={styles.cardSubtitle}>{inventory.lowStockAlerts} items below minimum</span>
-                        </div>
-                        <div className={styles.alertList}>
-                            {(alertsData.lowStock || []).slice(0, 3).map((alert, idx) => (
-                                <div
-                                    key={idx}
-                                    className={styles.alertItem}
-                                    onClick={() => router.push(`/inventory?search=${encodeURIComponent(alert.name)}`)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <span className={styles.alertName}>{alert.name}</span>
-                                    <span className={styles.alertValue}>{alert.currentStock}&nbsp;kg left</span>
-                                </div>
-                            ))}
-                        </div>
+                    <div className={styles.chartBody}>
+                        <SalesChart data={salesTrends} compact={settings.compactMode} />
                     </div>
-                )}
+                </div>
             </div>
+
+            {/* ── BOTTOM PANELS ──────────────────────────────────── */}
+            <div className={styles.bottomGrid}>
+
+                {/* Pending Orders */}
+                <div className={styles.panelCard}>
+                    <div className={styles.panelHeader}>
+                        <div className={styles.panelHeading}>
+                            <div className={cn(styles.panelIcon, styles.panelIconOrange)}>
+                                <Clock size={15} />
+                            </div>
+                            <div>
+                                <p className={styles.panelSublabel}>ORDERS</p>
+                                <h3 className={styles.panelTitle}>Pending</h3>
+                            </div>
+                        </div>
+                        <button className={styles.viewAllBtn} onClick={() => router.push('/orders')}>
+                            View all <ArrowRight size={13} />
+                        </button>
+                    </div>
+
+                    <div className={styles.panelBody}>
+                        {pendingOrders.length === 0 ? (
+                            <div className={styles.emptyPanel}>
+                                <CheckCircle2 size={28} />
+                                <span>All caught up! No pending orders.</span>
+                            </div>
+                        ) : (
+                            <div className={styles.orderList}>
+                                {pendingOrders.slice(0, 5).map((order, i) => {
+                                    const st = STATUS_STYLES[order.status] || STATUS_STYLES.pending;
+                                    return (
+                                        <div
+                                            key={order.id || i}
+                                            className={styles.orderRow}
+                                            onClick={() => router.push(`/orders`)}
+                                        >
+                                            <div className={styles.orderLeft}>
+                                                <span className={styles.orderNumber}>
+                                                    #{order.order_number || order.id?.slice(0, 8)}
+                                                </span>
+                                                <span className={styles.orderCustomer}>
+                                                    {order.customer?.name || order.customer_name || '—'}
+                                                </span>
+                                            </div>
+                                            <div className={styles.orderRight}>
+                                                <span className={styles.orderAmount}>
+                                                    {formatCurrency(order.total_amount || 0)}
+                                                </span>
+                                                <span className={cn(styles.orderStatus, st.cls)}>
+                                                    {st.label}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Recent Production Logs */}
+                <div className={styles.panelCard}>
+                    <div className={styles.panelHeader}>
+                        <div className={styles.panelHeading}>
+                            <div className={cn(styles.panelIcon, styles.panelIconIndigo)}>
+                                <Factory size={15} />
+                            </div>
+                            <div>
+                                <p className={styles.panelSublabel}>PRODUCTION</p>
+                                <h3 className={styles.panelTitle}>Recent Logs</h3>
+                            </div>
+                        </div>
+                        <button className={styles.viewAllBtn} onClick={() => router.push('/reports')}>
+                            View all <ArrowRight size={13} />
+                        </button>
+                    </div>
+
+                    <div className={styles.panelBody}>
+                        {recentLogs.length === 0 ? (
+                            <div className={styles.emptyPanel}>
+                                <Factory size={28} />
+                                <span>No production logs yet.</span>
+                            </div>
+                        ) : (
+                            <div className={styles.logList}>
+                                {recentLogs.slice(0, 6).map((log, i) => (
+                                    <div key={log.id || i} className={styles.logRow}>
+                                        <div className={styles.logDot} />
+                                        <div className={styles.logContent}>
+                                            <span className={styles.logProduct}>
+                                                {log.product?.name || log.product_name || 'Production Entry'}
+                                            </span>
+                                            <span className={styles.logMeta}>
+                                                {log.actual_bundles ?? log.units_produced ?? 0} units
+                                                {log.machine?.name ? ` · ${log.machine.name}` : ''}
+                                            </span>
+                                        </div>
+                                        <span className={styles.logTime}>
+                                            {timeAgo(log.created_at || log.date)}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+            </div>
+
         </div>
     );
 }

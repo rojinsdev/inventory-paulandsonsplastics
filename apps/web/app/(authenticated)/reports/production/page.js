@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Factory, TrendingUp, AlertTriangle, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
@@ -61,10 +61,11 @@ export default function ProductionReportsPage() {
         },
     });
 
+    const logs = useMemo(() => logsData?.data || (Array.isArray(logsData) ? logsData : []), [logsData]);
+    const machines = useMemo(() => machinesData?.data || (Array.isArray(machinesData) ? machinesData : []), [machinesData]);
+    const products = useMemo(() => productsData?.data || (Array.isArray(productsData) ? productsData : []), [productsData]);
+
     const error = queryError?.message;
-    const logs = Array.isArray(logsData) ? logsData : [];
-    const machines = Array.isArray(machinesData) ? machinesData : [];
-    const products = Array.isArray(productsData) ? productsData : [];
 
 
     useEffect(() => {
@@ -76,10 +77,6 @@ export default function ProductionReportsPage() {
                 {
                     title: "Efficiency Calculus (%)",
                     explanation: "Efficiency is (Actual Output / Theoretical Capacity). 'Theoretical Capacity' is the maximum bundles a machine can produce in 23 hours. Anything above 70% is considered a healthy production run."
-                },
-                {
-                    title: "The Verification Cycle",
-                    explanation: "Logs stay 'Pending' until a manager clicks 'Verify'. This is the final check before stock is officially added to your warehouse counts, preventing data entry mistakes."
                 }
             ],
             components: [
@@ -174,7 +171,7 @@ export default function ProductionReportsPage() {
                 log.actual_quantity || 0,
                 log.theoretical_quantity || 0,
                 log.efficiency_percentage || log.efficiency || 0,
-                log.verified ? 'Verified' : 'Pending'
+                'Logged'
             ].map(field => `"${field}"`).join(','))
         ].join('\n');
 
@@ -381,7 +378,6 @@ export default function ProductionReportsPage() {
                                     <th style={{ textAlign: 'right' }}>Actual</th>
                                     <th style={{ textAlign: 'right' }}>Theoretical</th>
                                     <th style={{ textAlign: 'right' }}>Efficiency</th>
-                                    <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -403,13 +399,6 @@ export default function ProductionReportsPage() {
                                                 <span className={cn(styles.efficiencyBadge, isLow && styles.efficiencyLow)}>
                                                     {efficiency.toFixed(1)}%
                                                 </span>
-                                            </td>
-                                            <td>
-                                                {log.verified ? (
-                                                    <span className="badge badge-success">Verified</span>
-                                                ) : (
-                                                    <span className="badge badge-warning">Pending</span>
-                                                )}
                                             </td>
                                         </tr>
                                     );

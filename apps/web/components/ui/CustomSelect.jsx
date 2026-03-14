@@ -48,7 +48,7 @@ export default function CustomSelect({
     }, [isOpen]);
 
     return (
-        <div className={cn(styles.container, className)} ref={containerRef}>
+        <div className={cn(styles.container, isOpen && styles.isOpen, className)} ref={containerRef}>
             <button
                 type="button"
                 className={styles.trigger}

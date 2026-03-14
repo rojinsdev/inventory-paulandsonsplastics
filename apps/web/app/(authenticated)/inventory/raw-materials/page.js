@@ -39,10 +39,14 @@ export default function RawMaterialsPage() {
     const [filters, setFilters] = useState({
         search: '',
     });
-    const { data: materials = [], isLoading: loading, error: queryError, refetch } = useQuery({
+    const { data: materialsResponse, isLoading: loading, error: queryError, refetch } = useQuery({
         queryKey: ['raw-materials', selectedFactory],
         queryFn: () => inventoryAPI.getRawMaterials(selectedFactory ? { factory_id: selectedFactory } : {}),
     });
+
+    const materials = useMemo(() => {
+        return materialsResponse?.rawMaterials || materialsResponse?.data || (Array.isArray(materialsResponse) ? materialsResponse : []);
+    }, [materialsResponse]);
 
     const error = queryError?.message;
 

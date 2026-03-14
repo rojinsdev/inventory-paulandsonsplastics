@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { productionService } from './production.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth';
+import { AppError } from '../../utils/AppError';
 
 // Updated schema for session-based production
 const submitProductionSchema = z.object({
@@ -20,8 +21,8 @@ const submitProductionSchema = z.object({
     total_weight_kg: z.number().positive().optional(),
 
     // Actual metrics
-    actual_cycle_time_seconds: z.number().positive(),
-    actual_weight_grams: z.number().positive(),
+    actual_cycle_time_seconds: z.number().positive().optional(),
+    actual_weight_grams: z.number().positive().optional(),
 
     // Downtime
     downtime_minutes: z.number().int().optional(),
@@ -30,142 +31,108 @@ const submitProductionSchema = z.object({
 
 const submitCapProductionSchema = z.object({
     cap_id: z.string().uuid(),
-    factory_id: z.string().uuid(),
+    factory_id: z.string().uuid().optional(),
     date: z.string(),
     shift_number: z.number().int().min(1).max(2),
     start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
     end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
-    total_weight_produced_kg: z.number().positive(),
-    actual_cycle_time_seconds: z.number().positive(),
+    total_weight_produced_kg: z.number().positive().optional(),
+    total_produced: z.number().int().positive().optional(),
+    actual_cycle_time_seconds: z.number().positive().optional(),
+    actual_weight_grams: z.number().positive().optional(),
     remarks: z.string().optional(),
 });
 
 export class ProductionController {
     async submit(req: AuthRequest, res: Response) {
-        try {
-            const validatedData = submitProductionSchema.parse(req.body);
+        const validatedData = submitProductionSchema.parse(req.body);
 
-            const log = await productionService.submitProduction({
-                ...validatedData,
-                user_id: req.user!.id,
-            });
+        const log = await productionService.submitProduction({
+            ...validatedData,
+            user_id: req.user!.id,
+        });
 
-            res.status(201).json(log);
-        } catch (error: any) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: error.issues });
-            } else {
-                res.status(500).json({ error: error.message });
-            }
-        }
+        res.status(201).json(log);
     }
 
     async list(req: Request, res: Response) {
-        try {
-            const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+        const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
 
-            const filters = {
-                machine_id: sanitize(req.query.machine_id),
-                product_id: sanitize(req.query.product_id),
-                start_date: sanitize(req.query.start_date),
-                end_date: sanitize(req.query.end_date),
-                factory_id: sanitize(req.query.factory_id),
-            };
-            const logs = await productionService.getProductionLogs(filters);
-            res.json(logs);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const filters = {
+            machine_id: sanitize(req.query.machine_id),
+            product_id: sanitize(req.query.product_id),
+            start_date: sanitize(req.query.start_date),
+            end_date: sanitize(req.query.end_date),
+            factory_id: sanitize(req.query.factory_id),
+            page: req.query.page ? parseInt(req.query.page as string) : 1,
+            size: req.query.size ? parseInt(req.query.size as string) : 20,
+        };
+        const result = await productionService.getProductionLogs(filters);
+        res.json(result);
     }
 
     async getDailyProduction(req: Request, res: Response) {
-        try {
-            const { date } = req.params;
-            const logs = await productionService.getDailyProduction(date);
-            res.json(logs);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const { date } = req.params;
+        const logs = await productionService.getDailyProduction(date);
+        res.json(logs);
     }
 
     async listRequests(req: Request, res: Response) {
-        try {
-            const factoryId = req.query.factory_id as string;
-            const requests = await productionService.getProductionRequests(factoryId);
-            res.json(requests);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const factoryId = req.query.factory_id as string;
+        const requests = await productionService.getProductionRequests(factoryId);
+        res.json(requests);
     }
 
     async updateRequestStatus(req: AuthRequest, res: Response) {
-        try {
-            const { id } = req.params;
-            const { status } = req.body;
+        const { id } = req.params;
+        const { status } = req.body;
 
-            if (!['pending', 'in-progress', 'completed', 'cancelled'].includes(status)) {
-                return res.status(400).json({ error: 'Invalid status' });
-            }
-
-            const request = await productionService.updateProductionRequestStatus(id, status, req.user!.id);
-            res.json(request);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
+        if (!['pending', 'in_production', 'completed', 'cancelled'].includes(status)) {
+            throw new AppError('Invalid status', 400);
         }
+
+        const request = await productionService.updateProductionRequestStatus(id, status, req.user!.id);
+        res.json(request);
     }
 
     async submitCapProduction(req: AuthRequest, res: Response) {
-        try {
-            const validatedData = submitCapProductionSchema.parse(req.body);
+        const validatedData = submitCapProductionSchema.parse(req.body);
 
-            const log = await productionService.submitCapProduction({
-                ...validatedData,
-                user_id: req.user!.id,
-            });
+        const log = await productionService.submitCapProduction({
+            ...validatedData,
+            user_id: req.user!.id,
+        });
 
-            res.status(201).json(log);
-        } catch (error: any) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: error.issues });
-            } else {
-                res.status(500).json({ error: error.message });
-            }
-        }
+        res.status(201).json(log);
     }
 
     async listCapLogs(req: Request, res: Response) {
-        try {
-            const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+        const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
 
-            const filters = {
-                factory_id: sanitize(req.query.factory_id),
-                cap_id: sanitize(req.query.cap_id),
-                start_date: sanitize(req.query.start_date),
-                end_date: sanitize(req.query.end_date),
-            };
-            const logs = await productionService.getCapProductionLogs(filters);
-            res.json(logs);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const filters = {
+            factory_id: sanitize(req.query.factory_id),
+            cap_id: sanitize(req.query.cap_id),
+            start_date: sanitize(req.query.start_date),
+            end_date: sanitize(req.query.end_date),
+            page: req.query.page ? parseInt(req.query.page as string) : 1,
+            size: req.query.size ? parseInt(req.query.size as string) : 20,
+        };
+        const result = await productionService.getCapProductionLogs(filters);
+        res.json(result);
     }
 
     async getLastSession(req: Request, res: Response) {
-        try {
-            const { machine_id, date, shift_number } = req.query as any;
-            if (!machine_id || !date || !shift_number) {
-                return res.status(400).json({ error: 'Missing required parameters' });
-            }
-
-            const endTime = await productionService.getLastSessionEndTime(
-                machine_id,
-                date,
-                parseInt(shift_number)
-            );
-            res.json({ end_time: endTime });
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
+        const { machine_id, date, shift_number } = req.query as any;
+        if (!machine_id || !date || !shift_number) {
+            throw new AppError('Missing required parameters', 400);
         }
+
+        const endTime = await productionService.getLastSessionEndTime(
+            machine_id,
+            date,
+            parseInt(shift_number)
+        );
+        res.json({ end_time: endTime });
     }
 }
 

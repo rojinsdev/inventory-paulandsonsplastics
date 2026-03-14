@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Package, Loader2, X, RefreshCw } from 'lucide-react';
-import { productsAPI, inventoryAPI } from '@/lib/api';
+import { productsAPI, inventoryAPI, productTemplatesAPI, capsAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ export default function ProductsPage() {
     const { selectedFactory, factories } = useFactory();
 
     const [modalOpen, setModalOpen] = useState(false);
+    const [isTemplateMode, setIsTemplateMode] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
 
     // Form state
@@ -39,15 +40,17 @@ export default function ProductsPage() {
         sku: '',
         size: '',
         color: 'White',
+        colors: ['White'], // For template mode
         weight_grams: '',
         selling_price: '',
-        items_per_packet: '100',
-        packets_per_bundle: '50',
-        items_per_bundle: '600',
+        selling_price: '',
         status: 'active',
         factory_id: '',
         raw_material_id: '',
+        cap_template_id: '',
     });
+
+    const [initialColors, setInitialColors] = useState([]);
 
     // Queries
     const { data: products = [], isLoading: loading, error: queryError, refetch } = useQuery({
@@ -57,32 +60,56 @@ export default function ProductsPage() {
             return productsAPI.getAll(params).then(res => Array.isArray(res) ? res : []);
         },
     });
+    const { data: templates = [] } = useQuery({
+        queryKey: ['product-templates', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
+            return productTemplatesAPI.getAll(params).then(res => Array.isArray(res) ? res : []);
+        },
+    });
+
+    const { data: capTemplates = [] } = useQuery({
+        queryKey: ['cap-templates', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
+            return capsAPI.getTemplates(params).then(res => Array.isArray(res) ? res : []);
+        },
+    });
 
     const error = queryError?.message;
 
     // Query for raw materials (factory-specific)
-    const { data: rawMaterials = [], isLoading: rawMaterialsLoading } = useQuery({
+    const { data: rawMaterialsResponse, isLoading: rawMaterialsLoading } = useQuery({
         queryKey: ['rawMaterials', formData.factory_id],
         queryFn: async () => {
-            if (!formData.factory_id) return [];
-            const res = await inventoryAPI.getRawMaterials({ factory_id: formData.factory_id });
-            return Array.isArray(res) ? res : [];
+            if (!formData.factory_id) return { rawMaterials: [] };
+            return await inventoryAPI.getRawMaterials({ factory_id: formData.factory_id });
         },
         enabled: modalOpen && !!formData.factory_id,
     });
 
+    const rawMaterials = rawMaterialsResponse?.rawMaterials || (Array.isArray(rawMaterialsResponse) ? rawMaterialsResponse : []);
+
     // Mutations
     const saveMutation = useMutation({
-        mutationFn: (data) => editingProduct
-            ? productsAPI.update(editingProduct.id, data)
-            : productsAPI.create(data),
+        mutationFn: (data) => {
+            if (isTemplateMode && editingProduct) {
+                return productTemplatesAPI.update(editingProduct.id, data);
+            }
+            if (editingProduct) return productsAPI.update(editingProduct.id, data);
+            if (isTemplateMode) return productTemplatesAPI.create(data);
+            return productsAPI.create(data);
+        },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: ['product-templates'] });
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             setModalOpen(false);
-            toast.success(editingProduct ? 'Product updated successfully' : 'Product created successfully');
+            const action = editingProduct ? 'updated' : 'created';
+            const type = isTemplateMode ? 'Template' : 'Product';
+            toast.success(`${type} ${action} successfully`);
         },
-        onError: (err) => toast.error(err.message || 'Failed to save product')
+        onError: (err) => toast.error(err.message || 'Failed to save')
     });
 
     const deleteMutation = useMutation({
@@ -146,11 +173,14 @@ export default function ProductsPage() {
     // Open modal for create
     const handleCreate = () => {
         setEditingProduct(null);
+        setIsTemplateMode(false);
+        setInitialColors([]);
         setFormData({
             name: '',
             sku: '',
             size: '',
             color: 'White',
+            colors: ['White'],
             weight_grams: '',
             selling_price: '',
             items_per_packet: '100',
@@ -159,18 +189,52 @@ export default function ProductsPage() {
             status: 'active',
             factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
             raw_material_id: '',
+            cap_template_id: '',
         });
         setModalOpen(true);
     };
 
     // Open modal for edit
     const handleEdit = (product) => {
+        // If it's a template variant, edit the template
+        if (product.template_id) {
+            const template = templates.find(t => t.id === product.template_id);
+            if (template) {
+                setEditingProduct(template);
+                setIsTemplateMode(true);
+                const currentColors = template.variants?.map(v => v.color) || [];
+                setInitialColors(currentColors);
+                setFormData({
+                    name: template.name || '',
+                    sku: '', // Templates don't have individual SKUs
+                    size: template.size || '',
+                    color: '',
+                    colors: currentColors,
+                    weight_grams: template.weight_grams || '',
+                    selling_price: template.selling_price || '',
+                    items_per_packet: template.items_per_packet || '100',
+                    packets_per_bundle: template.packets_per_bundle || '50',
+                    items_per_bundle: template.items_per_bundle || '',
+                    status: template.status || 'active',
+                    factory_id: template.factory_id || '',
+                    raw_material_id: template.raw_material_id || '',
+                    cap_template_id: template.cap_template_id || '',
+                });
+                setModalOpen(true);
+                return;
+            }
+        }
+
+        // Single Product Edit
         setEditingProduct(product);
+        setIsTemplateMode(false);
+        setInitialColors([]);
         setFormData({
             name: product.name || '',
             sku: product.sku || '',
             size: product.size || '',
             color: product.color || 'White',
+            colors: [product.color || 'White'],
             weight_grams: product.weight_grams || '',
             selling_price: product.selling_price || '',
             items_per_packet: product.items_per_packet || '100',
@@ -179,6 +243,7 @@ export default function ProductsPage() {
             status: product.status || 'active',
             factory_id: product.factory_id || '',
             raw_material_id: product.raw_material_id || '',
+            cap_template_id: product.cap_template_id || '',
         });
         setModalOpen(true);
     };
@@ -187,18 +252,43 @@ export default function ProductsPage() {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const payload = {
-            ...formData,
-            sku: formData.sku?.trim() || null, // Ensure empty SKU is null
-            weight_grams: Number(formData.weight_grams) || 0,
-            selling_price: formData.selling_price ? Number(formData.selling_price) : null,
-            items_per_packet: Number(formData.items_per_packet) || 0,
-            packets_per_bundle: Number(formData.packets_per_bundle) || 0,
-            items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
-            raw_material_id: formData.raw_material_id || null,
-        };
+        if (isTemplateMode) {
+            const payload = {
+                name: formData.name,
+                size: formData.size,
+                weight_grams: Number(formData.weight_grams) || 0,
+                items_per_packet: Number(formData.items_per_packet) || 0,
+                packets_per_bundle: Number(formData.packets_per_bundle) || 0,
+                items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
+                selling_price: formData.selling_price ? Number(formData.selling_price) : null,
+                factory_id: formData.factory_id,
+                raw_material_id: formData.raw_material_id || null,
+                cap_template_id: formData.cap_template_id || null,
+                colors: formData.colors,
+            };
 
-        saveMutation.mutate(payload);
+            // Calculate color diffs if editing
+            if (editingProduct) {
+                payload.variants_to_add = formData.colors.filter(c => !initialColors.includes(c));
+                payload.variants_to_remove = initialColors.filter(c => !formData.colors.includes(c));
+            }
+
+            saveMutation.mutate(payload);
+        } else {
+            const payload = {
+                ...formData,
+                sku: formData.sku?.trim() || null,
+                weight_grams: Number(formData.weight_grams) || 0,
+                selling_price: formData.selling_price ? Number(formData.selling_price) : null,
+                items_per_packet: Number(formData.items_per_packet) || 0,
+                packets_per_bundle: Number(formData.packets_per_bundle) || 0,
+                items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
+                raw_material_id: formData.raw_material_id || null,
+                cap_template_id: formData.cap_template_id || null,
+            };
+            delete payload.colors;
+            saveMutation.mutate(payload);
+        }
     };
 
     // Handle delete
@@ -218,7 +308,16 @@ export default function ProductsPage() {
     // Calculate stats
     const totalProducts = products.length;
     const activeProducts = products.filter((p) => p.status === 'active').length;
-    const uniqueSKUs = new Set(products.filter((p) => p.sku).map((p) => p.sku)).size;
+
+    // Validation Logic
+    const isFormValid = () => {
+        if (!formData.name || !formData.size || !formData.factory_id || !formData.weight_grams || !formData.raw_material_id) return false;
+        if (isTemplateMode) {
+            return formData.colors.length > 0 && formData.items_per_packet && formData.packets_per_bundle;
+        } else {
+            return formData.items_per_packet && formData.packets_per_bundle;
+        }
+    };
 
     return (
         <>
@@ -263,9 +362,9 @@ export default function ProductsPage() {
                         <Package size={28} />
                     </div>
                     <div className={styles.statContent}>
-                        <div className={styles.statValue}>{uniqueSKUs}</div>
-                        <div className={styles.statLabel}>Unique SKUs</div>
-                        <div className={styles.statSublabel}>With SKU codes</div>
+                        <div className={styles.statValue}>{templates.length}</div>
+                        <div className={styles.statLabel}>Product Templates</div>
+                        <div className={styles.statSublabel}>Master specs</div>
                     </div>
                 </div>
             </div>
@@ -371,174 +470,261 @@ export default function ProductsPage() {
                     <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
                             <h2 className={styles.modalTitle}>
-                                {editingProduct ? 'Edit Product' : 'Add Product'}
+                                {editingProduct ? 'Edit Product' : isTemplateMode ? 'Add Product Template' : 'Add Single Product'}
                             </h2>
                             <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit}>
-                            <div className={styles.modalBody}>
-                                {/* Basic Information Section */}
-                                <div className={styles.formSection}>
-                                    <h3 className={styles.sectionTitle}>Basic Information</h3>
-                                    <div className={styles.formRow3}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Name *</label>
-                                            <input
-                                                type="text"
-                                                className={styles.formInput}
-                                                value={formData.name}
-                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                                required
-                                                placeholder="e.g., 1L Water Bottle"
-                                            />
-                                        </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>SKU</label>
-                                            <input
-                                                type="text"
-                                                className={styles.formInput}
-                                                value={formData.sku}
-                                                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                                                placeholder="Optional"
-                                            />
-                                        </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Factory *</label>
-                                            <FactorySelect
-                                                value={formData.factory_id}
-                                                onChange={(val) => {
-                                                    setFormData({
-                                                        ...formData,
-                                                        factory_id: val,
-                                                        raw_material_id: ''
-                                                    });
-                                                }}
-                                                disabled={!!editingProduct}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className={styles.formRow3}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Size *</label>
-                                            <input
-                                                type="text"
-                                                className={styles.formInput}
-                                                value={formData.size}
-                                                onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                                                required
-                                                placeholder="e.g., 100ml, 1L"
-                                            />
-                                        </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Color *</label>
-                                            <CustomSelect
-                                                options={COLORS}
-                                                value={formData.color}
-                                                onChange={(val) => setFormData({ ...formData, color: val })}
-                                            />
-                                        </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Status</label>
-                                            <CustomSelect
-                                                options={[
-                                                    { value: 'active', label: 'Active' },
-                                                    { value: 'inactive', label: 'Inactive' }
-                                                ]}
-                                                value={formData.status}
-                                                onChange={(val) => setFormData({ ...formData, status: val })}
-                                            />
-                                        </div>
+                        <form onSubmit={handleSubmit} className={styles.modalContent}>
+                            {!editingProduct && (
+                                <div className={styles.modeToggleWrapper}>
+                                    <div className={styles.modeToggle}>
+                                        <button
+                                            type="button"
+                                            className={cn(styles.modeBtn, !isTemplateMode && styles.modeBtnActive)}
+                                            onClick={() => setIsTemplateMode(false)}
+                                        >
+                                            Single SKU
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={cn(styles.modeBtn, isTemplateMode && styles.modeBtnActive)}
+                                            onClick={() => setIsTemplateMode(true)}
+                                        >
+                                            Template (Multiple Colors)
+                                        </button>
                                     </div>
                                 </div>
+                            )}
 
-                                {/* Manufacturing & Pricing Section */}
-                                <div className={styles.formSection}>
-                                    <h3 className={styles.sectionTitle}>Manufacturing & Pricing</h3>
-                                    <div className={styles.formRow3}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Weight (grams) *</label>
-                                            <input
-                                                type="number"
-                                                className={styles.formInput}
-                                                value={formData.weight_grams ?? ''}
-                                                onChange={(e) => setFormData({ ...formData, weight_grams: e.target.value === '' ? '' : e.target.value })}
-                                                required
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                        </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Raw Material *</label>
-                                            <CustomSelect
-                                                options={rawMaterials.map(rm => ({ value: rm.id, label: rm.name }))}
-                                                value={formData.raw_material_id}
-                                                onChange={(val) => setFormData({ ...formData, raw_material_id: val })}
-                                                placeholder={formData.factory_id ? "Select material" : "Select factory first"}
-                                                disabled={!formData.factory_id || rawMaterialsLoading}
-                                            />
-                                            {formData.factory_id && !rawMaterialsLoading && rawMaterials.length === 0 && (
-                                                <p style={{ fontSize: '0.75rem', color: 'var(--color-warning)', marginTop: '0.25rem' }}>
-                                                    No materials found.
-                                                </p>
+                            <div className={styles.modalBody}>
+                                <div className={styles.landscapeLayout}>
+                                    {/* Left Pane: Definition & Manufacturing */}
+                                    <div className={styles.leftPane}>
+                                        <div className={styles.formSection}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <Package size={16} />
+                                                Basic Information
+                                            </h3>
+                                            <div className={styles.formRow}>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Product Name *</label>
+                                                    <input
+                                                        type="text"
+                                                        className={styles.formInput}
+                                                        value={formData.name}
+                                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                                        required
+                                                        placeholder="e.g., Industrial Crate XL"
+                                                    />
+                                                </div>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Factory *</label>
+                                                    <FactorySelect
+                                                        value={formData.factory_id}
+                                                        onChange={(val) => {
+                                                            setFormData({
+                                                                ...formData,
+                                                                factory_id: val,
+                                                                raw_material_id: ''
+                                                            });
+                                                        }}
+                                                        disabled={!!editingProduct}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className={styles.formRow}>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Size / Master Specs *</label>
+                                                    <input
+                                                        type="text"
+                                                        className={styles.formInput}
+                                                        value={formData.size}
+                                                        onChange={(e) => setFormData({ ...formData, size: e.target.value })}
+                                                        required
+                                                        placeholder="e.g., 600x400x300, 100ml"
+                                                    />
+                                                </div>
+                                                {!isTemplateMode ? (
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>SKU (Optional)</label>
+                                                        <input
+                                                            type="text"
+                                                            className={styles.formInput}
+                                                            value={formData.sku}
+                                                            onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                                            placeholder="Unique Code"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Status</label>
+                                                        <CustomSelect
+                                                            options={[
+                                                                { value: 'active', label: 'Active' },
+                                                                { value: 'inactive', label: 'Inactive' }
+                                                            ]}
+                                                            value={formData.status}
+                                                            onChange={(val) => setFormData({ ...formData, status: val })}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {isTemplateMode && (
+                                                <div className={styles.formGroup} style={{ marginTop: '1rem' }}>
+                                                    <label className={styles.formLabel}>Default Cap Template (Optional)</label>
+                                                    <CustomSelect
+                                                        options={[
+                                                            { value: '', label: 'No Cap Mapping' },
+                                                            ...capTemplates.map(ct => ({ value: ct.id, label: ct.name }))
+                                                        ]}
+                                                        value={formData.cap_template_id}
+                                                        onChange={(val) => setFormData({ ...formData, cap_template_id: val })}
+                                                        placeholder="Select cap template"
+                                                    />
+                                                    <p className={styles.inputHint}>
+                                                        Automatically deducts matching cap variants during production.
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Selling Price</label>
-                                            <div className={styles.prefixWrapper}>
-                                                <input
-                                                    type="number"
-                                                    className={styles.formInput}
-                                                    value={formData.selling_price ?? ''}
-                                                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value === '' ? '' : e.target.value })}
-                                                    placeholder="per piece (e.g. 0.80)"
-                                                    min="0"
-                                                    step="0.01"
-                                                />
+
+                                        <div className={styles.formSection}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <RefreshCw size={16} />
+                                                Manufacturing & Pricing
+                                            </h3>
+                                            <div className={styles.formRow}>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Weight per Unit *</label>
+                                                    <div className={styles.inputWrapper}>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.weight_grams ?? ''}
+                                                            onChange={(e) => setFormData({ ...formData, weight_grams: e.target.value === '' ? '' : e.target.value })}
+                                                            required
+                                                            min="0"
+                                                            step="0.01"
+                                                            placeholder="0.00"
+                                                        />
+                                                        <span className={styles.suffix}>grams</span>
+                                                    </div>
+                                                </div>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Raw Material *</label>
+                                                    <CustomSelect
+                                                        options={rawMaterials.map(rm => ({ value: rm.id, label: rm.name }))}
+                                                        value={formData.raw_material_id}
+                                                        onChange={(val) => setFormData({ ...formData, raw_material_id: val })}
+                                                        placeholder={formData.factory_id ? "Select material" : "Select factory first"}
+                                                        disabled={!formData.factory_id || rawMaterialsLoading}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className={styles.formRow}>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Selling Price (Optional)</label>
+                                                    <div className={styles.prefixWrapper}>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.selling_price ?? ''}
+                                                            onChange={(e) => setFormData({ ...formData, selling_price: e.target.value === '' ? '' : e.target.value })}
+                                                            placeholder="0.80"
+                                                            min="0"
+                                                            step="0.01"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                {!isTemplateMode && (
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Status</label>
+                                                        <CustomSelect
+                                                            options={[
+                                                                { value: 'active', label: 'Active' },
+                                                                { value: 'inactive', label: 'Inactive' }
+                                                            ]}
+                                                            value={formData.status}
+                                                            onChange={(val) => setFormData({ ...formData, status: val })}
+                                                        />
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
-                                </div>
 
-                                {/* Packing Rules Section */}
-                                <div className={styles.formSection}>
-                                    <h3 className={styles.sectionTitle}>Packing Rules</h3>
-                                    <div className={styles.formRow3}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Items per Packet *</label>
-                                            <input
-                                                type="number"
-                                                className={styles.formInput}
-                                                value={formData.items_per_packet ?? ''}
-                                                onChange={(e) => setFormData({ ...formData, items_per_packet: e.target.value === '' ? '' : e.target.value })}
-                                                required
-                                                min="1"
-                                            />
+                                    {/* Right Pane: Colors & Logistics */}
+                                    <div className={styles.rightPane}>
+                                        <div className={styles.formSection}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <Plus size={16} />
+                                                {isTemplateMode ? 'Target Variants (Colors)' : 'Color Selection'}
+                                            </h3>
+                                            {isTemplateMode ? (
+                                                <div className={styles.colorTagSection}>
+                                                    <div className={styles.tagContainer}>
+                                                        {formData.colors.length === 0 && (
+                                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                                Select at least one color below...
+                                                            </span>
+                                                        )}
+                                                        {formData.colors.map(col => (
+                                                            <div key={col} className={styles.colorTag}>
+                                                                <span>{col}</span>
+                                                                <button
+                                                                    type="button"
+                                                                    className={styles.removeTagBtn}
+                                                                    onClick={() => {
+                                                                        setFormData({
+                                                                            ...formData,
+                                                                            colors: formData.colors.filter(c => c !== col)
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    <X size={14} />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    <div className={styles.availableColors}>
+                                                        {COLORS.map(c => (
+                                                            <button
+                                                                key={c.value}
+                                                                type="button"
+                                                                className={cn(
+                                                                    styles.colorChoiceBtn,
+                                                                    formData.colors.includes(c.value) && styles.colorChoiceBtnSelected
+                                                                )}
+                                                                onClick={() => {
+                                                                    if (!formData.colors.includes(c.value)) {
+                                                                        setFormData({
+                                                                            ...formData,
+                                                                            colors: [...formData.colors, c.value]
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                disabled={formData.colors.includes(c.value)}
+                                                            >
+                                                                {c.label}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className={styles.formGroup}>
+                                                    <CustomSelect
+                                                        options={COLORS}
+                                                        value={formData.color}
+                                                        onChange={(val) => setFormData({ ...formData, color: val })}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Packets per Bundle *</label>
-                                            <input
-                                                type="number"
-                                                className={styles.formInput}
-                                                value={formData.packets_per_bundle ?? ''}
-                                                onChange={(e) => setFormData({ ...formData, packets_per_bundle: e.target.value === '' ? '' : e.target.value })}
-                                                required
-                                                min="1"
-                                            />
-                                        </div>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Items per Bundle (Direct)</label>
-                                            <input
-                                                type="number"
-                                                className={styles.formInput}
-                                                value={formData.items_per_bundle ?? ''}
-                                                onChange={(e) => setFormData({ ...formData, items_per_bundle: e.target.value === '' ? '' : e.target.value })}
-                                                placeholder="For loose-to-bundle"
-                                                min="1"
-                                            />
-                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -551,7 +737,11 @@ export default function ProductsPage() {
                                 >
                                     Cancel
                                 </button>
-                                <button type="submit" className={styles.submitButton} disabled={saving}>
+                                <button
+                                    type="submit"
+                                    className={styles.submitButton}
+                                    disabled={saving || !isFormValid()}
+                                >
                                     {saving ? (
                                         <>
                                             <Loader2 size={16} className={styles.spinner} />

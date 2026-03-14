@@ -1,27 +1,47 @@
 import 'package:flutter/material.dart';
 import '../providers/inventory_provider.dart';
+import '../providers/cap_stock_model.dart';
 
 /// Redesigned premium stock summary card for use across dashboard and operations screens
-class StockSummaryCard extends StatelessWidget {
+class StockSummaryCard extends StatefulWidget {
   final List<InventoryStock> stocks;
+  final List<CapStock> capStocks;
   final VoidCallback? onTap;
 
-  const StockSummaryCard({super.key, required this.stocks, this.onTap});
+  const StockSummaryCard({
+    super.key,
+    required this.stocks,
+    this.capStocks = const [],
+    this.onTap,
+  });
+
+  @override
+  State<StockSummaryCard> createState() => _StockSummaryCardState();
+}
+
+class _StockSummaryCardState extends State<StockSummaryCard> {
+  bool _showCaps = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Aggregate totals
+    // Aggregate totals for Products
     int totalSemiFinished = 0;
     int totalPacked = 0;
     int totalBundled = 0;
 
-    for (final stock in stocks) {
+    for (final stock in widget.stocks) {
       totalSemiFinished += stock.semiFinishedQty;
       totalPacked += stock.packedQty;
       totalBundled += stock.bundledQty;
+    }
+
+    // Aggregate totals for Caps
+    int totalCaps = 0;
+    for (final cap in widget.capStocks) {
+      totalCaps += cap.quantity;
     }
 
     return Container(
@@ -49,7 +69,7 @@ class StockSummaryCard extends StatelessWidget {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: onTap,
+            onTap: widget.onTap,
             child: Stack(
               children: [
                 // Subtle background pattern/glow
@@ -80,53 +100,197 @@ class StockSummaryCard extends StatelessWidget {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          Icon(
-                            Icons.arrow_forward_ios,
-                            size: 14,
-                            color: colorScheme.onPrimary.withOpacity(0.7),
+                          // Tab Switcher
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            padding: const EdgeInsets.all(4),
+                            child: Row(
+                              children: [
+                                _buildTab(context, 'Products', !_showCaps),
+                                _buildTab(context, 'Caps', _showCaps),
+                              ],
+                            ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          StockItem(
-                            label: 'Loose',
-                            value: totalSemiFinished,
-                            icon: Icons.grain_outlined,
-                            textColor: colorScheme.onPrimary,
-                          ),
+                      if (!_showCaps) ...[
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: StockItem(
+                                label: 'Loose',
+                                value: totalSemiFinished,
+                                icon: Icons.grain_outlined,
+                                textColor: colorScheme.onPrimary,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 40,
+                              color: colorScheme.onPrimary.withOpacity(0.2),
+                            ),
+                            Expanded(
+                              child: StockItem(
+                                label: 'Packets',
+                                value: totalPacked,
+                                icon: Icons.inventory_2_outlined,
+                                textColor: colorScheme.onPrimary,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 40,
+                              color: colorScheme.onPrimary.withOpacity(0.2),
+                            ),
+                            Expanded(
+                              child: StockItem(
+                                label: 'Bundles',
+                                value: totalBundled,
+                                icon: Icons.layers_outlined,
+                                textColor: colorScheme.onPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (widget.stocks.isNotEmpty) ...[
+                          const SizedBox(height: 24),
                           Container(
-                            width: 1,
-                            height: 40,
-                            color: colorScheme.onPrimary.withOpacity(0.2),
+                            height: 1,
+                            color: Colors.white.withOpacity(0.1),
                           ),
-                          StockItem(
-                            label: 'Packets',
-                            value: totalPacked,
-                            icon: Icons.inventory_2_outlined,
-                            textColor: colorScheme.onPrimary,
+                          const SizedBox(height: 16),
+                          Text(
+                            'Top Product Variants',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white.withOpacity(0.6),
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
                           ),
-                          Container(
-                            width: 1,
-                            height: 40,
-                            color: colorScheme.onPrimary.withOpacity(0.2),
-                          ),
-                          StockItem(
-                            label: 'Bundles',
-                            value: totalBundled,
-                            icon: Icons.layers_outlined,
-                            textColor: colorScheme.onPrimary,
-                          ),
+                          const SizedBox(height: 12),
+                          ...widget.stocks.take(3).map((stock) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        stock.displayName,
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      '${stock.bundledQty}B / ${stock.packedQty}P',
+                                      style:
+                                          theme.textTheme.labelSmall?.copyWith(
+                                        color: Colors.white.withOpacity(0.8),
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )),
                         ],
-                      ),
+                      ] else ...[
+                        Center(
+                          child: StockItem(
+                            label: 'Total Loose Caps',
+                            value: totalCaps,
+                            icon: Icons.radio_button_checked,
+                            textColor: colorScheme.onPrimary,
+                          ),
+                        ),
+                        if (widget.capStocks.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Container(
+                            height: 1,
+                            color: Colors.white.withOpacity(0.1),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Cap Breakdown',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white.withOpacity(0.6),
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          ...widget.capStocks.take(3).map((cap) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${cap.capName} (${cap.color ?? 'N/A'})',
+                                        style:
+                                            theme.textTheme.bodySmall?.copyWith(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      cap.quantity.toString(),
+                                      style:
+                                          theme.textTheme.labelSmall?.copyWith(
+                                        color: Colors.white.withOpacity(0.8),
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )),
+                        ],
+                      ],
                     ],
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTab(BuildContext context, String label, bool isSelected) {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _showCaps = label == 'Caps';
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color:
+                    isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+                fontWeight: FontWeight.bold,
+              ),
         ),
       ),
     );
@@ -236,10 +400,14 @@ class StockErrorCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Unable to fetch latest stock',
+                  error.contains('Exception:')
+                      ? error.replaceFirst('Exception: ', '')
+                      : error,
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: colorScheme.onSurfaceVariant,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

@@ -2,6 +2,10 @@ import { supabase } from '../../config/supabase';
 import { AuditService } from '../audit/audit.service';
 import { inventoryService } from '../inventory/inventory.service';
 import { cashFlowService } from '../cash-flow/cash-flow.service';
+import logger from '../../utils/logger';
+import { getPagination } from '../../utils/supabase';
+import { pushNotificationService } from '../notifications/push-notification.service';
+import { AppError } from '../../utils/AppError';
 
 const auditService = new AuditService();
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
@@ -71,6 +75,7 @@ export class SalesOrderService {
                 });
 
             if (itemError) {
+                logger.error('Failed to create sales order item', { error: itemError.message, orderId: order.id, item });
                 await supabase.from('sales_orders').delete().eq('id', order.id);
                 throw new Error(`Failed to create order item: ${itemError.message}`);
             }
@@ -93,27 +98,44 @@ export class SalesOrderService {
         // 3. Notify Product Managers of all factories involved in this order
         const factoryIds = new Set<string>();
         for (const item of data.items) {
-            const { data: p } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
+            const { data: p, error: productFactoryError } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
+            if (productFactoryError) {
+                logger.warn('Could not fetch factory_id for product during notification setup', { productId: item.product_id, error: productFactoryError.message });
+            }
             if (p?.factory_id) factoryIds.add(p.factory_id);
         }
 
         for (const factoryId of factoryIds) {
-            const { data: managers } = await supabase
+            const { data: managers, error: managerError } = await supabase
                 .from('user_profiles')
                 .select('id')
                 .eq('role', 'production_manager')
                 .eq('factory_id', factoryId);
 
+            if (managerError) {
+                logger.warn('Could not fetch production managers for factory', { factoryId, error: managerError.message });
+            }
+
             if (managers) {
                 for (const manager of managers) {
-                    await supabase.from('notifications').insert({
+                    const { error: notificationError } = await supabase.from('notifications').insert({
                         user_id: manager.id,
                         title: 'New Sales Order Needs Preparation',
                         message: `Order #${order.id.slice(-6).toUpperCase()} has items from your factory. Delivery scheduled for ${data.delivery_date || 'ASAP'}.`,
                         type: 'sales_order_preparation',
                         metadata: { order_id: order.id }
                     });
+                    if (notificationError) {
+                        logger.error('Failed to send sales order preparation notification', { error: notificationError.message, managerId: manager.id, orderId: order.id });
+                    }
                 }
+
+                // Push Notification to Factory Managers
+                await pushNotificationService.sendToRole('production_manager', {
+                    title: 'New Sales Order Received',
+                    body: `Order #${order.id.slice(-6).toUpperCase()} requires items from your factory.`,
+                    data: { order_id: order.id, type: 'sales_order' }
+                }, factoryId);
             }
         }
 
@@ -121,18 +143,24 @@ export class SalesOrderService {
         const fullOrder = await this.getOrderById(order.id);
 
         // Audit logging for order creation
-        await auditService.logAction(
-            data.user_id,
-            'create_sales_order',
-            'sales_orders',
-            order.id,
-            {
-                customer_id: data.customer_id,
-                items: data.items,
-                total_items: data.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
-            }
-        );
+        try {
+            await auditService.logAction(
+                data.user_id,
+                'create_sales_order',
+                'sales_orders',
+                order.id,
+                {
+                    customer_id: data.customer_id,
+                    items: data.items,
+                    total_items: data.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
+                }
+            );
+        } catch (auditError: any) {
+            logger.error('Failed to create audit log for sales order creation', { error: auditError.message, userId: data.user_id, orderId: order.id });
+            // Do not rethrow, audit logging should not block core functionality
+        }
 
+        logger.info('Sales order created successfully', { orderId: order.id, customerId: data.customer_id, userId: data.user_id });
         return fullOrder;
     }
 
@@ -151,7 +179,10 @@ export class SalesOrderService {
             .eq('factory_id', factoryId)
             .single();
 
-        if (error && error.code !== 'PGRST116') throw new Error(`Stock fetch error: ${error.message}`);
+        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is valid for 0 stock
+            logger.error('Stock fetch error in getAvailableStock', { error: error.message, productId, unitType, factoryId });
+            throw new Error(`Stock fetch error: ${error.message}`);
+        }
         return stock?.quantity || 0;
     }
 
@@ -163,39 +194,49 @@ export class SalesOrderService {
         };
         const sourceState = stateMapping[unitType] || 'finished';
 
-        // 1. Deduct from source state
-        const available = await this.getAvailableStock(productId, unitType, factoryId);
-        const { error: deductError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: sourceState,
-            factory_id: factoryId,
-            quantity: available - quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        // 1. Deduct from source state atomically
+        const { error: deductError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factoryId,
+            p_state: sourceState,
+            p_quantity_change: -quantity,
+            p_cap_id: null // Assuming reservaStock from source state doesn't target specific cap_id here or handles it via default null
+        });
 
-        if (deductError) throw new Error(`Failed to deduct ${sourceState} stock: ${deductError.message}`);
+        if (deductError) {
+            logger.error('Failed to deduct stock during reservation', { error: deductError.message, productId, quantity, unitType, factoryId, sourceState });
+            throw new Error(`Failed to deduct ${sourceState} stock: ${deductError.message}`);
+        }
 
-        // 2. Add to reserved state
-        const { data: reservedStock } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', 'reserved')
-            .eq('factory_id', factoryId)
-            .single();
+        // 2. Add to reserved state atomically
+        const { error: reserveError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factoryId,
+            p_state: 'reserved',
+            p_quantity_change: quantity,
+            p_cap_id: null
+        });
 
-        const { error: reserveError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'reserved',
-            factory_id: factoryId,
-            quantity: (reservedStock?.quantity || 0) + quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
-
-        if (reserveError) throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
+        if (reserveError) {
+            logger.error('Failed to update reserved stock during reservation', { error: reserveError.message, productId, quantity, unitType, factoryId });
+            // ROLLING BACK the deduction if addition fails (though unlikely with simple increment)
+            await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factoryId,
+                p_state: sourceState,
+                p_quantity_change: quantity,
+                p_cap_id: null
+            });
+            throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
+        }
 
         // 3. Log Audit Trail
-        await inventoryService.logTransaction('reserve', productId, quantity, unitType, sourceState, 'reserved', factoryId);
+        try {
+            await inventoryService.logTransaction('reserve', productId, quantity, unitType, sourceState, 'reserved', factoryId);
+        } catch (auditError: any) {
+            logger.error('Failed to log inventory transaction for stock reservation', { error: auditError.message, productId, quantity, factoryId });
+        }
+        logger.info('Stock reserved successfully', { productId, quantity, unitType, factoryId });
     }
 
     private async createProductionRequest(productId: string, factoryId: string, quantity: number, unitType: string, orderId: string) {
@@ -213,27 +254,48 @@ export class SalesOrderService {
             .select()
             .single();
 
-        if (reqError) throw new Error(`Failed to create production request: ${reqError.message}`);
+        if (reqError) {
+            logger.error('Failed to create production request', { error: reqError.message, productId, factoryId, quantity, orderId });
+            throw new Error(`Failed to create production request: ${reqError.message}`);
+        }
 
         // 2. Notify Production Manager
-        const { data: managers } = await supabase
+        const { data: managers, error: managerError } = await supabase
             .from('user_profiles')
             .select('id')
             .eq('role', 'production_manager')
             .eq('factory_id', factoryId);
 
+        if (managerError) {
+            logger.warn('Could not fetch production managers for factory during production request notification', { factoryId, error: managerError.message });
+        }
+
         if (managers && managers.length > 0) {
-            const { data: product } = await supabase.from('products').select('name').eq('id', productId).single();
+            const { data: product, error: productError } = await supabase.from('products').select('name').eq('id', productId).single();
+            if (productError) {
+                logger.warn('Could not fetch product name for production request notification', { productId, error: productError.message });
+            }
             for (const manager of managers) {
-                await supabase.from('notifications').insert({
+                const { error: notificationError } = await supabase.from('notifications').insert({
                     user_id: manager.id,
                     title: 'New Production Request',
-                    message: `Demand Signal: ${quantity} units of ${product?.name} (${unitType}) needed for Order #${orderId.slice(-6).toUpperCase()}`,
+                    message: `Demand Signal: ${quantity} units of ${product?.name || 'Unknown Product'} (${unitType}) needed for Order #${orderId.slice(-6).toUpperCase()}`,
                     type: 'production_request',
                     metadata: { request_id: request.id, order_id: orderId }
                 });
+                if (notificationError) {
+                    logger.error('Failed to send production request notification', { error: notificationError.message, managerId: manager.id, requestId: request.id });
+                }
             }
+
+            // Push Notification for Production Request
+            await pushNotificationService.sendToRole('production_manager', {
+                title: 'New Production Request',
+                body: `${quantity} units of ${product?.name || 'Product'} needed for Order #${orderId.slice(-6).toUpperCase()}`,
+                data: { request_id: request.id, order_id: orderId, type: 'production_request' }
+            }, factoryId);
         }
+        logger.info('Production request created', { requestId: request.id, productId, quantity, orderId });
     }
 
     private async unreserveStock(productId: string, quantity: number, unitType: string, factoryId: string) {
@@ -245,7 +307,7 @@ export class SalesOrderService {
         const targetState = stateMapping[unitType] || 'finished';
 
         // 1. Move stock back from reserved
-        const { data: reservedStock } = await supabase
+        const { data: reservedStock, error: fetchReservedError } = await supabase
             .from('stock_balances')
             .select('quantity')
             .eq('product_id', productId)
@@ -253,7 +315,12 @@ export class SalesOrderService {
             .eq('factory_id', factoryId)
             .single();
 
-        await supabase.from('stock_balances').upsert({
+        if (fetchReservedError && fetchReservedError.code !== 'PGRST116') {
+            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchReservedError.message, productId, factoryId });
+            throw new Error(`Failed to fetch reserved stock: ${fetchReservedError.message}`);
+        }
+
+        const { error: unreserveError } = await supabase.from('stock_balances').upsert({
             product_id: productId,
             state: 'reserved',
             factory_id: factoryId,
@@ -261,8 +328,13 @@ export class SalesOrderService {
             last_updated: new Date().toISOString()
         }, { onConflict: 'product_id,state,factory_id' });
 
+        if (unreserveError) {
+            logger.error('Failed to deduct from reserved stock during unreservation', { error: unreserveError.message, productId, quantity, factoryId });
+            throw new Error(`Failed to update reserved stock: ${unreserveError.message}`);
+        }
+
         // 2. Add back to original state
-        const { data: sourceStock } = await supabase
+        const { data: sourceStock, error: fetchSourceError } = await supabase
             .from('stock_balances')
             .select('quantity')
             .eq('product_id', productId)
@@ -270,7 +342,12 @@ export class SalesOrderService {
             .eq('factory_id', factoryId)
             .single();
 
-        await supabase.from('stock_balances').upsert({
+        if (fetchSourceError && fetchSourceError.code !== 'PGRST116') {
+            logger.error('Failed to fetch source stock for unreservation', { error: fetchSourceError.message, productId, factoryId, targetState });
+            throw new Error(`Failed to fetch source stock: ${fetchSourceError.message}`);
+        }
+
+        const { error: addBackError } = await supabase.from('stock_balances').upsert({
             product_id: productId,
             state: targetState,
             factory_id: factoryId,
@@ -278,13 +355,23 @@ export class SalesOrderService {
             last_updated: new Date().toISOString()
         }, { onConflict: 'product_id,state,factory_id' });
 
+        if (addBackError) {
+            logger.error('Failed to add back to source stock during unreservation', { error: addBackError.message, productId, quantity, factoryId, targetState });
+            throw new Error(`Failed to update source stock: ${addBackError.message}`);
+        }
+
         // 3. Log Audit Trail
-        await inventoryService.logTransaction('unreserve', productId, quantity, unitType, 'reserved', targetState, factoryId);
+        try {
+            await inventoryService.logTransaction('unreserve', productId, quantity, unitType, 'reserved', targetState, factoryId);
+        } catch (auditError: any) {
+            logger.error('Failed to log inventory transaction for stock unreservation', { error: auditError.message, productId, quantity, factoryId });
+        }
+        logger.info('Stock unreserved successfully', { productId, quantity, unitType, factoryId });
     }
 
     private async deliverStock(productId: string, quantity: number, factoryId: string) {
         // Permanently remove from reserved (stock is sold)
-        const { data: reservedStock } = await supabase
+        const { data: reservedStock, error: fetchReservedError } = await supabase
             .from('stock_balances')
             .select('quantity')
             .eq('product_id', productId)
@@ -292,7 +379,12 @@ export class SalesOrderService {
             .eq('factory_id', factoryId)
             .single();
 
-        await supabase.from('stock_balances').upsert({
+        if (fetchReservedError && fetchReservedError.code !== 'PGRST116') {
+            logger.error('Failed to fetch reserved stock for delivery', { error: fetchReservedError.message, productId, factoryId });
+            throw new Error(`Failed to fetch reserved stock: ${fetchReservedError.message}`);
+        }
+
+        const { error: deliverError } = await supabase.from('stock_balances').upsert({
             product_id: productId,
             state: 'reserved',
             factory_id: factoryId,
@@ -300,12 +392,24 @@ export class SalesOrderService {
             last_updated: new Date().toISOString()
         }, { onConflict: 'product_id,state,factory_id' });
 
+        if (deliverError) {
+            logger.error('Failed to deduct from reserved stock during delivery', { error: deliverError.message, productId, quantity, factoryId });
+            throw new Error(`Failed to update reserved stock for delivery: ${deliverError.message}`);
+        }
+
         // Log Audit Trail
         // Note: Defaulting to 'bundle' as delivery unit for now, ideally passed from caller
-        await inventoryService.logTransaction('delivery', productId, quantity, 'bundle', 'reserved', null, factoryId);
+        try {
+            await inventoryService.logTransaction('delivery', productId, quantity, 'bundle', 'reserved', null, factoryId);
+        } catch (auditError: any) {
+            logger.error('Failed to log inventory transaction for stock delivery', { error: auditError.message, productId, quantity, factoryId });
+        }
+        logger.info('Stock delivered successfully', { productId, quantity, factoryId });
     }
 
-    async getAllOrders(filters?: { status?: string; factoryId?: string }) {
+    async getAllOrders(filters?: { status?: string; factoryId?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page, filters?.size);
+
         let query = supabase
             .from('sales_orders')
             .select(`
@@ -321,7 +425,7 @@ export class SalesOrderService {
                     prepared_at,
                     products!inner(name, size, color, selling_price, factory_id)
                 )
-            `);
+            `, { count: 'exact' });
 
         if (filters?.status) {
             query = query.eq('status', filters.status);
@@ -331,10 +435,22 @@ export class SalesOrderService {
             query = query.eq('sales_order_items.products.factory_id', filters.factoryId);
         }
 
-        const { data, error } = await query.order('order_date', { ascending: false });
+        const { data, error, count } = await query
+            .order('order_date', { ascending: false })
+            .range(from, to);
 
-        if (error) throw new Error(error.message);
-        return data;
+        if (error) {
+            logger.error('Failed to fetch all sales orders', { error: error.message, filters });
+            throw new Error(error.message);
+        }
+        return {
+            orders: data,
+            pagination: {
+                total: count,
+                page: filters?.page || 1,
+                size: filters?.size || 10
+            }
+        };
     }
 
     async getOrderById(id: string) {
@@ -355,19 +471,32 @@ export class SalesOrderService {
             .eq('id', id)
             .maybeSingle();
 
-        if (error) throw new Error(error.message);
-        if (!data) return null;
+        if (error) {
+            logger.error('Failed to fetch sales order by ID', { error: error.message, orderId: id });
+            throw new Error(error.message);
+        }
+        if (!data) {
+            logger.warn('Sales order not found', { orderId: id });
+            return null;
+        }
         return data;
     }
 
     async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled' | 'pending', userId: string) {
         const order = await this.getOrderById(id);
 
+        if (!order) {
+            logger.warn('Attempted to update status of non-existent order', { orderId: id, status, userId });
+            throw new Error('Order not found');
+        }
+
         if (status === 'delivered' && order.status !== 'reserved') {
+            logger.warn('Attempted to deliver an order not in reserved status', { orderId: id, currentStatus: order.status, userId });
             throw new Error('Can only deliver orders that are reserved');
         }
 
         if (status === 'cancelled' && order.status === 'delivered') {
+            logger.warn('Attempted to cancel a delivered order', { orderId: id, userId });
             throw new Error('Cannot cancel delivered orders');
         }
 
@@ -380,6 +509,7 @@ export class SalesOrderService {
                     await this.deliverStock(item.product_id, item.quantity, factoryId);
                 }
             }
+            logger.info('Order delivered, stock deducted', { orderId: id, userId });
         } else if (status === 'cancelled') {
             // Return stock to inventory (only for those that were NOT backordered, as backordered items never left inventory)
             for (const item of order.sales_order_items) {
@@ -388,13 +518,17 @@ export class SalesOrderService {
                     await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
                 } else {
                     // Cancel the production request if it exists
-                    await supabase
+                    const { error: cancelReqError } = await supabase
                         .from('production_requests')
                         .update({ status: 'cancelled' })
                         .eq('sales_order_id', id)
                         .eq('product_id', item.product_id);
+                    if (cancelReqError) {
+                        logger.error('Failed to cancel production request for cancelled order item', { error: cancelReqError.message, orderId: id, productId: item.product_id });
+                    }
                 }
             }
+            logger.info('Order cancelled, stock unreserved and production requests cancelled', { orderId: id, userId });
         }
 
         // Update order status (with delivered_at timestamp if applicable)
@@ -410,26 +544,51 @@ export class SalesOrderService {
             .select()
             .single();
 
-        if (error) throw new Error(error.message);
+        if (error) {
+            logger.error('Failed to update sales order status', { error: error.message, orderId: id, newStatus: status, userId });
+            throw new Error(error.message);
+        }
 
         // Audit logging for status change
-        await auditService.logAction(
-            userId,
-            status === 'delivered' ? 'deliver_order' : 'cancel_order',
-            'sales_orders',
-            id,
-            {
-                previous_status: order.status,
-                new_status: status,
-                customer_id: order.customer_id,
-                total_items: order.sales_order_items.reduce((sum: number, item: any) => sum + item.quantity, 0)
-            }
-        );
+        try {
+            await auditService.logAction(
+                userId,
+                status === 'delivered' ? 'deliver_order' : 'cancel_order',
+                'sales_orders',
+                id,
+                {
+                    previous_status: order.status,
+                    new_status: status,
+                    customer_id: order.customer_id,
+                    total_items: order.sales_order_items.reduce((sum: number, item: any) => sum + item.quantity, 0)
+                }
+            );
+        } catch (auditError: any) {
+            logger.error('Failed to create audit log for sales order status update', { error: auditError.message, userId, orderId: id, newStatus: status });
+        }
 
+        logger.info('Sales order status updated', { orderId: id, newStatus: status, userId });
         return this.getOrderById(id);
     }
 
     async prepareOrderItem(itemId: string, userId: string) {
+        // 0. Fetch item first to check backorder status
+        const { data: currentItem, error: fetchError } = await supabase
+            .from('sales_order_items')
+            .select('is_backordered, order_id')
+            .eq('id', itemId)
+            .single();
+
+        if (fetchError || !currentItem) {
+            logger.error('Failed to fetch sales order item for preparation check', { error: fetchError?.message, itemId });
+            throw new AppError('Order item not found', 404);
+        }
+
+        if (currentItem.is_backordered) {
+            logger.warn('Attempted to prepare a backordered item', { itemId, orderId: currentItem.order_id, userId });
+            throw new AppError('Cannot prepare item with pending backorder. Please fulfill the production request first.', 400);
+        }
+
         // 1. Mark item as prepared
         const { data: item, error: itemError } = await supabase
             .from('sales_order_items')
@@ -442,31 +601,55 @@ export class SalesOrderService {
             .select('*, products(name, factory_id), sales_orders(id, created_by)')
             .single();
 
-        if (itemError) throw new Error(itemError.message);
+        if (itemError) {
+            logger.error('Failed to prepare sales order item', { error: itemError.message, itemId, userId });
+            throw new Error(itemError.message);
+        }
 
         // 2. Check if the entire order is now prepared
         const orderId = (item.sales_orders as any).id;
-        const { data: allItems } = await supabase
+        const { data: allItems, error: allItemsError } = await supabase
             .from('sales_order_items')
             .select('is_prepared')
             .eq('order_id', orderId);
 
+        if (allItemsError) {
+            logger.error('Failed to fetch all items for order after item preparation', { error: allItemsError.message, orderId });
+            // Continue without full order status update if this fails
+        }
+
         if (allItems && allItems.every(i => i.is_prepared)) {
             // Update order status to reserved (ready for delivery)
-            await supabase
+            const { error: updateOrderError } = await supabase
                 .from('sales_orders')
                 .update({ status: 'reserved' })
                 .eq('id', orderId);
 
+            if (updateOrderError) {
+                logger.error('Failed to update order status to reserved after all items prepared', { error: updateOrderError.message, orderId });
+            } else {
+                logger.info('Order fully prepared and status set to reserved', { orderId });
+            }
+
             // Notify the Sales Admin that the order is fully prepared
             const createdBy = (item.sales_orders as any)?.created_by;
             if (createdBy) {
-                await supabase.from('notifications').insert({
+                const { error: notificationError } = await supabase.from('notifications').insert({
                     user_id: createdBy,
                     title: 'Order Fully Prepared',
                     message: `All items for Order #${orderId.slice(-6).toUpperCase()} have been prepared. It is now ready for delivery.`,
                     type: 'order_prepared',
                     metadata: { order_id: orderId }
+                });
+                if (notificationError) {
+                    logger.error('Failed to send order fully prepared notification', { error: notificationError.message, createdBy, orderId });
+                }
+
+                // Push Notification for Sales Admin
+                await pushNotificationService.sendToUsers([createdBy], {
+                    title: 'Order Fully Prepared',
+                    body: `Order #${orderId.slice(-6).toUpperCase()} is now ready for delivery.`,
+                    data: { order_id: orderId, type: 'order_prepared' }
                 });
             }
         } else {
@@ -474,16 +657,19 @@ export class SalesOrderService {
             const createdBy = (item.sales_orders as any)?.created_by;
             if (createdBy) {
                 const productName = (item.products as any)?.name;
-                await supabase.from('notifications').insert({
+                const { error: notificationError } = await supabase.from('notifications').insert({
                     user_id: createdBy,
                     title: 'Item Prepared',
                     message: `Product "${productName}" for Order #${orderId.slice(-6).toUpperCase()} is ready at the factory.`,
                     type: 'item_prepared',
                     metadata: { order_id: orderId, item_id: itemId }
                 });
+                if (notificationError) {
+                    logger.error('Failed to send item prepared notification', { error: notificationError.message, createdBy, orderId, itemId });
+                }
             }
         }
-
+        logger.info('Sales order item prepared', { itemId, orderId, userId });
         return item;
     }
 
@@ -501,7 +687,13 @@ export class SalesOrderService {
         // 1. Fetch the order
         const order = await this.getOrderById(orderId);
 
+        if (!order) {
+            logger.warn('Attempted to process delivery for non-existent order', { orderId, deliveryData });
+            throw new Error('Order not found');
+        }
+
         if (order.status !== 'reserved') {
+            logger.warn('Attempted to deliver an order not in reserved status', { orderId, currentStatus: order.status, deliveryData });
             throw new Error('Only reserved orders can be delivered');
         }
 
@@ -513,12 +705,17 @@ export class SalesOrderService {
                 .update({ unit_price: itemData.unit_price })
                 .eq('id', itemData.item_id);
 
-            if (error) throw new Error(`Failed to update item price: ${error.message}`);
+            if (error) {
+                logger.error('Failed to update item price during delivery processing', { error: error.message, orderId, itemId: itemData.item_id, unitPrice: itemData.unit_price });
+                throw new Error(`Failed to update item price: ${error.message}`);
+            }
 
             // Calculate subtotal
             const item = order.sales_order_items.find((i: any) => i.id === itemData.item_id);
             if (item) {
                 subtotal += itemData.unit_price * item.quantity;
+            } else {
+                logger.warn('Item not found in order during subtotal calculation for delivery', { orderId, itemId: itemData.item_id });
             }
         }
 
@@ -554,7 +751,10 @@ export class SalesOrderService {
             })
             .eq('id', orderId);
 
-        if (orderError) throw new Error(`Failed to update order: ${orderError.message}`);
+        if (orderError) {
+            logger.error('Failed to update sales order details during delivery processing', { error: orderError.message, orderId, deliveryData });
+            throw new Error(`Failed to update order: ${orderError.message}`);
+        }
 
         // 5. Create initial payment record if amount > 0
         if (initialPayment > 0) {
@@ -569,18 +769,25 @@ export class SalesOrderService {
                     recorded_by: deliveryData.user_id
                 });
 
-            if (paymentError) throw new Error(`Failed to record payment: ${paymentError.message}`);
+            if (paymentError) {
+                logger.error('Failed to record initial payment during delivery processing', { error: paymentError.message, orderId, initialPayment, userId: deliveryData.user_id });
+                throw new Error(`Failed to record payment: ${paymentError.message}`);
+            }
 
             // Log to Cash Flow
-            const categoryId = await cashFlowService.getCategoryId('Cash Sales', 'income');
-            await cashFlowService.logEntry({
-                category_id: categoryId,
-                amount: initialPayment,
-                payment_mode: deliveryData.payment_method || 'Cash',
-                reference_id: orderId,
-                notes: `Initial payment at delivery for Order #${orderId.slice(-6).toUpperCase()}`,
-                is_automatic: true
-            });
+            try {
+                const categoryId = await cashFlowService.getCategoryId('Cash Sales', 'income');
+                await cashFlowService.logEntry({
+                    category_id: categoryId,
+                    amount: initialPayment,
+                    payment_mode: deliveryData.payment_method || 'Cash',
+                    reference_id: orderId,
+                    notes: `Initial payment at delivery for Order #${orderId.slice(-6).toUpperCase()}`,
+                    is_automatic: true
+                });
+            } catch (cashFlowError: any) {
+                logger.error('Failed to log initial payment to cash flow', { error: cashFlowError.message, orderId, initialPayment });
+            }
         }
 
         // 6. Deliver stock (move from reserved to delivered)
@@ -590,21 +797,26 @@ export class SalesOrderService {
         }
 
         // 7. Audit logging
-        await auditService.logAction(
-            deliveryData.user_id,
-            'process_delivery',
-            'sales_orders',
-            orderId,
-            {
-                subtotal,
-                discount: discountAmount,
-                total_amount: totalAmount,
-                payment_mode: deliveryData.payment_mode,
-                initial_payment: initialPayment,
-                balance_due: balanceDue
-            }
-        );
+        try {
+            await auditService.logAction(
+                deliveryData.user_id,
+                'process_delivery',
+                'sales_orders',
+                orderId,
+                {
+                    subtotal,
+                    discount: discountAmount,
+                    total_amount: totalAmount,
+                    payment_mode: deliveryData.payment_mode,
+                    initial_payment: initialPayment,
+                    balance_due: balanceDue
+                }
+            );
+        } catch (auditError: any) {
+            logger.error('Failed to create audit log for delivery processing', { error: auditError.message, userId: deliveryData.user_id, orderId });
+        }
 
+        logger.info('Delivery processed successfully', { orderId, totalAmount, initialPayment, balanceDue, userId: deliveryData.user_id });
         return this.getOrderById(orderId);
     }
 
@@ -617,15 +829,23 @@ export class SalesOrderService {
         // 1. Fetch the order
         const order = await this.getOrderById(orderId);
 
+        if (!order) {
+            logger.warn('Attempted to record payment for non-existent order', { orderId, paymentData });
+            throw new Error('Order not found');
+        }
+
         if (order.status !== 'delivered') {
+            logger.warn('Attempted to record payment for an order not in delivered status', { orderId, currentStatus: order.status, paymentData });
             throw new Error('Can only record payments for delivered orders');
         }
 
         if (!order.balance_due || order.balance_due <= 0) {
+            logger.warn('Attempted to record payment for an order with no pending balance', { orderId, balanceDue: order.balance_due, paymentData });
             throw new Error('This order has no pending balance');
         }
 
         if (paymentData.amount > order.balance_due) {
+            logger.warn('Payment amount exceeds balance due', { orderId, paymentAmount: paymentData.amount, balanceDue: order.balance_due, paymentData });
             throw new Error(`Payment amount (${paymentData.amount}) exceeds balance due (${order.balance_due})`);
         }
 
@@ -641,18 +861,25 @@ export class SalesOrderService {
                 recorded_by: paymentData.user_id
             });
 
-        if (paymentError) throw new Error(`Failed to record payment: ${paymentError.message}`);
+        if (paymentError) {
+            logger.error('Failed to record payment', { error: paymentError.message, orderId, paymentData });
+            throw new Error(`Failed to record payment: ${paymentError.message}`);
+        }
 
         // Log to Cash Flow
-        const categoryId = await cashFlowService.getCategoryId('Cash Sales', 'income');
-        await cashFlowService.logEntry({
-            category_id: categoryId,
-            amount: paymentData.amount,
-            payment_mode: paymentData.payment_method,
-            reference_id: orderId,
-            notes: `Payment for Order #${orderId.slice(-6).toUpperCase()}: ${paymentData.notes || 'No notes'}`,
-            is_automatic: true
-        });
+        try {
+            const categoryId = await cashFlowService.getCategoryId('Cash Sales', 'income');
+            await cashFlowService.logEntry({
+                category_id: categoryId,
+                amount: paymentData.amount,
+                payment_mode: paymentData.payment_method,
+                reference_id: orderId,
+                notes: `Payment for Order #${orderId.slice(-6).toUpperCase()}: ${paymentData.notes || 'No notes'}`,
+                is_automatic: true
+            });
+        } catch (cashFlowError: any) {
+            logger.error('Failed to log payment to cash flow', { error: cashFlowError.message, orderId, paymentAmount: paymentData.amount });
+        }
 
         // 3. Update order balance
         const newAmountPaid = (order.amount_paid || 0) + paymentData.amount;
@@ -667,32 +894,42 @@ export class SalesOrderService {
             })
             .eq('id', orderId);
 
-        if (updateError) throw new Error(`Failed to update order balance: ${updateError.message}`);
+        if (updateError) {
+            logger.error('Failed to update order balance after payment', { error: updateError.message, orderId, newBalanceDue });
+            throw new Error(`Failed to update order balance: ${updateError.message}`);
+        }
 
         // 4. Audit logging
-        await auditService.logAction(
-            paymentData.user_id,
-            'record_payment',
-            'sales_orders',
-            orderId,
-            {
-                amount: paymentData.amount,
-                payment_method: paymentData.payment_method,
-                new_balance: newBalanceDue
-            }
-        );
+        try {
+            await auditService.logAction(
+                paymentData.user_id,
+                'record_payment',
+                'sales_orders',
+                orderId,
+                {
+                    amount: paymentData.amount,
+                    payment_method: paymentData.payment_method,
+                    new_balance: newBalanceDue
+                }
+            );
+        } catch (auditError: any) {
+            logger.error('Failed to create audit log for payment recording', { error: auditError.message, userId: paymentData.user_id, orderId });
+        }
 
         // 5. Notify if balance is cleared
         if (newBalanceDue === 0) {
-            await supabase.from('notifications').insert({
+            const { error: notificationError } = await supabase.from('notifications').insert({
                 user_id: order.created_by,
                 title: 'Payment Completed',
                 message: `Order #${orderId.slice(-6).toUpperCase()} has been fully paid.`,
                 type: 'payment_completed',
                 metadata: { order_id: orderId }
             });
+            if (notificationError) {
+                logger.error('Failed to send payment completed notification', { error: notificationError.message, userId: order.created_by, orderId });
+            }
         }
-
+        logger.info('Payment recorded successfully', { orderId, amount: paymentData.amount, newBalanceDue, userId: paymentData.user_id });
         return this.getOrderById(orderId);
     }
 
@@ -709,20 +946,37 @@ export class SalesOrderService {
             .eq('status', 'delivered')
             .order('delivered_at', { ascending: false });
 
-        if (error) throw new Error(error.message);
+        if (error) {
+            logger.error('Failed to fetch customer payment history', { error: error.message, customerId });
+            throw new Error(error.message);
+        }
 
         // Calculate totals
         const totalBilled = orders?.reduce((sum, order) => sum + (order.total_amount || 0), 0) || 0;
         const totalPaid = orders?.reduce((sum, order) => sum + (order.amount_paid || 0), 0) || 0;
         const outstandingBalance = orders?.reduce((sum, order) => sum + (order.balance_due || 0), 0) || 0;
 
+        // Derive payment_records and orders_with_balance for frontend
+        const paymentRecords = (orders as any[])?.flatMap((o: any) => (o.payments || []).map((p: any) => ({
+            ...p,
+            order_number: `#${o.id.slice(-6).toUpperCase()}`
+        }))) || [];
+
+        const ordersWithBalance = (orders as any[])?.filter((o: any) => (o.balance_due || 0) > 0).map((o: any) => ({
+            ...o,
+            order_number: `#${o.id.slice(-6).toUpperCase()}`
+        })) || [];
+
+        logger.info('Customer payment history fetched', { customerId, totalOrders: orders?.length, outstandingBalance });
         return {
             customer_id: customerId,
             total_orders: orders?.length || 0,
             total_billed: totalBilled,
             total_paid: totalPaid,
             outstanding_balance: outstandingBalance,
-            orders: orders || []
+            orders: orders || [],
+            orders_with_balance: ordersWithBalance,
+            payment_records: paymentRecords.sort((a, b) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
         };
     }
 
@@ -730,6 +984,7 @@ export class SalesOrderService {
         customer_id?: string;
         is_overdue?: boolean;
         status?: string;
+        factoryId?: string;
     }) {
         let query = supabase
             .from('sales_orders')
@@ -746,10 +1001,15 @@ export class SalesOrderService {
             query = query.eq('customer_id', filters.customer_id);
         }
 
+        if (filters?.factoryId) {
+            query = query.filter('sales_order_items.products.factory_id', 'eq', filters.factoryId);
+        }
+
         if (filters?.status === 'overdue' || filters?.is_overdue) {
             query = query.eq('is_overdue', true);
         } else if (filters?.status === 'pending') {
-            query = query.gt('balance_due', 0);
+            // Include NULL balances as pending (or we could assume balance_due is not yet set)
+            query = query.or('balance_due.gt.0,balance_due.is.null');
         } else if (filters?.status === 'paid') {
             query = query.eq('balance_due', 0);
         } else if (!filters?.status || filters.status === 'all') {
@@ -761,8 +1021,11 @@ export class SalesOrderService {
 
         const { data, error } = await query;
 
-        if (error) throw new Error(error.message);
-
+        if (error) {
+            logger.error('Failed to fetch pending payments', { error: error.message, filters });
+            throw new Error(error.message);
+        }
+        logger.info('Pending payments fetched', { filters, count: data?.length || 0 });
         return data || [];
     }
 
@@ -772,10 +1035,12 @@ export class SalesOrderService {
         const order = await this.getOrderById(id);
 
         if (!order) {
+            logger.warn('Attempted to delete non-existent order', { orderId: id });
             throw new Error('Order not found');
         }
 
         if (order.status === 'delivered') {
+            logger.warn('Attempted to delete a delivered order', { orderId: id });
             throw new Error('Cannot delete delivered orders');
         }
 
@@ -787,6 +1052,7 @@ export class SalesOrderService {
                     await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
                 }
             }
+            logger.info('Stock unreserved for deleted reserved order', { orderId: id });
         }
 
         const { error } = await supabase
@@ -794,7 +1060,11 @@ export class SalesOrderService {
             .delete()
             .eq('id', id);
 
-        if (error) throw new Error(error.message);
+        if (error) {
+            logger.error('Failed to delete sales order', { error: error.message, orderId: id });
+            throw new Error(error.message);
+        }
+        logger.info('Sales order deleted successfully', { orderId: id });
         return { message: 'Order deleted successfully' };
     }
 
@@ -815,9 +1085,13 @@ export class SalesOrderService {
             .lt('credit_deadline', today)
             .eq('is_overdue', false);
 
-        if (selectError) throw new Error(selectError.message);
+        if (selectError) {
+            logger.error('Failed to select overdue orders', { error: selectError.message });
+            throw new Error(selectError.message);
+        }
 
         if (!overdueOrders || overdueOrders.length === 0) {
+            logger.info('[Overdue Check] No new overdue orders found.');
             return { count: 0, orders: [] };
         }
 
@@ -828,7 +1102,10 @@ export class SalesOrderService {
             .update({ is_overdue: true, updated_at: new Date().toISOString() })
             .in('id', orderIds);
 
-        if (updateError) throw new Error(updateError.message);
+        if (updateError) {
+            logger.error('Failed to update orders as overdue', { error: updateError.message, orderIds });
+            throw new Error(updateError.message);
+        }
 
         // Create notifications for each overdue order
         const notifications = overdueOrders.map(order => ({
@@ -844,11 +1121,10 @@ export class SalesOrderService {
             .insert(notifications);
 
         if (notifyError) {
-            console.error(`[Overdue Check] Failed to create notifications: ${notifyError.message}`);
+            logger.error('[Overdue Check] Failed to create notifications', { error: notifyError.message });
             // Don't throw here to avoid failing the script if only notifications fail
         }
-
-        console.log(`[Overdue Check] Marked ${overdueOrders.length} orders as overdue and sent notifications`);
+        logger.info(`[Overdue Check] Marked ${overdueOrders.length} orders as overdue and sent notifications`);
 
         return {
             count: overdueOrders.length,

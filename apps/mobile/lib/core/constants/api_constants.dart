@@ -1,7 +1,7 @@
 class ApiConstants {
   // Use 10.0.2.2 for Android Emulator to access localhost of the host machine
   // Use local IP (e.g., 192.168.x.x) for physical device
-  static const String baseUrl = 'http://10.0.2.2:4000/api';
+  static const String baseUrl = 'http://172.29.40.158:4000/api';
 
   static const String loginEndpoint = '/auth/login';
   static const String meEndpoint = '/auth/me';
@@ -14,7 +14,9 @@ class ApiConstants {
 
   static const String machines = '/machines';
   static const String products = '/products';
+  static const String productTemplates = '/products/templates';
   static const String caps = '/caps';
+  static const String capTemplates = '/caps/templates';
 
   static const String inventoryPack = '/inventory/pack';
   static const String inventoryBundle = '/inventory/bundle';
@@ -23,5 +25,7 @@ class ApiConstants {
 
   static const String inventoryStockOverview = '/inventory/overview';
   static const String inventoryRawMaterials = '/inventory/raw-materials';
+  static const String inventoryCapBalances = '/caps/balances';
   static const String salesOrders = '/orders';
+  static const String notificationsTokens = '/notifications/tokens';
 }

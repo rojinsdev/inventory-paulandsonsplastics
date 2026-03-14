@@ -2,13 +2,20 @@
 
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 
 export function useRealtime() {
     const queryClient = useQueryClient();
+    const { isAuthenticated } = useAuth();
 
     useEffect(() => {
-        if (!supabase) return;
+        if (!supabase || !isAuthenticated) {
+            if (!isAuthenticated) {
+                console.log('📡 Supabase Realtime: User not authenticated, skipping listener setup.');
+            }
+            return;
+        }
 
         console.log('📡 Supabase Realtime: Initializing listeners...');
 
@@ -161,6 +168,21 @@ export function useRealtime() {
             )
             .subscribe();
 
+        // 12. Listen for Payment Changes
+        const paymentChannel = supabase
+            .channel('payment-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'payments' },
+                (payload) => {
+                    console.log('🔄 Realtime: Payment change detected', payload);
+                    queryClient.invalidateQueries({ queryKey: ['pending-payments'] });
+                    queryClient.invalidateQueries({ queryKey: ['orders'] });
+                    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+                }
+            )
+            .subscribe();
+
         // Cleanup on unmount
         return () => {
             console.log('📡 Supabase Realtime: Cleaning up listeners...');
@@ -175,6 +197,7 @@ export function useRealtime() {
             supabase.removeChannel(settingChannel);
             supabase.removeChannel(auditChannel);
             supabase.removeChannel(userChannel);
+            supabase.removeChannel(paymentChannel);
         };
-    }, [queryClient]);
+    }, [queryClient, isAuthenticated]);
 }

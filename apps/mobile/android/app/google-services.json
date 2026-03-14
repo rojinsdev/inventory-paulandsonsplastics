@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "957904840532",
+    "project_id": "paulandsonsplastics-294a7",
+    "storage_bucket": "paulandsonsplastics-294a7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:957904840532:android:bc77c5c28eb14265d48ac1",
+        "android_client_info": {
+          "package_name": "com.paulsons.inventory_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBykRUo3pW3GoGmX4X12KDsJcAQk8tyx14"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

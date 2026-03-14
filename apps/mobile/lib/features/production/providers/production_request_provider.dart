@@ -44,8 +44,8 @@ class ProductionRequestNotifier
         );
       });
     } catch (e) {
-      // For now we just print error or we could show a toast in UI
       print('Failed to update status: $e');
+      rethrow;
     }
   }
 }

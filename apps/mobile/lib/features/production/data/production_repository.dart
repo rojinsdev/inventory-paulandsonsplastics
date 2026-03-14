@@ -83,7 +83,8 @@ class ProductionRepository {
     required int shiftNumber,
     required String startTime,
     required String endTime,
-    required double totalWeightKg,
+    double? totalWeightKg,
+    int? totalProduced,
     required double actualCycleTimeSeconds,
     required double actualWeightGrams,
     String? remarks,
@@ -95,12 +96,16 @@ class ProductionRepository {
         'shift_number': shiftNumber,
         'start_time': startTime,
         'end_time': endTime,
-        'total_weight_kg': totalWeightKg,
+        'total_weight_produced_kg': totalWeightKg,
+        'total_produced': totalProduced,
         'actual_cycle_time_seconds': actualCycleTimeSeconds,
         'actual_weight_grams': actualWeightGrams,
         'remarks': remarks,
         'date': date.toIso8601String().split('T')[0], // YYYY-MM-DD
       };
+
+      // Remove nulls so server can switch modes
+      payload.removeWhere((key, value) => value == null);
 
       await _apiClient.client.post(
         ApiConstants.capProductionSubmit,

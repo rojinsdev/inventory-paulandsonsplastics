@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { inventoryController } from './inventory.controller';
 import { authenticate, requireRole } from '../../middleware/auth';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -8,17 +9,17 @@ const router = Router();
 router.post('/pack',
     authenticate,
     requireRole('production_manager'),
-    inventoryController.pack
+    asyncHandler(inventoryController.pack)
 );
 router.post('/bundle',
     authenticate,
     requireRole('production_manager'),
-    inventoryController.bundle
+    asyncHandler(inventoryController.bundle)
 );
 router.post('/unpack',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.unpack
+    asyncHandler(inventoryController.unpack)
 );
 
 
@@ -26,44 +27,45 @@ router.post('/unpack',
 router.get('/stock/:id',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.getStock
+    asyncHandler(inventoryController.getStock)
 );
 router.get('/stock',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.listAll
+    asyncHandler(inventoryController.listAll)
 );
 router.get('/overview',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.getStockOverview
+    asyncHandler(inventoryController.getStockOverview)
 );
 router.get('/available',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.getAvailable
+    asyncHandler(inventoryController.getAvailable)
 );
 
 // Raw Materials
 router.get('/raw-materials',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.getRawMaterials
+    asyncHandler(inventoryController.getRawMaterials)
 );
 router.post('/raw-materials',
     authenticate,
     requireRole('admin'),
-    inventoryController.createRawMaterial
+    asyncHandler(inventoryController.createRawMaterial)
 );
 router.put('/raw-materials/:id',
     authenticate,
     requireRole('admin'),
-    inventoryController.updateRawMaterial
+    asyncHandler(inventoryController.updateRawMaterial)
 );
 router.post('/raw-materials/:id/adjust',
     authenticate,
     requireRole('admin', 'production_manager'),
-    inventoryController.adjustRawMaterial
+    asyncHandler(inventoryController.adjustRawMaterial)
 );
+
 
 export default router;

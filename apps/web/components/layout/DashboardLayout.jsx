@@ -7,7 +7,7 @@ import { SearchProvider } from '@/contexts/SearchContext';
 import { FactoryProvider } from '@/contexts/FactoryContext';
 import styles from './DashboardLayout.module.css';
 
-export default function DashboardLayout({ children, title = 'Dashboard' }) {
+export default function DashboardLayout({ children, title = 'Home' }) {
     return (
         <ProtectedRoute>
             <FactoryProvider>

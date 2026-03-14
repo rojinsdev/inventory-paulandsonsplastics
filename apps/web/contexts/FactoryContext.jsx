@@ -1,13 +1,22 @@
 'use client';
 
-import { createContext, useContext, useState, useMemo } from 'react';
+import { createContext, useContext, useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { factoriesAPI } from '@/lib/api';
+import { useAuth } from './AuthContext';
 
 const FactoryContext = createContext();
 
 export function FactoryProvider({ children }) {
+    const { user } = useAuth();
     const [selectedFactory, setSelectedFactory] = useState(null);
+
+    // Initialize selectedFactory from user profile if not set
+    useEffect(() => {
+        if (user?.factory_id && !selectedFactory) {
+            setSelectedFactory(user.factory_id);
+        }
+    }, [user, selectedFactory]);
 
     // Use React Query for shared factory data
     const {

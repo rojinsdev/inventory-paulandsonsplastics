@@ -26,6 +26,10 @@ class SalesOrderRepository {
       if (data is List) {
         orders = data;
       } else if (data is Map &&
+          data.containsKey('orders') &&
+          data['orders'] is List) {
+        orders = data['orders'];
+      } else if (data is Map &&
           data.containsKey('data') &&
           data['data'] is List) {
         orders = data['data'];
@@ -59,7 +63,8 @@ class SalesOrderRepository {
       return allItems;
     } catch (e) {
       if (e is DioException) {
-        throw Exception(e.response?.data['error'] ?? 'Failed to fetch orders');
+        throw Exception(
+            e.response?.data['message'] ?? 'Failed to fetch orders');
       }
       rethrow;
     }
@@ -72,7 +77,8 @@ class SalesOrderRepository {
       );
     } catch (e) {
       if (e is DioException) {
-        throw Exception(e.response?.data['error'] ?? 'Failed to prepare item');
+        throw Exception(
+            e.response?.data['message'] ?? 'Failed to prepare item');
       }
       rethrow;
     }

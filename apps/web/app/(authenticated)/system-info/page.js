@@ -238,7 +238,7 @@ export default function SystemInfoPage() {
                 <div className={styles.helpContent}>
                     <strong className={styles.helpTitle}>Need Help?</strong>
                     <p className={styles.helpText}>
-                        If you're experiencing issues, please contact the system administrator or
+                        If you&apos;re experiencing issues, please contact the system administrator or
                         check the server logs for more details. System status is checked automatically
                         and can be refreshed manually.
                     </p>

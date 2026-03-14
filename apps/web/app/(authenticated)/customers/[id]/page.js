@@ -294,23 +294,55 @@ export default function CustomerDetailPage() {
                                 <table className="table">
                                     <thead>
                                         <tr>
+                                            <th>Order #</th>
                                             <th>Order Date</th>
                                             <th>Status</th>
-                                            <th>Items</th>
                                             <th>Total Amount</th>
+                                            <th>Amount Paid</th>
+                                            <th>Balance Due</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {recentOrders.map((order) => (
-                                            <tr key={order.id}>
-                                                <td>{formatDate(order.order_date)}</td>
-                                                <td>
+                                            <tr key={order.id} className={order.is_overdue ? styles.overdueRow : ''}>
+                                                <td className={styles.orderNumber} data-label="Order #">
+                                                    #{order.id?.slice(-6).toUpperCase()}
+                                                </td>
+                                                <td data-label="Date">{formatDate(order.order_date)}</td>
+                                                <td data-label="Status">
                                                     <span className={`badge badge-${order.status}`}>
                                                         {order.status}
                                                     </span>
                                                 </td>
-                                                <td>{order.sales_order_items?.length || 0} items</td>
-                                                <td className="font-medium">{formatCurrency(order.total_amount || 0)}</td>
+                                                <td data-label="Total" className="font-medium">{formatCurrency(order.total_amount || 0)}</td>
+                                                <td data-label="Paid">{formatCurrency(order.amount_paid || 0)}</td>
+                                                <td data-label="Balance" className={styles.balanceDue}>{formatCurrency(order.balance_due || 0)}</td>
+                                                <td data-label="Actions">
+                                                    {(order.status === 'delivered' && (order.balance_due || 0) > 0) ? (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedOrder({
+                                                                    ...order,
+                                                                    order_number: `#${order.id.slice(-6).toUpperCase()}`
+                                                                });
+                                                                setPaymentForm({
+                                                                    amount: order.balance_due || '',
+                                                                    payment_method: 'Cash',
+                                                                    payment_date: new Date().toISOString().split('T')[0],
+                                                                    notes: ''
+                                                                });
+                                                                setShowPaymentModal(true);
+                                                            }}
+                                                            className={styles.recordButton}
+                                                        >
+                                                            <DollarSign size={14} />
+                                                            Record Payment
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-muted small">No action</span>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -386,12 +418,12 @@ export default function CustomerDetailPage() {
                                             <tbody>
                                                 {paymentHistory.orders_with_balance.map((order) => (
                                                     <tr key={order.id} className={order.is_overdue ? styles.overdueRow : ''}>
-                                                        <td className={styles.orderNumber}>{order.order_number}</td>
-                                                        <td>{formatDate(order.order_date)}</td>
-                                                        <td>{formatCurrency(order.total_amount || 0)}</td>
-                                                        <td>{formatCurrency(order.amount_paid || 0)}</td>
-                                                        <td className={styles.balanceDue}>{formatCurrency(order.balance_due || 0)}</td>
-                                                        <td>
+                                                        <td className={styles.orderNumber} data-label="Order #">{order.order_number}</td>
+                                                        <td data-label="Date">{formatDate(order.order_date)}</td>
+                                                        <td data-label="Total">{formatCurrency(order.total_amount || 0)}</td>
+                                                        <td data-label="Paid">{formatCurrency(order.amount_paid || 0)}</td>
+                                                        <td data-label="Balance" className={styles.balanceDue}>{formatCurrency(order.balance_due || 0)}</td>
+                                                        <td data-label="Deadline">
                                                             {order.credit_deadline ? (
                                                                 <span className={order.is_overdue ? styles.overdueDate : ''}>
                                                                     {formatDate(order.credit_deadline)}
@@ -399,7 +431,7 @@ export default function CustomerDetailPage() {
                                                                 </span>
                                                             ) : 'N/A'}
                                                         </td>
-                                                        <td>
+                                                        <td data-label="Actions">
                                                             <button
                                                                 onClick={() => {
                                                                     setSelectedOrder(order);
@@ -441,11 +473,11 @@ export default function CustomerDetailPage() {
                                             <tbody>
                                                 {paymentHistory.payment_records.map((payment) => (
                                                     <tr key={payment.id}>
-                                                        <td>{formatDate(payment.payment_date)}</td>
-                                                        <td>{payment.order_number || 'N/A'}</td>
-                                                        <td className={styles.paymentAmount}>{formatCurrency(payment.amount)}</td>
-                                                        <td>{payment.payment_method}</td>
-                                                        <td>{payment.notes || '—'}</td>
+                                                        <td data-label="Date">{formatDate(payment.payment_date)}</td>
+                                                        <td data-label="Order #">{payment.order_number || 'N/A'}</td>
+                                                        <td data-label="Amount" className={styles.paymentAmount}>{formatCurrency(payment.amount)}</td>
+                                                        <td data-label="Method">{payment.payment_method}</td>
+                                                        <td data-label="Notes">{payment.notes || '—'}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>

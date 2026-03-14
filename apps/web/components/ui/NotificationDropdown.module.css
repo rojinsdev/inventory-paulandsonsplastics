@@ -1,0 +1,246 @@
+.container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.triggerBtn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.triggerBtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--primary);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--error);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--surface-elevated);
+    box-shadow: 0 0 10px rgba(255, 71, 87, 0.4);
+}
+
+.dropdown {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: 360px;
+    background: var(--surface-elevated);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    overflow: hidden;
+    animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.header {
+    padding: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.count {
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    color: var(--text-muted);
+}
+
+.list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.item {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.iconContainer {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.stockIcon {
+    color: var(--error);
+}
+
+.orderIcon {
+    color: var(--warning);
+}
+
+.planIcon {
+    color: var(--primary);
+}
+
+.machineIcon {
+    color: var(--error);
+}
+
+.content {
+    flex-grow: 1;
+}
+
+.itemHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.time {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.message {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.item.critical .iconContainer {
+    background: rgba(255, 71, 87, 0.1);
+}
+
+.item.warning .iconContainer {
+    background: rgba(255, 165, 2, 0.1);
+}
+
+.item.info .iconContainer {
+    background: rgba(46, 213, 115, 0.1);
+}
+
+.arrow {
+    opacity: 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
+.item:hover .arrow {
+    opacity: 1;
+    transform: translateX(4px);
+    color: var(--primary);
+}
+
+.empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.emptyIcon {
+    margin-bottom: 12px;
+    color: var(--success);
+    opacity: 0.5;
+}
+
+.loading {
+    padding: 20px;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.footer {
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    display: flex;
+    justify-content: center;
+}
+
+.footer button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.footer button:hover {
+    color: var(--text-main);
+}
+
+/* Scrollbar */
+.list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+}

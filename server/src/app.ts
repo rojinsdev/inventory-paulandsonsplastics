@@ -21,6 +21,9 @@ import reportRoutes from './modules/reports/reports.routes';
 import factoryRoutes from './modules/factories/factory.routes';
 import capRoutes from './modules/inventory/cap.routes';
 import cashFlowRoutes from './modules/cash-flow/cash-flow.routes';
+import notificationRoutes from './modules/notifications/notification.routes';
+
+
 
 
 
@@ -31,10 +34,19 @@ const app = express();
 
 app.use(helmet());
 
-// Strict CORS Policy
+// CORS Policy
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
 app.use(cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            callback(null, false);
+        }
+    },
     credentials: true,
 }));
 
@@ -48,8 +60,19 @@ app.get('/', (req, res) => {
     res.json({ message: 'Inventory Production System API is running' });
 });
 
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+import { HealthUtility } from './utils/health';
+
+app.get('/health', async (req, res) => {
+    try {
+        const report = await HealthUtility.getReport();
+        res.status(report.status === 'ok' ? 200 : 500).json(report);
+    } catch (err: any) {
+        res.status(500).json({
+            status: 'error',
+            error: err instanceof Error ? err.message : String(err),
+            timestamp: new Date().toISOString()
+        });
+    }
 });
 
 // Auth routes (no authentication required)
@@ -73,6 +96,9 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/factories', factoryRoutes);
 app.use('/api/caps', capRoutes);
 app.use('/api/cash-flow', cashFlowRoutes);
+app.use('/api/notifications', notificationRoutes);
+
+
 
 // Global Error Handler
 import { errorHandler } from './middleware/errorHandler';

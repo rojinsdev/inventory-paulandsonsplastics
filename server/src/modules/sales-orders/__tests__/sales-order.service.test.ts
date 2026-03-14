@@ -36,6 +36,7 @@ describe('SalesOrderService', () => {
         chain.insert = jest.fn().mockReturnValue(chain);
         chain.delete = jest.fn().mockReturnValue(chain);
         chain.upsert = jest.fn().mockResolvedValue({ error });
+        chain.or = jest.fn().mockReturnValue(chain);
         chain.then = (resolve: any) => resolve({ data, error });
         return chain;
     };
@@ -122,7 +123,7 @@ describe('SalesOrderService', () => {
 
             await service.getPendingPayments({ status: 'pending' });
 
-            expect(mockQuery.gt).toHaveBeenCalledWith('balance_due', 0);
+            expect(mockQuery.or).toHaveBeenCalledWith('balance_due.gt.0,balance_due.is.null');
         });
 
         it('should filter by paid status (balance_due = 0)', async () => {

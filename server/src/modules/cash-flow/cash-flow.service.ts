@@ -1,5 +1,6 @@
 import { supabase } from '../../config/supabase';
 import { randomUUID } from 'crypto';
+import { getPagination } from '../../utils/supabase';
 
 export interface CashFlowLogDTO {
     date?: string;
@@ -143,22 +144,34 @@ export class CashFlowService {
     /**
      * Get daily cash flow sheet
      */
-    async getDailySheet(date: string, factoryId?: string) {
+    async getDailySheet(date: string, filters?: { factoryId?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page, filters?.size);
+
         let query = supabase
             .from('cash_flow_logs')
             .select(`
                 *,
                 cash_flow_categories(name, type, is_system, is_recurring)
-            `)
+            `, { count: 'exact' })
             .eq('date', date);
 
-        if (factoryId) {
-            query = query.eq('factory_id', factoryId);
+        if (filters?.factoryId) {
+            query = query.eq('factory_id', filters.factoryId);
         }
 
-        const { data, error } = await query;
+        const { data, error, count } = await query
+            .order('created_at', { ascending: false })
+            .range(from, to);
+
         if (error) throw new Error(error.message);
-        return data;
+        return {
+            logs: data,
+            pagination: {
+                total: count,
+                page: filters?.page || 1,
+                size: filters?.size || 10
+            }
+        };
     }
 
     /**

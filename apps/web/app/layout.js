@@ -9,6 +9,7 @@ import NextTopLoader from 'nextjs-toploader';
 import QueryProvider from '../components/providers/QueryProvider';
 import RealtimeHandler from '../components/providers/RealtimeHandler';
 import { Toaster } from 'react-hot-toast';
+import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 
 
 export const metadata = {
@@ -48,7 +49,9 @@ export default function RootLayout({ children }) {
                     <UIProvider>
                       <RealtimeHandler />
                       <Toaster position="top-right" />
-                      {children}
+                      <ErrorBoundary>
+                        {children}
+                      </ErrorBoundary>
                     </UIProvider>
                   </GuideProvider>
                 </SettingsProvider>

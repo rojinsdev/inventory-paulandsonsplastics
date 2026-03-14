@@ -9,6 +9,8 @@ class ProductionRequest {
   final String status;
   final String? salesOrderId;
   final DateTime createdAt;
+  final int availableStock;
+  final bool isSatisfiable;
 
   ProductionRequest({
     required this.id,
@@ -21,6 +23,8 @@ class ProductionRequest {
     required this.status,
     this.salesOrderId,
     required this.createdAt,
+    this.availableStock = 0,
+    this.isSatisfiable = false,
   });
 
   factory ProductionRequest.fromJson(Map<String, dynamic> json) {
@@ -32,11 +36,13 @@ class ProductionRequest {
       productName: product?['name'] ?? 'Unknown Product',
       productSize: product?['size'],
       productColor: product?['color'],
-      quantity: json['quantity'] ?? 0,
+      quantity: ((json['quantity'] ?? 0) as num).toInt(),
       unitType: json['unit_type'] ?? 'bundle',
       status: json['status'] ?? 'pending',
       salesOrderId: json['sales_order_id'],
       createdAt: DateTime.parse(json['created_at']),
+      availableStock: ((json['available_stock'] ?? 0) as num).toInt(),
+      isSatisfiable: json['is_satisfiable'] ?? false,
     );
   }
 
@@ -48,5 +54,7 @@ class ProductionRequest {
         'status': status,
         'sales_order_id': salesOrderId,
         'created_at': createdAt.toIso8601String(),
+        'available_stock': availableStock,
+        'is_satisfiable': isSatisfiable,
       };
 }

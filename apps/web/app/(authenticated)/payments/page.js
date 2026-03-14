@@ -7,15 +7,17 @@ import {
     DollarSign, Search, Filter, Calendar, X,
     AlertCircle, CheckCircle2, Clock, TrendingUp
 } from 'lucide-react';
+import { useFactory } from '@/contexts/FactoryContext';
 import styles from './page.module.css';
 
 export default function PaymentsPage() {
+    const { selectedFactory } = useFactory();
     const queryClient = useQueryClient();
 
     // State
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCustomer, setSelectedCustomer] = useState('');
-    const [statusFilter, setStatusFilter] = useState('pending'); // all, pending, overdue, paid
+    const [statusFilter, setStatusFilter] = useState('all'); // all, pending, overdue, paid
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [paymentForm, setPaymentForm] = useState({
@@ -27,17 +29,18 @@ export default function PaymentsPage() {
 
     // Queries
     const { data: pendingOrders = [], isLoading: ordersLoading } = useQuery({
-        queryKey: ['pending-payments', { status: statusFilter, customer: selectedCustomer }],
+        queryKey: ['pending-payments', { status: statusFilter, customer: selectedCustomer, factory: selectedFactory }],
         queryFn: () => {
             const params = { status: statusFilter };
             if (selectedCustomer) params.customer_id = selectedCustomer;
-            return ordersAPI.getPendingPayments(params);
+            if (selectedFactory) params.factory_id = selectedFactory;
+            return ordersAPI.getPendingPayments(params).then(res => res?.data || (Array.isArray(res) ? res : []));
         },
     });
 
     const { data: customers = [], isLoading: customersLoading, error: customersError } = useQuery({
         queryKey: ['customers'],
-        queryFn: () => customersAPI.getAll(),
+        queryFn: () => customersAPI.getAll().then(res => res?.data || (Array.isArray(res) ? res : [])),
     });
 
     // Mutation for recording payment
@@ -249,21 +252,21 @@ export default function PaymentsPage() {
                         ) : (
                             filteredOrders.map(order => (
                                 <tr key={order.id} className={order.is_overdue ? styles.overdueRow : ''}>
-                                    <td className={styles.orderNumber}>#{order.id?.slice(-6).toUpperCase()}</td>
-                                    <td>{order.customer?.name || 'N/A'}</td>
-                                    <td>{new Date(order.order_date).toLocaleDateString('en-IN')}</td>
-                                    <td>₹{parseFloat(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                    <td>₹{parseFloat(order.amount_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                    <td className={styles.balanceDue}>
+                                    <td className={styles.orderNumber} data-label="Order #">#{order.id?.slice(-6).toUpperCase()}</td>
+                                    <td data-label="Customer">{order.customer?.name || 'N/A'}</td>
+                                    <td data-label="Order Date">{new Date(order.order_date).toLocaleDateString('en-IN')}</td>
+                                    <td data-label="Total Amount">₹{parseFloat(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                    <td data-label="Amount Paid">₹{parseFloat(order.amount_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                    <td className={styles.balanceDue} data-label="Balance Due">
                                         ₹{parseFloat(order.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                     </td>
-                                    <td>
+                                    <td data-label="Credit Deadline">
                                         {order.credit_deadline
                                             ? new Date(order.credit_deadline).toLocaleDateString('en-IN')
                                             : 'N/A'
                                         }
                                     </td>
-                                    <td>
+                                    <td data-label="Status">
                                         {order.is_overdue ? (
                                             <span className={styles.statusBadge} data-status="overdue">
                                                 <AlertCircle size={14} />
@@ -281,10 +284,11 @@ export default function PaymentsPage() {
                                             </span>
                                         )}
                                     </td>
-                                    <td>
+                                    <td data-label="Actions">
                                         <button
                                             onClick={() => handleOpenPaymentModal(order)}
                                             className={styles.recordButton}
+                                            disabled={order.balance_due <= 0}
                                         >
                                             <DollarSign size={16} />
                                             Record Payment

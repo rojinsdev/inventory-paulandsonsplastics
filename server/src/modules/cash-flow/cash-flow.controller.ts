@@ -4,8 +4,13 @@ import { cashFlowService } from './cash-flow.service';
 export class CashFlowController {
     async getDailySheet(req: Request, res: Response) {
         try {
-            const { date, factory_id } = req.query;
-            const data = await cashFlowService.getDailySheet(date as string, factory_id as string);
+            const { date, factory_id, page, size } = req.query;
+            const filters = {
+                factoryId: factory_id as string,
+                page: page ? parseInt(page as string) : 1,
+                size: size ? parseInt(size as string) : 10,
+            };
+            const data = await cashFlowService.getDailySheet(date as string, filters);
             res.json(data);
         } catch (error: any) {
             res.status(500).json({ error: error.message });

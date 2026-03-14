@@ -4,6 +4,8 @@ class Cap {
   final String? color;
   final double idealWeightGrams;
   final double idealCycleTimeSeconds;
+  final int stockQuantity;
+  final String? templateId;
 
   Cap({
     required this.id,
@@ -11,9 +13,22 @@ class Cap {
     this.color,
     required this.idealWeightGrams,
     required this.idealCycleTimeSeconds,
+    this.stockQuantity = 0,
+    this.templateId,
   });
 
   factory Cap.fromJson(Map<String, dynamic> json) {
+    // Handle the join structure from Superbase
+    final stockField = json['stock'];
+    int stock = 0;
+    if (stockField != null) {
+      if (stockField is List && stockField.isNotEmpty) {
+        stock = (stockField[0]['quantity'] as num?)?.toInt() ?? 0;
+      } else if (stockField is Map) {
+        stock = (stockField['quantity'] as num?)?.toInt() ?? 0;
+      }
+    }
+
     return Cap(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? 'Unknown',
@@ -21,6 +36,8 @@ class Cap {
       idealWeightGrams: (json['ideal_weight_grams'] as num?)?.toDouble() ?? 0.0,
       idealCycleTimeSeconds:
           (json['ideal_cycle_time_seconds'] as num?)?.toDouble() ?? 0.0,
+      stockQuantity: stock,
+      templateId: json['template_id'] as String?,
     );
   }
 

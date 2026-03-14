@@ -152,6 +152,35 @@ class _PreparationCard extends ConsumerWidget {
                 _DeliveryIndicator(dateStr: deliveryStr),
               ],
             ),
+            if (item.isBackordered) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border:
+                      Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 14, color: Colors.orange),
+                    SizedBox(width: 4),
+                    Text(
+                      'Backordered - Awaiting Production',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Text(
               '${item.productSize ?? ''} ${item.productColor ?? ''}'.trim(),
@@ -176,6 +205,7 @@ class _PreparationCard extends ConsumerWidget {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  const Spacer(),
                 ],
               ),
             ),
@@ -200,28 +230,35 @@ class _PreparationCard extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () async {
-                  try {
-                    await ref.read(pendingOrdersProvider.notifier).prepareItem(
-                          item.id,
-                          factoryId: user?.factoryId,
-                        );
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Item marked as prepared')),
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error: $e')),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.check_circle_outline),
-                label: const Text('Mark as Prepared'),
+                onPressed: item.isBackordered
+                    ? null
+                    : () async {
+                        try {
+                          await ref
+                              .read(pendingOrdersProvider.notifier)
+                              .prepareItem(
+                                item.id,
+                                factoryId: user?.factoryId,
+                              );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Item marked as prepared')),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                          }
+                        }
+                      },
+                icon: Icon(item.isBackordered
+                    ? Icons.hourglass_empty
+                    : Icons.check_circle_outline),
+                label: Text(
+                    item.isBackordered ? 'Awaiting Stock' : 'Mark as Prepared'),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(

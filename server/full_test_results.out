@@ -1,0 +1,147 @@
+npm warn invalid config cache=false set in command line options
+npm warn invalid config Must be valid filesystem path
+
+> server@1.0.0 test
+> jest
+
+PASS src/utils/__tests__/AppError.test.ts
+  AppError Utility
+    ΓêÜ should create an operational error with correct status code (12 ms)
+    ΓêÜ should set status to "error" for 500 status code (2 ms)
+    ΓêÜ should capture stack trace (12 ms)
+
+  console.log
+    Automated allocation skipped for prod-123 in finished. Manual fulfillment required.
+
+      at StockAllocationService.allocateStock (src/modules/inventory/stock-allocation.service.ts:12:17)
+
+FAIL src/modules/production/__tests__/production.service.test.ts
+  ProductionService
+    ├ù should submit production successfully and deduct raw materials (19 ms)
+    ΓêÜ should throw error if insufficient raw material (20 ms)
+
+  ΓùÅ ProductionService ΓÇ║ should submit production successfully and deduct raw materials
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "prod-1", "semi_finished", 95, "fac-1"
+
+    Number of calls: 0
+
+      112 |         );
+      113 |
+    > 114 |         expect(stockAllocationService.allocateStock).toHaveBeenCalledWith(
+          |                                                      ^
+      115 |             'prod-1',
+      116 |             'semi_finished',
+      117 |             95,
+
+      at Object.<anonymous> (src/modules/production/__tests__/production.service.test.ts:114:54)
+
+PASS src/modules/cash-flow/__tests__/cash-flow.service.test.ts
+  CashFlowService - Shared Costs
+    ΓêÜ should calculate shared cost split correctly (102 ms)
+
+  console.log
+    Automated allocation skipped for prod-123 in finished. Manual fulfillment required.
+
+      at StockAllocationService.allocateStock (src/modules/inventory/stock-allocation.service.ts:12:17)
+
+FAIL src/modules/inventory/__tests__/stock-allocation.service.test.ts
+  StockAllocationService
+    ├ù should allocate stock to backorders in FIFO order (70 ms)
+    ├ù should correctly call reserveFulfillment and update database for fulfilled item (6 ms)
+
+  ΓùÅ StockAllocationService ΓÇ║ should allocate stock to backorders in FIFO order
+
+    expect(jest.fn()).toHaveBeenCalledTimes(expected)
+
+    Expected number of calls: 1
+    Received number of calls: 0
+
+      73 |         // 3. Verify
+      74 |         // Expect Backorder 1 to be fulfilled (update called once for item-1)
+    > 75 |         expect(updateSpy).toHaveBeenCalledTimes(1);
+         |                           ^
+      76 |         expect(updateSpy).toHaveBeenCalledWith({ is_backordered: false });
+      77 |
+      78 |         // Ensure it stopped after first item (remaining 5 < 10)
+
+      at Object.<anonymous> (src/modules/inventory/__tests__/stock-allocation.service.test.ts:75:27)
+
+  ΓùÅ StockAllocationService ΓÇ║ should correctly call reserveFulfillment and update database for fulfilled item
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: {"is_backordered": false}
+
+    Number of calls: 0
+
+      130 |
+      131 |         // Verify Update was called
+    > 132 |         expect(updateSpy).toHaveBeenCalledWith({ is_backordered: false });
+          |                           ^
+      133 |
+      134 |         // Verify it was called for the correct item ID
+      135 |         // The chain is .update(...).eq('id', item.id)
+
+      at Object.<anonymous> (src/modules/inventory/__tests__/stock-allocation.service.test.ts:132:27)
+
+  console.log
+    [Overdue Check] Marked 1 orders as overdue and sent notifications
+
+      at SalesOrderService.checkAndUpdateOverdueOrders (src/modules/sales-orders/sales-order.service.ts:870:17)
+
+PASS src/modules/sales-orders/__tests__/sales-credit.integration.test.ts
+  Sales & Credit Integration - Partial Payment Loop
+    ΓêÜ should handle the full partial payment cycle correctly (20 ms)
+    ΓêÜ should correctly mark orders as overdue and send notifications (53 ms)
+
+FAIL src/modules/sales-orders/__tests__/sales-order.service.test.ts
+  SalesOrderService
+    ΓêÜ should calculate totals and discounts correctly during delivery (11 ms)
+    getPendingPayments
+      ├ù should filter by pending status (balance_due > 0) (1 ms)
+      ΓêÜ should filter by paid status (balance_due = 0) (1 ms)
+      ΓêÜ should return null if order is not found
+      ΓêÜ should filter by overdue status (1 ms)
+      ΓêÜ should not apply balance filter when status is all (1 ms)
+      ΓêÜ should filter by customer_id if provided (1 ms)
+
+  ΓùÅ SalesOrderService ΓÇ║ getPendingPayments ΓÇ║ should filter by pending status (balance_due > 0)
+
+    TypeError: query.or is not a function
+
+      769 |         } else if (filters?.status === 'pending') {
+      770 |             // Include NULL balances as pending (or we could assume balance_due is not yet set)
+    > 771 |             query = query.or('balance_due.gt.0,balance_due.is.null');
+          |                           ^
+      772 |         } else if (filters?.status === 'paid') {
+      773 |             query = query.eq('balance_due', 0);
+      774 |         } else if (!filters?.status || filters.status === 'all') {
+
+      at SalesOrderService.getPendingPayments (src/modules/sales-orders/sales-order.service.ts:771:27)
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/sales-order.service.test.ts:123:27)
+
+  console.log
+    Γ£à PlanningService initialized with updated query logic
+
+      at new PlanningService (src/modules/planning/planning.service.ts:21:17)
+
+[32minfo[39m: Fetching profile for user ID: user-123 {"service":"inventory-system","timestamp":"2026-02-22T17:53:24.055Z"}
+[0mPOST /api/auth/login [32m200[0m 24.001 ms - 199[0m
+[0mPOST /api/auth/login [33m400[0m 2.447 ms - 303[0m
+[33mwarn[39m: Login failed for test@example.com: Invalid login credentials {"service":"inventory-system","timestamp":"2026-02-22T17:53:24.077Z"}
+[0mPOST /api/auth/login [33m401[0m 2.141 ms - 55[0m
+PASS src/modules/auth/__tests__/auth.integration.test.ts
+  Auth Integration
+    ΓêÜ should login successfully with valid credentials (51 ms)
+    ΓêÜ should return 400 for invalid input (7 ms)
+    ΓêÜ should return 401 for wrong credentials (7 ms)
+
+Test Suites: 3 failed, 4 passed, 7 total
+Tests:       4 failed, 16 passed, 20 total
+Snapshots:   0 total
+Time:        5.589 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

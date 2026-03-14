@@ -3,7 +3,9 @@ import '../../../features/auth/providers/auth_provider.dart';
 import '../data/master_data_repository.dart';
 import '../data/models/machine_model.dart';
 import '../data/models/product_model.dart';
+import '../data/models/product_template_model.dart';
 import '../data/models/cap_model.dart';
+import '../data/models/cap_template_model.dart';
 
 final masterDataRepositoryProvider = Provider<MasterDataRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -20,7 +22,19 @@ final productsProvider = FutureProvider.autoDispose<List<Product>>((ref) async {
   return repo.getProducts();
 });
 
+final productTemplatesProvider =
+    FutureProvider.autoDispose<List<ProductTemplate>>((ref) async {
+  final repo = ref.watch(masterDataRepositoryProvider);
+  return repo.getProductTemplates();
+});
+
 final capsProvider = FutureProvider.autoDispose<List<Cap>>((ref) async {
   final repo = ref.watch(masterDataRepositoryProvider);
   return repo.getCaps();
+});
+
+final capTemplatesProvider =
+    FutureProvider.autoDispose<List<CapTemplate>>((ref) async {
+  final repo = ref.watch(masterDataRepositoryProvider);
+  return repo.getCapTemplates();
 });

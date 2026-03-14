@@ -19,8 +19,9 @@ class ProductionRequestRepository {
       return data.map((json) => ProductionRequest.fromJson(json)).toList();
     } catch (e) {
       if (e is DioException) {
-        throw Exception(
-            e.response?.data['error'] ?? 'Failed to fetch production requests');
+        throw Exception(e.response?.data['message'] ??
+            e.response?.data['error'] ??
+            'Failed to fetch production requests');
       }
       rethrow;
     }
@@ -37,8 +38,9 @@ class ProductionRequestRepository {
       return ProductionRequest.fromJson(response.data);
     } catch (e) {
       if (e is DioException) {
-        throw Exception(
-            e.response?.data['error'] ?? 'Failed to update request status');
+        throw Exception(e.response?.data['message'] ??
+            e.response?.data['error'] ??
+            'Failed to update request status');
       }
       rethrow;
     }

@@ -3,17 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/inventory_provider.dart';
 
 class UnpackModal extends ConsumerStatefulWidget {
-  final String productId;
-  final String productName;
-  final int currentBundles;
-  final int currentPackets;
+  final InventoryStock stock;
 
   const UnpackModal({
     super.key,
-    required this.productId,
-    required this.productName,
-    required this.currentBundles,
-    required this.currentPackets,
+    required this.stock,
   });
 
   @override
@@ -27,7 +21,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
   bool _isProcessing = false;
 
   int get _availableStock =>
-      _fromState == 'finished' ? widget.currentBundles : widget.currentPackets;
+      _fromState == 'finished' ? widget.stock.bundledQty : widget.stock.packedQty;
 
   bool get _isQuantityInvalid {
     final qty = int.tryParse(_quantityController.text) ?? 0;
@@ -56,11 +50,12 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
 
     setState(() => _isProcessing = true);
     try {
-      await ref.read(inventoryRepositoryProvider).unpack(
-            productId: widget.productId,
-            quantity: qty,
-            fromState: _fromState,
-            toState: _toState,
+      await ref.read(inventoryOperationProvider.notifier).unpack(
+            widget.stock.productId ?? '',
+            qty,
+            _fromState,
+            _toState,
+            capId: widget.stock.capId,
           );
 
       if (mounted) {
@@ -85,6 +80,20 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+
+    // Calculate Yield based on product packing details
+    final qty = int.tryParse(_quantityController.text) ?? 0;
+    int multiplier = 0;
+    if (_fromState == 'finished') {
+      if (_toState == 'packed') {
+        multiplier = widget.stock.packetsPerBundle ?? 50;
+      } else {
+        multiplier = widget.stock.itemsPerBundle ?? 600;
+      }
+    } else {
+      multiplier = widget.stock.itemsPerPacket ?? 12;
+    }
+    final yieldValue = qty * multiplier;
 
     return Container(
       padding: EdgeInsets.only(
@@ -124,7 +133,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                       ),
                     ),
                     Text(
-                      widget.productName,
+                      widget.stock.displayName,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: colorScheme.onSurfaceVariant,
                       ),
@@ -150,7 +159,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
-                'Available: ${_fromState == 'finished' ? widget.currentBundles : widget.currentPackets} ${_fromState == 'finished' ? 'Bundles' : 'Packets'}',
+                'Available: $_availableStock ${_fromState == 'finished' ? 'Bundles' : 'Packets'}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: (_availableStock == 0)
                       ? colorScheme.error
@@ -239,6 +248,35 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
               suffixText: _fromState == 'finished' ? 'Bundles' : 'Packets',
             ),
           ),
+
+          const SizedBox(height: 24),
+          
+          if (qty > 0)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color:
+                    colorScheme.primaryContainer.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Expected Yield:',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onPrimaryContainer),
+                  ),
+                  Text(
+                    '$yieldValue ${_toState == 'packed' ? 'Packets' : 'Loose Items'}',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           const SizedBox(height: 32),
           SizedBox(

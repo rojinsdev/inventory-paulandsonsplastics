@@ -1,6 +1,11 @@
 .container {
     position: relative;
     width: 100%;
+    z-index: 1;
+}
+
+.container.isOpen {
+    z-index: 9999;
 }
 
 .trigger {
@@ -59,7 +64,7 @@
     top: calc(100% + 0.25rem);
     left: 0;
     right: 0;
-    z-index: 50;
+    z-index: 9999;
     background-color: var(--surface);
     border: 1px solid var(--border);
     border-radius: 0.75rem;

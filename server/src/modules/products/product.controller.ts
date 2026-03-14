@@ -2,6 +2,25 @@ import { Request, Response } from 'express';
 import { productService } from './product.service';
 import { z } from 'zod';
 
+const createTemplateSchema = z.object({
+    name: z.string().min(1),
+    size: z.string().min(1),
+    weight_grams: z.number().positive(),
+    items_per_packet: z.number().int().positive().optional(),
+    packets_per_bundle: z.number().int().positive().optional(),
+    items_per_bundle: z.number().int().positive().optional(),
+    selling_price: z.number().nonnegative().optional(),
+    factory_id: z.string().uuid('Invalid factory ID'),
+    raw_material_id: z.string().uuid('Invalid raw material ID').optional().nullable(),
+    cap_template_id: z.string().uuid('Invalid cap template ID').optional().nullable(),
+    colors: z.array(z.string().min(1)).min(1),
+});
+
+const updateTemplateSchema = createTemplateSchema.extend({
+    variants_to_add: z.array(z.string().min(1)).optional(),
+    variants_to_remove: z.array(z.string().min(1)).optional(),
+}).partial();
+
 const createProductSchema = z.object({
     name: z.string().min(1),
     sku: z.string().nullable().optional(),
@@ -97,6 +116,60 @@ export class ProductController {
             } else {
                 res.status(404).json({ error: 'Product not found' });
             }
+        }
+    }
+
+    // --- Template Handlers ---
+
+    async createTemplate(req: Request, res: Response) {
+        try {
+            const validated = createTemplateSchema.parse(req.body);
+            const { colors, ...templateData } = validated;
+            const result = await productService.createTemplateWithVariants(templateData, colors);
+            res.status(201).json(result);
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: error.issues });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
+
+    async listTemplates(req: Request, res: Response) {
+        try {
+            const factoryId = req.query.factory_id as string | undefined;
+            const templates = await productService.getTemplates(factoryId);
+            res.json(templates);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async updateTemplate(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const validated = updateTemplateSchema.parse(req.body);
+            const template = await productService.updateTemplate(id, validated);
+            res.json(template);
+        } catch (error: any) {
+            if (error instanceof z.ZodError) {
+                res.status(400).json({ error: error.issues });
+            } else if (error.message.includes('not found')) {
+                res.status(404).json({ error: 'Template not found' });
+            } else {
+                res.status(500).json({ error: error.message });
+            }
+        }
+    }
+
+    async getTemplate(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const template = await productService.getTemplateById(id);
+            res.json(template);
+        } catch (error: any) {
+            res.status(404).json({ error: 'Template not found' });
         }
     }
 }

@@ -28,7 +28,13 @@ class ApiClient {
           if (token != null) {
             options.headers['Authorization'] = 'Bearer $token';
           }
+          debugPrint('🌐 Request: ${options.method} ${options.uri}');
           return handler.next(options);
+        },
+        onResponse: (response, handler) {
+          debugPrint(
+              '✅ Response: ${response.statusCode} for ${response.requestOptions.uri}');
+          return handler.next(response);
         },
         onError: (DioException e, handler) async {
           if (e.response?.statusCode == 401) {

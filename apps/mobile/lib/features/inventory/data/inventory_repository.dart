@@ -3,6 +3,9 @@ import '../../../core/api/api_client.dart';
 import '../../../core/constants/api_constants.dart';
 import '../providers/inventory_provider.dart';
 import '../../inventory/providers/raw_material_model.dart';
+import '../providers/cap_stock_model.dart';
+
+
 
 class InventoryRepository {
   final ApiClient _apiClient;
@@ -18,7 +21,18 @@ class InventoryRepository {
           : ApiConstants.inventoryStock;
 
       final response = await _apiClient.client.get(endpoint);
-      final data = response.data as List<dynamic>? ?? [];
+      final responseData = response.data;
+      final List<dynamic> data;
+
+      if (responseData is Map<String, dynamic> &&
+          responseData.containsKey('stock')) {
+        data = responseData['stock'] as List<dynamic>;
+      } else if (responseData is List<dynamic>) {
+        data = responseData;
+      } else {
+        data = [];
+      }
+
       return data.map((item) => InventoryStock.fromJson(item)).toList();
     } catch (e) {
       if (e is DioException) {
@@ -57,12 +71,54 @@ class InventoryRepository {
           : ApiConstants.inventoryRawMaterials;
 
       final response = await _apiClient.client.get(endpoint);
-      final data = response.data as List<dynamic>? ?? [];
+      final responseData = response.data;
+      final List<dynamic> data;
+
+      if (responseData is Map<String, dynamic> &&
+          responseData.containsKey('rawMaterials')) {
+        data = responseData['rawMaterials'] as List<dynamic>;
+      } else if (responseData is List<dynamic>) {
+        data = responseData;
+      } else {
+        data = [];
+      }
+
       return data.map((item) => RawMaterial.fromJson(item)).toList();
     } catch (e) {
       if (e is DioException) {
         throw Exception(
             e.response?.data['error'] ?? 'Failed to fetch raw materials');
+      }
+      rethrow;
+    }
+  }
+
+  /// Get cap stock balances (read-only)
+  Future<List<CapStock>> getCapStockBalances() async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.inventoryCapBalances}?factory_id=$factoryId'
+          : ApiConstants.inventoryCapBalances;
+
+      final response = await _apiClient.client.get(endpoint);
+      final responseData = response.data;
+      final List<dynamic> data;
+
+      if (responseData is Map<String, dynamic> &&
+          responseData.containsKey('capBalances')) {
+        data = responseData['capBalances'] as List<dynamic>;
+      } else if (responseData is List<dynamic>) {
+        data = responseData;
+      } else {
+        data = [];
+      }
+
+      return data.map((item) => CapStock.fromJson(item)).toList();
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(
+            e.response?.data['error'] ?? 'Failed to fetch cap stock balances');
       }
       rethrow;
     }
@@ -93,11 +149,16 @@ class InventoryRepository {
   Future<void> pack({
     required String productId,
     required int packetsCreated,
+    String? capId,
   }) async {
     try {
       await _apiClient.client.post(
         ApiConstants.inventoryPack,
-        data: {'product_id': productId, 'packets_created': packetsCreated},
+        data: {
+          'product_id': productId,
+          'packets_created': packetsCreated,
+          if (capId != null) 'cap_id': capId,
+        },
       );
     } catch (e) {
       if (e is DioException) {
@@ -111,6 +172,7 @@ class InventoryRepository {
     required String productId,
     required int bundlesCreated,
     String source = 'packed',
+    String? capId,
   }) async {
     try {
       await _apiClient.client.post(
@@ -119,6 +181,7 @@ class InventoryRepository {
           'product_id': productId,
           'bundles_created': bundlesCreated,
           'source': source,
+          if (capId != null) 'cap_id': capId,
         },
       );
     } catch (e) {
@@ -134,6 +197,7 @@ class InventoryRepository {
     required int quantity,
     required String fromState,
     required String toState,
+    String? capId,
   }) async {
     try {
       await _apiClient.client.post(
@@ -143,6 +207,7 @@ class InventoryRepository {
           'quantity': quantity,
           'from_state': fromState,
           'to_state': toState,
+          if (capId != null) 'cap_id': capId,
         },
       );
     } catch (e) {
@@ -152,4 +217,6 @@ class InventoryRepository {
       rethrow;
     }
   }
+
+
 }

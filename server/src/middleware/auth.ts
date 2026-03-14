@@ -1,11 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../config/supabase';
+import { withRetry } from '../utils/supabaseRetries';
+import logger from '../utils/logger';
 
 export interface AuthRequest extends Request {
     user?: {
         id: string;
         email: string;
+        name: string;
         role: 'admin' | 'production_manager';
+        factory_id: string | null;
     };
 }
 
@@ -31,10 +35,21 @@ export const authenticate = async (
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-        // Verify token with Supabase
-        const { data: { user }, error } = await supabase.auth.getUser(token);
+        // Verify token with Supabase (Use with retry for transient network errors)
+        const { data: { user }, error } = await withRetry<{ data: { user: any }; error: any }>(
+            () => supabase.auth.getUser(token)
+        );
 
         if (error || !user) {
+            if (error) {
+                // Log expired tokens as warnings instead of errors to avoid red alerts
+                const isExpired = error.message?.includes('expired');
+                if (isExpired) {
+                    logger.warn('Supabase Session Expired:', error.message);
+                } else {
+                    logger.error('Supabase Auth Error:', error);
+                }
+            }
             return res.status(401).json({
                 error: 'Unauthorized',
                 message: 'Invalid or expired token'
@@ -42,11 +57,13 @@ export const authenticate = async (
         }
 
         // Fetch user profile from database (source of truth for role)
-        const { data: profile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('id, email, role, active')
-            .eq('id', user.id)
-            .single();
+        const { data: profile, error: profileError } = await withRetry<any>(() =>
+            supabase
+                .from('user_profiles')
+                .select('id, email, role, active, name, factory_id')
+                .eq('id', user.id)
+                .single()
+        );
 
         if (profileError || !profile) {
             return res.status(401).json({
@@ -67,12 +84,14 @@ export const authenticate = async (
         req.user = {
             id: profile.id,
             email: profile.email,
+            name: profile.name,
             role: profile.role,
+            factory_id: profile.factory_id,
         };
 
         next();
     } catch (error: any) {
-        console.error('Authentication error:', error);
+        logger.error('Authentication process failed:', error);
         return res.status(500).json({
             error: 'Internal Server Error',
             message: 'Authentication failed'

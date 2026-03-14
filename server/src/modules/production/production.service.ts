@@ -3,6 +3,8 @@ import { SettingsService } from '../settings/settings.service';
 import { AuditService } from '../audit/audit.service';
 import { stockAllocationService } from '../inventory/stock-allocation.service';
 import { inventoryService } from '../inventory/inventory.service';
+import { getPagination } from '../../utils/supabase';
+import logger from '../../utils/logger';
 
 const auditService = new AuditService();
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
@@ -23,9 +25,9 @@ export interface SubmitProductionDTO {
     // For weight-based products (caps)
     total_weight_kg?: number; // NEW: For caps
 
-    // Actual metrics
-    actual_cycle_time_seconds: number; // NEW: From machine display
-    actual_weight_grams: number; // NEW: Measured weight per unit
+    // Actual metrics (Optional for robustness)
+    actual_cycle_time_seconds?: number; // NEW: From machine display
+    actual_weight_grams?: number; // NEW: Measured weight per unit
 
     // Downtime
     downtime_minutes?: number; // NEW: Calculated or manual
@@ -36,13 +38,15 @@ export interface SubmitProductionDTO {
 
 export interface SubmitCapProductionDTO {
     cap_id: string;
-    factory_id: string;
+    factory_id?: string; // Optional: Server will default to MAIN_FACTORY_ID
     date: string;
     shift_number: number;
     start_time: string;
     end_time: string;
-    total_weight_produced_kg: number;
-    actual_cycle_time_seconds: number;
+    total_weight_produced_kg?: number; // Optional if total_produced is provided
+    total_produced?: number; // Optional if total_weight_produced_kg is provided
+    actual_cycle_time_seconds?: number; // Optional
+    actual_weight_grams?: number; // Optional
     remarks?: string;
     user_id: string;
 }
@@ -77,10 +81,13 @@ export class ProductionService {
             throw new Error('Invalid or inactive machine');
         }
 
-        // 4. Get Product and counting method
+        // 4. Get Product and counting method + joined template info
         const { data: product, error: productError } = await supabase
             .from('products')
-            .select('selling_price, weight_grams, status, counting_method, raw_material_id, factory_id')
+            .select(`
+                id, color, selling_price, weight_grams, status, counting_method, raw_material_id, factory_id, template_id,
+                product_templates(cap_template_id)
+            `)
             .eq('id', data.product_id)
             .single();
 
@@ -95,11 +102,12 @@ export class ProductionService {
         }
 
         // 6. Get Ideal Cycle Time
+        // NOTE: machine_products is now keyed on (machine_id, product_template_id) since migration 022
         const { data: machineProduct, error: mpError } = await supabase
             .from('machine_products')
             .select('ideal_cycle_time_seconds')
             .eq('machine_id', data.machine_id)
-            .eq('product_id', data.product_id)
+            .eq('product_template_id', product.template_id)
             .single();
 
         if (mpError || !machineProduct) {
@@ -132,8 +140,9 @@ export class ProductionService {
         }
 
         // === CYCLE TIME LOSS CALCULATION ===
+        const actual_cycle_time = data.actual_cycle_time_seconds ?? ideal_cycle_time;
         const ideal_production_time = actual_quantity * ideal_cycle_time;
-        const actual_production_time = actual_quantity * data.actual_cycle_time_seconds;
+        const actual_production_time = actual_quantity * actual_cycle_time;
         const cycle_time_loss_seconds = actual_production_time - ideal_production_time;
         const units_lost_to_cycle = Math.floor(cycle_time_loss_seconds / ideal_cycle_time);
 
@@ -149,13 +158,13 @@ export class ProductionService {
 
         // === WEIGHT WASTAGE ===
         const ideal_total_weight = actual_quantity * product.weight_grams;
-        const actual_total_weight = actual_quantity * data.actual_weight_grams;
+        const actual_total_weight = actual_quantity * (data.actual_weight_grams ?? product.weight_grams);
         const weight_wastage_grams = Math.max(0, actual_total_weight - ideal_total_weight);
         const weight_wastage_kg = weight_wastage_grams / 1000;
 
         // === CYCLE TIME VARIANCE ALERT (5% threshold) ===
         const variance_threshold = 1.05;
-        const flagged_for_review = data.actual_cycle_time_seconds > (ideal_cycle_time * variance_threshold);
+        const flagged_for_review = (data.actual_cycle_time_seconds ?? ideal_cycle_time) > (ideal_cycle_time * variance_threshold);
 
         // === EFFICIENCY (for backward compatibility) ===
         const theoretical_quantity = Math.floor(shift_duration_seconds / ideal_cycle_time);
@@ -202,12 +211,12 @@ export class ProductionService {
                 total_weight_kg: data.total_weight_kg,
 
                 // Cycle time analysis
-                actual_cycle_time_seconds: data.actual_cycle_time_seconds,
+                actual_cycle_time_seconds: data.actual_cycle_time_seconds ?? ideal_cycle_time,
                 units_lost_to_cycle,
                 flagged_for_review,
 
                 // Weight analysis
-                actual_weight_grams: data.actual_weight_grams,
+                actual_weight_grams: data.actual_weight_grams ?? product.weight_grams,
                 weight_wastage_kg,
 
                 // Downtime
@@ -233,8 +242,16 @@ export class ProductionService {
         await this.deductRawMaterial(product.weight_grams, actual_quantity, product.raw_material_id, factoryId);
         await inventoryService.logTransaction('raw_material_consumption', product.raw_material_id, requiredMaterialKg, 'kg', 'raw_material', null, factoryId, log.id, undefined, true);
 
+        // ================== CAP CONSUMPTION ==================
+        const capTemplateId = (product as any).product_templates?.cap_template_id;
+        if (capTemplateId) {
+            await this.handleCapConsumption(capTemplateId, product.color, actual_quantity, factoryId, log.id, data.user_id);
+        }
+
         // ================== SMART QUEUE ALLOCATION ==================
-        await stockAllocationService.allocateStock(data.product_id, 'semi_finished', actual_quantity, factoryId);
+        // Deprecated: Automated FIFO allocation is disabled.
+        // Product Managers will manually fulfill from the mobile app.
+        // await stockAllocationService.allocateStock(data.product_id, 'semi_finished', actual_quantity, factoryId);
 
         // ================== AUDIT LOGGING ==================
 
@@ -365,73 +382,88 @@ export class ProductionService {
     }
 
     private async updateInventory(productId: string, state: string, quantity: number, factoryId: string) {
-        const { data: existing, error: fetchError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', state)
+        const { error } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factoryId,
+            p_state: state,
+            p_quantity_change: quantity,
+            p_cap_id: null
+        });
+
+        if (error) throw new Error(`Inventory update error: ${error.message}`);
+    }
+
+    private async handleCapConsumption(capTemplateId: string, color: string, quantity: number, factoryId: string, referenceId: string, userId: string) {
+        // Find matching cap variant (matching color and template)
+        const { data: cap, error } = await supabase
+            .from('caps')
+            .select('id, name')
+            .eq('template_id', capTemplateId)
+            .eq('color', color)
             .eq('factory_id', factoryId)
             .single();
 
-        if (fetchError && fetchError.code !== 'PGRST116') throw new Error(`Inventory fetch error: ${fetchError.message}`);
+        if (error || !cap) {
+            logger.warn('No matching cap variant found for deduction', { capTemplateId, color, factoryId });
+            return;
+        }
 
-        const newQty = (existing?.quantity || 0) + quantity;
+        // Deduct cap stock
+        await this.updateCapStock(cap.id, -quantity, factoryId);
 
-        const { error: upsertError } = await supabase
-            .from('stock_balances')
-            .upsert({
-                product_id: productId,
-                state,
-                factory_id: factoryId,
-                quantity: newQty,
-                last_updated: new Date().toISOString()
-            }, { onConflict: 'product_id,state,factory_id' });
+        // Log transaction
+        await inventoryService.logTransaction(
+            'cap_consumption',
+            cap.id,
+            quantity,
+            'loose',
+            'cap',
+            null,
+            factoryId,
+            referenceId,
+            userId,
+            true // isDeduction
+        );
+    }
 
-        if (upsertError) throw new Error(`Inventory update error: ${upsertError.message}`);
+    private async updateCapStock(capId: string, quantity: number, factoryId: string) {
+        const { error } = await supabase.rpc('adjust_cap_stock', {
+            p_cap_id: capId,
+            p_factory_id: factoryId,
+            p_quantity_change: quantity
+        });
+
+        if (error) throw new Error(`Cap inventory update error: ${error.message}`);
     }
 
     private async deductRawMaterial(weightGrams: number, quantity: number, rawMaterialId?: string, factoryId?: string) {
         if (!rawMaterialId) {
-            console.warn('⚠️ Product does not have a raw material assigned. Skipping deduction.');
+            logger.warn('Product missing raw material assignment, skipping deduction', { weightGrams, quantity });
             return;
         }
 
         const totalWeightKg = (weightGrams * quantity) / 1000;
 
-        const { data: rawMaterial, error: rmError } = await supabase
-            .from('raw_materials')
-            .select('id, stock_weight_kg')
-            .eq('id', rawMaterialId)
-            .eq('factory_id', factoryId || MAIN_FACTORY_ID)
-            .single();
+        const { error } = await supabase.rpc('adjust_raw_material_stock', {
+            p_material_id: rawMaterialId,
+            p_weight_change: -totalWeightKg
+        });
 
-        if (rmError || !rawMaterial) {
-            throw new Error(`Raw material not found for deduction: ${rmError?.message}`);
-        }
-
-        const newStock = Number((rawMaterial.stock_weight_kg - totalWeightKg).toFixed(4));
-
-        if (newStock < 0) {
-            throw new Error(`Insufficient raw material stock for this production. Need ${totalWeightKg.toFixed(2)}kg, have ${rawMaterial.stock_weight_kg.toFixed(2)}kg`);
-        }
-
-        const { error: updateError } = await supabase
-            .from('raw_materials')
-            .update({ stock_weight_kg: newStock, updated_at: new Date().toISOString() })
-            .eq('id', rawMaterial.id);
-
-        if (updateError) throw new Error(`Raw material deduction error: ${updateError.message}`);
+        if (error) throw new Error(`Raw material deduction error: ${error.message}`);
     }
 
-    async getProductionLogs(filters?: { machine_id?: string; product_id?: string; start_date?: string; end_date?: string; factory_id?: string }) {
+    async getProductionLogs(filters?: { machine_id?: string; product_id?: string; start_date?: string; end_date?: string; factory_id?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page || 1, filters?.size || 20);
+
         let query = supabase
             .from('production_logs')
             .select(`
                 *,
                 machines(name),
                 products(name, size, color)
-            `)
-            .order('date', { ascending: false });
+            `, { count: 'exact' })
+            .order('date', { ascending: false })
+            .range(from, to);
 
         if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
         if (filters?.product_id) query = query.eq('product_id', filters.product_id);
@@ -439,9 +471,18 @@ export class ProductionService {
         if (filters?.end_date) query = query.lte('date', filters.end_date);
         if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
 
-        const { data, error } = await query;
+        const { data, error, count } = await query;
         if (error) throw new Error(error.message);
-        return data;
+
+        return {
+            data,
+            pagination: {
+                total: count || 0,
+                page: filters?.page || 1,
+                size: filters?.size || 20,
+                pages: Math.ceil((count || 0) / (filters?.size || 20))
+            }
+        };
     }
 
     async getDailyProduction(date: string) {
@@ -472,22 +513,62 @@ export class ProductionService {
             query = query.eq('factory_id', factoryId);
         }
 
-        const { data, error } = await query;
+        // We need to filter stock_balances to match the state corresponding to the unit_type
+        // However, Supabase joins are tricky with conditional filters. 
+        // A better approach is to fetch and then map, or use a RPC/View.
+        // For now, let's fetch all relevant stock and match in JS.
+
+        const { data: rawData, error } = await query;
         if (error) throw new Error(error.message);
-        return data;
+
+        // Fetch current stock for all products in these requests to confirm availability
+        const productIds = [...new Set(rawData.map(r => r.product_id))];
+        const { data: stockData } = await supabase
+            .from('stock_balances')
+            .select('product_id, quantity, state, factory_id')
+            .in('product_id', productIds);
+
+        const stateMapping: Record<string, string> = {
+            'loose': 'semi_finished',
+            'packet': 'packed',
+            'bundle': 'finished'
+        };
+
+        return rawData.map(req => {
+            const requiredState = stateMapping[req.unit_type];
+            const stock = stockData?.find(s =>
+                s.product_id === req.product_id &&
+                s.state === requiredState &&
+                s.factory_id === req.factory_id
+            );
+
+            return {
+                ...req,
+                available_stock: stock?.quantity || 0,
+                is_satisfiable: (stock?.quantity || 0) >= req.quantity
+            };
+        });
     }
 
     async updateProductionRequestStatus(requestId: string, status: string, userId: string) {
+        if (status === 'completed') {
+            // Use manual fulfillment logic
+            return await stockAllocationService.fulfillRequestManually(requestId, userId);
+        }
+
         const { data, error } = await supabase
             .from('production_requests')
             .update({ status, updated_at: new Date().toISOString() })
             .eq('id', requestId)
-            .select()
+            .select(`
+                *,
+                products (name, size, color, factory_id)
+            `)
             .single();
 
         if (error) throw new Error(error.message);
 
-        // Log completion in audit
+        // Log other status changes in audit
         await auditService.logAction(
             userId,
             'update_request_status',
@@ -502,91 +583,152 @@ export class ProductionService {
     // ================== CAP PRODUCTION ==================
 
     async submitCapProduction(data: SubmitCapProductionDTO) {
+        const factoryId = data.factory_id || MAIN_FACTORY_ID;
         // 1. Get Cap Details
         const { data: cap, error: capError } = await supabase
             .from('caps')
-            .select('ideal_weight_grams, name')
+            .select('ideal_weight_grams, name, raw_material_id')
             .eq('id', data.cap_id)
             .single();
 
         if (capError || !cap) throw new Error(`Cap not found: ${capError?.message}`);
 
-        // 2. Calculate Quantity
-        const calculated_quantity = Math.floor((data.total_weight_produced_kg * 1000) / cap.ideal_weight_grams);
+        // 2. Calculate Quantity & Deduction Weight
+        let initial_quantity: number | undefined = data.total_produced;
+        let initial_weight_kg: number | undefined = data.total_weight_produced_kg;
 
-        if (calculated_quantity <= 0) {
-            throw new Error('Weight too low to calculate a valid quantity');
+        if (initial_quantity === undefined && initial_weight_kg !== undefined) {
+            // Mode 1: Weight-based (Current)
+            initial_quantity = Math.floor((initial_weight_kg * 1000) / cap.ideal_weight_grams);
+        } else if (initial_quantity !== undefined && initial_weight_kg === undefined) {
+            // Mode 2: Unit-based (Option B)
+            initial_weight_kg = Number(((initial_quantity * cap.ideal_weight_grams) / 1000).toFixed(4));
+        } else if (initial_quantity === undefined && initial_weight_kg === undefined) {
+            throw new Error('Either total_produced or total_weight_produced_kg must be provided');
         }
 
-        // 3. Log Production
+        // Now they MUST be defined
+        const final_quantity: number = initial_quantity!;
+        const final_weight_kg: number = initial_weight_kg!;
+
+        if (final_quantity <= 0) {
+            throw new Error('Produced quantity must be greater than zero');
+        }
+
+        // 3. Raw Material Check & Deduction
+        if (cap.raw_material_id) {
+            const { data: rawMaterial, error: rmError } = await supabase
+                .from('raw_materials')
+                .select('id, stock_weight_kg')
+                .eq('id', cap.raw_material_id)
+                .eq('factory_id', factoryId) // Raw material must be in the same factory
+                .single();
+
+            if (rmError || !rawMaterial) {
+                // Warning only or Error? For data integrity, maybe error, but if they haven't assigned RM yet?
+                // The user said "use the same mechanism... reduction of raw material when cap is created".
+                // If ID is there, we expect it to exist.
+                throw new Error(`Assigned raw material not found in this factory: ${rmError?.message}`);
+            }
+
+            if (rawMaterial.stock_weight_kg < final_weight_kg) {
+                throw new Error(`Insufficient raw material. Need ${final_weight_kg.toFixed(2)}kg, have ${rawMaterial.stock_weight_kg.toFixed(2)}kg`);
+            }
+
+            // Deduct
+            const { error: updateError } = await supabase
+                .from('raw_materials')
+                .update({
+                    stock_weight_kg: Number((rawMaterial.stock_weight_kg - final_weight_kg).toFixed(4)),
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', rawMaterial.id);
+
+            if (updateError) throw new Error(`Raw material deduction error: ${updateError.message}`);
+        }
+
+        // 4. Log Production
         const { data: log, error: logError } = await supabase
             .from('cap_production_logs')
             .insert([{
                 ...data,
-                calculated_quantity
+                factory_id: factoryId,
+                total_weight_produced_kg: final_weight_kg,
+                calculated_quantity: final_quantity,
+                actual_weight_grams: data.actual_weight_grams ?? cap.ideal_weight_grams,
+                actual_cycle_time_seconds: data.actual_cycle_time_seconds || 0
             }])
             .select()
             .single();
 
         if (logError) throw new Error(`Cap production log error: ${logError.message}`);
 
-        // 4. Update Stock Balance
-        await this.updateCapStock(data.cap_id, calculated_quantity, data.factory_id);
+        // 5. Update Stock Balance
+        await this.updateCapStock(data.cap_id, final_quantity, factoryId);
 
-        // 5. Audit
+        // 6. Log Raw Material Consumption Transaction
+        if (cap.raw_material_id) {
+            await inventoryService.logTransaction(
+                'raw_material_consumption',
+                cap.raw_material_id,
+                final_weight_kg,
+                'kg',
+                'raw_material',
+                null,
+                factoryId,
+                log.id, // Linked to cap_production_log? 
+                // Wait, logTransaction might expect log.id to be a production_log uuid.
+                // cap_production_logs is a different table.
+                // logTransaction schema: (type, item_id, quantity, unit, category, state, factory_id, related_entity_id?, is_negative?)
+                // The related_entity_id is generic uuid.
+                undefined,
+                true
+            );
+        }
+
+        // 7. Audit
         await auditService.logAction(
             data.user_id,
             'submit_cap_production',
             'cap_production_logs',
             log.id,
-            { calculated_quantity, weight_kg: data.total_weight_produced_kg }
+            { calculated_quantity: final_quantity, weight_kg: final_weight_kg }
         );
 
         return log;
     }
 
-    async getCapProductionLogs(filters?: { factory_id?: string; cap_id?: string; start_date?: string; end_date?: string }) {
+    async getCapProductionLogs(filters?: { factory_id?: string; cap_id?: string; start_date?: string; end_date?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page || 1, filters?.size || 20);
+
         let query = supabase
             .from('cap_production_logs')
             .select(`
                 *,
                 caps(name)
-            `)
-            .order('date', { ascending: false });
+            `, { count: 'exact' })
+            .order('date', { ascending: false })
+            .range(from, to);
 
         if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
         if (filters?.cap_id) query = query.eq('cap_id', filters.cap_id);
         if (filters?.start_date) query = query.gte('date', filters.start_date);
         if (filters?.end_date) query = query.lte('date', filters.end_date);
 
-        const { data, error } = await query;
+        const { data, error, count } = await query;
         if (error) throw new Error(error.message);
-        return data;
+
+        return {
+            data,
+            pagination: {
+                total: count || 0,
+                page: filters?.page || 1,
+                size: filters?.size || 20,
+                pages: Math.ceil((count || 0) / (filters?.size || 20))
+            }
+        };
     }
 
-    private async updateCapStock(capId: string, quantity: number, factoryId: string) {
-        const { data: existing, error: fetchError } = await supabase
-            .from('cap_stock_balances')
-            .select('quantity')
-            .eq('cap_id', capId)
-            .eq('factory_id', factoryId)
-            .single();
-
-        if (fetchError && fetchError.code !== 'PGRST116') throw new Error(`Cap stock fetch error: ${fetchError.message}`);
-
-        const newQty = (existing?.quantity || 0) + quantity;
-
-        const { error: upsertError } = await supabase
-            .from('cap_stock_balances')
-            .upsert({
-                cap_id: capId,
-                factory_id: factoryId,
-                quantity: newQty,
-                last_updated: new Date().toISOString()
-            }, { onConflict: 'cap_id,factory_id' });
-
-        if (upsertError) throw new Error(`Cap stock update error: ${upsertError.message}`);
-    }
 }
 
 export const productionService = new ProductionService();

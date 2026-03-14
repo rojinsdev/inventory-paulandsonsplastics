@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Plus, Pencil, Trash2, Loader2, Link2, X, RefreshCw, Factory, Package, CheckCircle } from 'lucide-react';
-import { dieMappingsAPI, machinesAPI, productsAPI } from '@/lib/api';
+import { dieMappingsAPI, machinesAPI, productTemplatesAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ export default function DieMappingsPage() {
     // Form state
     const [formData, setFormData] = useState({
         machine_id: '',
-        product_id: '',
+        product_template_id: '',
         ideal_cycle_time_seconds: '',
         capacity_restriction: '',
         enabled: true,
@@ -39,12 +39,12 @@ export default function DieMappingsPage() {
         queryFn: () => machinesAPI.getAll(selectedFactory?.id ? { factory_id: selectedFactory.id } : {}).then(res => Array.isArray(res) ? res : []),
     });
 
-    const { data: products = [], isLoading: productsLoading } = useQuery({
-        queryKey: ['products', selectedFactory?.id],
-        queryFn: () => productsAPI.getAll(selectedFactory?.id ? { factory_id: selectedFactory.id } : {}).then(res => Array.isArray(res) ? res : []),
+    const { data: templates = [], isLoading: templatesLoading } = useQuery({
+        queryKey: ['product-templates', selectedFactory?.id],
+        queryFn: () => productTemplatesAPI.getAll(selectedFactory?.id ? { factory_id: selectedFactory.id } : {}).then(res => Array.isArray(res) ? res : []),
     });
 
-    const loading = mappingsLoading || machinesLoading || productsLoading;
+    const loading = mappingsLoading || machinesLoading || templatesLoading;
     const error = mappingsError?.message;
 
     // Mutations
@@ -80,9 +80,9 @@ export default function DieMappingsPage() {
 
     // Load data
     useEffect(() => {
-        setPageTitle('Die Mappings');
+        setPageTitle('Machine Mapping');
         registerGuide({
-            title: "Die & Cycle Time Mapping",
+            title: "Machine Mapping",
             description: "Configure performance limits and production speeds for machine-product pairs.",
             logic: [
                 {
@@ -111,9 +111,9 @@ export default function DieMappingsPage() {
 
     // Get machine/product name by ID
     const getMachineName = (id) => machines.find((m) => m.id === id)?.name || 'Unknown';
-    const getProductName = (id) => {
-        const p = products.find((p) => p.id === id);
-        return p ? `${p.name} (${p.size}, ${p.color})` : 'Unknown';
+    const getTemplateName = (id) => {
+        const t = templates.find((t) => t.id === id);
+        return t ? `${t.name} (${t.size})` : 'Unknown';
     };
 
     // Open modal for create
@@ -121,7 +121,7 @@ export default function DieMappingsPage() {
         setEditingMapping(null);
         setFormData({
             machine_id: machines[0]?.id || '',
-            product_id: products[0]?.id || '',
+            product_template_id: templates[0]?.id || '',
             ideal_cycle_time_seconds: '',
             capacity_restriction: '',
             enabled: true,
@@ -134,7 +134,7 @@ export default function DieMappingsPage() {
         setEditingMapping(mapping);
         setFormData({
             machine_id: mapping.machine_id || '',
-            product_id: mapping.product_id || '',
+            product_template_id: mapping.product_template_id || '',
             ideal_cycle_time_seconds: mapping.ideal_cycle_time_seconds || '',
             capacity_restriction: mapping.capacity_restriction || '',
             enabled: mapping.enabled !== false,
@@ -160,8 +160,8 @@ export default function DieMappingsPage() {
     // Handle delete
     const handleDelete = async (mapping) => {
         const machineName = getMachineName(mapping.machine_id);
-        const productName = getProductName(mapping.product_id);
-        if (!confirm(`Delete mapping: ${machineName} → ${productName}?`)) return;
+        const templateName = getTemplateName(mapping.product_template_id);
+        if (!confirm(`Delete mapping: ${machineName} → ${templateName}?`)) return;
         deleteMutation.mutate(mapping.id);
     };
 
@@ -182,7 +182,7 @@ export default function DieMappingsPage() {
             {/* Page Header */}
             <div className={styles.pageHeader}>
                 <div>
-                    <h1 className={styles.pageTitle}>Dies & Cycle Time</h1>
+                    <h1 className={styles.pageTitle}>Machine Mapping</h1>
                     <p className={styles.pageDescription}>
                         Define which machines can produce which products and their cycle times
                     </p>
@@ -190,7 +190,7 @@ export default function DieMappingsPage() {
                 <button
                     className={styles.primaryButton}
                     onClick={handleCreate}
-                    disabled={machines.length === 0 || products.length === 0}
+                    disabled={machines.length === 0 || templates.length === 0}
                 >
                     <Plus size={18} />
                     <span>Add Mapping</span>
@@ -224,8 +224,8 @@ export default function DieMappingsPage() {
                         <Package size={28} />
                     </div>
                     <div className={styles.statContent}>
-                        <div className={styles.statValue}>{products.length}</div>
-                        <div className={styles.statLabel}>Products</div>
+                        <div className={styles.statValue}>{templates.length}</div>
+                        <div className={styles.statLabel}>Templates</div>
                         <div className={styles.statSublabel}>In catalog</div>
                     </div>
                 </div>
@@ -260,15 +260,15 @@ export default function DieMappingsPage() {
                 ) : mappings.length === 0 ? (
                     <div className={styles.emptyState}>
                         <Link2 size={48} />
-                        <p>No die mappings configured yet</p>
+                        <p>No machine mappings configured yet</p>
                         <p className={styles.emptyHint}>
-                            {machines.length === 0 || products.length === 0 ? (
-                                'Add machines and products first before creating mappings'
+                            {machines.length === 0 || templates.length === 0 ? (
+                                'Add machines and templates first before creating mappings'
                             ) : (
                                 'Create mappings to define which machines can produce which products'
                             )}
                         </p>
-                        {machines.length > 0 && products.length > 0 && (
+                        {machines.length > 0 && templates.length > 0 && (
                             <button className={styles.primaryButton} onClick={handleCreate}>
                                 <Plus size={18} />
                                 <span>Add First Mapping</span>
@@ -281,7 +281,7 @@ export default function DieMappingsPage() {
                             <thead>
                                 <tr>
                                     <th>Machine</th>
-                                    <th>Product</th>
+                                    <th>Template</th>
                                     <th>Cycle Time (sec)</th>
                                     <th>Capacity Limit</th>
                                     <th>Enabled</th>
@@ -292,7 +292,7 @@ export default function DieMappingsPage() {
                                 {mappings.map((mapping) => (
                                     <tr key={mapping.id}>
                                         <td className={styles.nameCell}>{getMachineName(mapping.machine_id)}</td>
-                                        <td>{getProductName(mapping.product_id)}</td>
+                                        <td>{getTemplateName(mapping.product_template_id)}</td>
                                         <td className={styles.cycleCell}>{mapping.ideal_cycle_time_seconds}s</td>
                                         <td className={styles.capacityCell}>{mapping.capacity_restriction || '—'}</td>
                                         <td>
@@ -360,17 +360,17 @@ export default function DieMappingsPage() {
                                 </div>
 
                                 <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Product *</label>
+                                    <label className={styles.formLabel}>Template *</label>
                                     <select
                                         className={styles.formSelect}
-                                        value={formData.product_id}
-                                        onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                                        value={formData.product_template_id}
+                                        onChange={(e) => setFormData({ ...formData, product_template_id: e.target.value })}
                                         required
                                     >
-                                        <option value="">Select Product</option>
-                                        {products.map((product) => (
-                                            <option key={product.id} value={product.id}>
-                                                {product.name} ({product.size}, {product.color})
+                                        <option value="">Select Template</option>
+                                        {templates.map((template) => (
+                                            <option key={template.id} value={template.id}>
+                                                {template.name} ({template.size})
                                             </option>
                                         ))}
                                     </select>

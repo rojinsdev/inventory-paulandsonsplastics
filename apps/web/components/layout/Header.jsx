@@ -14,7 +14,9 @@ import { useGuide } from '@/contexts/GuideContext';
 import DateTimeWidget from '../ui/DateTimeWidget';
 import FactoryFilter from '../ui/FactoryFilter';
 import OrderCalendarModal from '../ui/OrderCalendarModal';
+import NotificationDropdown from '../ui/NotificationDropdown';
 import styles from './Header.module.css';
+
 
 export default function Header({ title }) {
     const { user } = useAuth();
@@ -89,6 +91,8 @@ export default function Header({ title }) {
                 >
                     <CalendarIcon size={20} />
                 </button>
+                <NotificationDropdown />
+
 
                 <div ref={quickActionsRef} style={{ position: 'relative' }}>
                     <button

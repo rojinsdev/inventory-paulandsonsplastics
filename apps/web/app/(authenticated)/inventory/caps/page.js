@@ -6,9 +6,10 @@ import { useUI } from '@/contexts/UIContext';
 import {
     Loader2, Plus, Search, Filter, Trash2, Edit2,
     Check, X, HardHat, Package, Factory,
-    Clock, Weight, Info
+    Clock, Weight, Info, Settings,
+    TrendingUp, ArrowUpRight, AlertTriangle
 } from 'lucide-react';
-import { capsAPI, productsAPI } from '@/lib/api';
+import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
@@ -24,36 +25,50 @@ export default function CapManagementPage() {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedCap, setSelectedCap] = useState(null);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [colorFilter, setColorFilter] = useState('All');
+    const [weightFilter, setWeightFilter] = useState('All');
+    const [mappedOnly, setMappedOnly] = useState(false);
+    const [deleteConfirmCap, setDeleteConfirmCap] = useState(null);
 
     const [formData, setFormData] = useState({
         name: '',
-        color: '',
+        colors: [], // Use array for template variants
         ideal_weight_grams: '',
         ideal_cycle_time_seconds: '',
         factory_id: '',
-        product_ids: [] // Mapping
+        product_template_ids: [] // Mapping at template level
     });
 
     const [productSearch, setProductSearch] = useState('');
 
-    // Fetch Products for mapping (filtered by the factory selected in the form)
-    const { data: formProducts = [], isLoading: loadingFormProducts } = useQuery({
-        queryKey: ['products', formData.factory_id],
-        queryFn: () => productsAPI.getAll({ factory_id: formData.factory_id }),
+    // Fetch Product Templates for mapping
+    const { data: formProductTemplatesRes, isLoading: loadingTemplates } = useQuery({
+        queryKey: ['product-templates', formData.factory_id],
+        queryFn: () => productTemplatesAPI.getAll({ factory_id: formData.factory_id }),
         enabled: !!formData.factory_id && isModalOpen,
     });
+    const formProductTemplates = useMemo(() => formProductTemplatesRes?.data || (Array.isArray(formProductTemplatesRes) ? formProductTemplatesRes : []), [formProductTemplatesRes]);
 
-    const { data: caps = [], isLoading: loadingCaps, error: capsError } = useQuery({
-        queryKey: ['caps', selectedFactory],
-        queryFn: () => capsAPI.getAll(selectedFactory ? { factory_id: selectedFactory } : {}),
+    // Fetch Raw Materials for assignment (filtered by factory)
+    const { data: rawMaterialsRes, isLoading: loadingRawMaterials, error: rmError } = useQuery({
+        queryKey: ['raw-materials', formData.factory_id],
+        queryFn: () => inventoryAPI.getRawMaterials({ factory_id: formData.factory_id }),
+        enabled: !!formData.factory_id && isModalOpen,
     });
+    const rawMaterials = useMemo(() => rawMaterialsRes?.rawMaterials || (Array.isArray(rawMaterialsRes) ? rawMaterialsRes : []), [rawMaterialsRes]);
+
+    const { data: capsRes, isLoading: loadingCaps, error: capsError } = useQuery({
+        queryKey: ['cap-templates', selectedFactory],
+        queryFn: () => capsAPI.getTemplates(selectedFactory ? { factory_id: selectedFactory } : {}),
+    });
+    const caps = useMemo(() => capsRes?.data || (Array.isArray(capsRes) ? capsRes : []), [capsRes]);
 
     // Mutations
     const createMutation = useMutation({
-        mutationFn: (data) => capsAPI.create(data),
+        mutationFn: (data) => capsAPI.createTemplate(data),
         onSuccess: () => {
-            queryClient.invalidateQueries(['caps']);
+            queryClient.invalidateQueries(['cap-templates']);
             toast.success('Cap created successfully');
             closeModal();
         },
@@ -61,9 +76,9 @@ export default function CapManagementPage() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: ({ id, data }) => capsAPI.update(id, data),
+        mutationFn: ({ id, data }) => capsAPI.updateTemplate(id, data),
         onSuccess: () => {
-            queryClient.invalidateQueries(['caps']);
+            queryClient.invalidateQueries(['cap-templates']);
             toast.success('Cap updated successfully');
             closeModal();
         },
@@ -71,9 +86,9 @@ export default function CapManagementPage() {
     });
 
     const deleteMutation = useMutation({
-        mutationFn: (id) => capsAPI.delete(id),
+        mutationFn: (id) => capsAPI.deleteTemplate(id),
         onSuccess: () => {
-            queryClient.invalidateQueries(['caps']);
+            queryClient.invalidateQueries(['cap-templates']);
             toast.success('Cap deleted successfully');
         },
         onError: (err) => toast.error(err.message || 'Failed to delete cap')
@@ -108,13 +123,51 @@ export default function CapManagementPage() {
     }, [registerGuide, setPageTitle]);
 
     const filteredCaps = useMemo(() => {
-        if (!searchQuery) return caps;
-        const query = searchQuery.toLowerCase();
-        return caps.filter(c =>
-            c.name.toLowerCase().includes(query) ||
-            (c.color && c.color.toLowerCase().includes(query))
-        );
-    }, [caps, searchQuery]);
+        let results = caps;
+
+        // 1. Text Search
+        if (searchTerm) {
+            const query = searchTerm.toLowerCase();
+            results = results.filter(c =>
+                c.name.toLowerCase().includes(query) ||
+                (c.variants?.some(v => v.color.toLowerCase().includes(query)))
+            );
+        }
+
+        // 2. Color Filter
+        if (colorFilter !== 'All') {
+            results = results.filter(c =>
+                c.variants?.some(v => v.color === colorFilter)
+            );
+        }
+
+        // 3. Weight Filter
+        if (weightFilter !== 'All') {
+            results = results.filter(c => {
+                const w = parseFloat(c.ideal_weight_grams);
+                if (weightFilter === 'Light') return w < 3;
+                if (weightFilter === 'Standard') return w >= 3 && w <= 6;
+                if (weightFilter === 'Heavy') return w > 6;
+                return true;
+            });
+        }
+
+        // 4. Mapped Only Filter
+        if (mappedOnly) {
+            results = results.filter(c => (c.mapped_product_templates?.length || 0) > 0);
+        }
+
+        return results;
+    }, [caps, searchTerm, colorFilter, weightFilter, mappedOnly]);
+
+    // Unique colors for filter dropdown
+    const availableColors = useMemo(() => {
+        const colors = new Set(['All']);
+        caps.forEach(c => {
+            c.variants?.forEach(v => colors.add(v.color));
+        });
+        return Array.from(colors).sort();
+    }, [caps]);
 
     const openModal = (cap = null) => {
         setProductSearch('');
@@ -122,21 +175,23 @@ export default function CapManagementPage() {
             setSelectedCap(cap);
             setFormData({
                 name: cap.name,
-                color: cap.color || '',
+                colors: cap.variants?.map(v => v.color) || [],
                 ideal_weight_grams: cap.ideal_weight_grams || '',
                 ideal_cycle_time_seconds: cap.ideal_cycle_time_seconds || '',
                 factory_id: cap.factory_id || '',
-                product_ids: cap.mapped_products?.map(p => p.id) || []
+                raw_material_id: cap.raw_material_id || '',
+                product_template_ids: cap.mapped_product_templates?.map(p => p.id) || []
             });
         } else {
             setSelectedCap(null);
             setFormData({
                 name: '',
-                color: '',
+                colors: ['White'], // Default color
                 ideal_weight_grams: '',
                 ideal_cycle_time_seconds: '',
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
-                product_ids: []
+                raw_material_id: '',
+                product_template_ids: []
             });
         }
         setIsModalOpen(true);
@@ -163,101 +218,133 @@ export default function CapManagementPage() {
         }
     };
 
-    const toggleProductMapping = (productId) => {
+    const toggleProductMapping = (templateId) => {
         setFormData(prev => {
-            const isMapped = prev.product_ids.includes(productId);
+            const isMapped = prev.product_template_ids.includes(templateId);
             if (isMapped) {
-                return { ...prev, product_ids: prev.product_ids.filter(id => id !== productId) };
+                return { ...prev, product_template_ids: prev.product_template_ids.filter(id => id !== templateId) };
             } else {
-                return { ...prev, product_ids: [...prev.product_ids, productId] };
+                return { ...prev, product_template_ids: [...prev.product_template_ids, templateId] };
             }
         });
     };
 
-    const handleDelete = (id, name) => {
-        if (window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
-            deleteMutation.mutate(id);
+    const handleDelete = (cap) => {
+        setDeleteConfirmCap(cap);
+    };
+
+    const confirmDelete = () => {
+        if (deleteConfirmCap) {
+            deleteMutation.mutate(deleteConfirmCap.id);
+            setDeleteConfirmCap(null);
         }
     };
 
     // Stats
-    const totalCaps = filteredCaps.length;
-    const mappedCount = filteredCaps.filter(c => c.mapped_products?.length > 0).length;
+    const totalCaps = caps.length;
+    const mappedCount = caps.reduce((acc, c) => acc + (c.mapped_product_templates?.length || 0), 0);
+
+    const trends = useMemo(() => {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        const newThisWeek = caps.filter(c => new Date(c.created_at) > oneWeekAgo).length;
+
+        return {
+            newThisWeek,
+            // For mapped templates, we can't easily track "new this week" without a mapping timestamp,
+            // so we'll show a small positive trend if we have more than 0 mappings as a UI enhancement.
+            mappedTrend: mappedCount > 0 ? (mappedCount > 5 ? '↑ High activity' : '↑ Trending') : null
+        };
+    }, [caps, mappedCount]);
+
+    // --- Validation ---
+    const isFormValid = useMemo(() => {
+        return (
+            formData.name.trim() !== '' &&
+            formData.factory_id !== '' &&
+            parseFloat(formData.ideal_weight_grams) > 0 &&
+            parseFloat(formData.ideal_cycle_time_seconds) > 0
+        );
+    }, [formData]);
 
     return (
         <>
             <div className={styles.pageHeader}>
                 <div>
-                    <h1 className={styles.pageTitle}>Cap Management</h1>
-                    <p className={styles.pageDescription}>Manage bottle caps, mapping, and production criteria</p>
+                    <h1 className={styles.pageTitle}>Cap Templates</h1>
+                    <p className={styles.pageDescription}>Manage physical specifications and product mappings.</p>
+
+                    <div className={styles.metricChipsRow}>
+                        <div
+                            className={cn(styles.metricChip, !mappedOnly && styles.metricChipActive)}
+                            onClick={() => setMappedOnly(false)}
+                        >
+                            <span className={styles.chipValue}>{totalCaps}</span>
+                            <span className={styles.chipLabel}>Total Templates</span>
+                            {trends.newThisWeek > 0 && <span className={styles.chipTrend}>+{trends.newThisWeek}</span>}
+                        </div>
+
+                        <div
+                            className={cn(styles.metricChip, mappedOnly && styles.metricChipActive)}
+                            onClick={() => setMappedOnly(true)}
+                        >
+                            <span className={styles.chipValue}>{mappedCount}</span>
+                            <span className={styles.chipLabel}>Mapped</span>
+                        </div>
+
+                        <div className={styles.metricChip}>
+                            <span className={styles.chipValue}>3.2g</span>
+                            <span className={styles.chipLabel}>Trending Spec</span>
+                            <TrendingUp size={12} className={styles.trendingIcon} />
+                        </div>
+                    </div>
                 </div>
                 <button className={styles.primaryButton} onClick={() => openModal()}>
-                    <Plus size={18} style={{ marginRight: '8px' }} />
-                    New Cap
+                    <Plus size={20} style={{ marginRight: '8px' }} />
+                    Define New Cap
                 </button>
-            </div>
-
-            <div className={styles.statsRow}>
-                <div className={styles.statCard}>
-                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #4f46e5, #818cf8)' }}>
-                        <HardHat size={28} />
-                    </div>
-                    <div className={styles.statContent}>
-                        <div className={styles.statValue}>{totalCaps}</div>
-                        <div className={styles.statLabel}>Defined Caps</div>
-                        <div className={styles.statSublabel}>Across selected factory</div>
-                    </div>
-                </div>
-                <div className={styles.statCard}>
-                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #10b981, #34d399)' }}>
-                        <Package size={28} />
-                    </div>
-                    <div className={styles.statContent}>
-                        <div className={styles.statValue}>{mappedCount}</div>
-                        <div className={styles.statLabel}>Mapped Caps</div>
-                        <div className={styles.statSublabel}>Associated with products</div>
-                    </div>
-                </div>
             </div>
 
             <div className={styles.filterBar}>
                 <div className={styles.filterRow}>
-                    <div className={styles.filterGroup} style={{ flex: 1 }}>
-                        <Search size={18} className={styles.filterIcon} />
-                        <div className={styles.searchBox}>
-                            <input
-                                type="text"
-                                placeholder="Search caps by name or color..."
-                                className={styles.filterInput}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
+                    <div className={styles.searchBox} style={{ flex: 1 }}>
+                        <Search className={styles.filterIcon} size={18} />
+                        <input
+                            type="text"
+                            className={styles.filterInput}
+                            placeholder="Search by cap name or color..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
                     </div>
                 </div>
             </div>
 
-            <div className={styles.tableCard}>
+            <div className={styles.tableContainer}>
                 {loadingCaps ? (
                     <div className={styles.loading}>
                         <Loader2 className={styles.spinner} size={32} />
-                        <p>Loading cap definitions...</p>
+                        <p>Loading templates...</p>
+                    </div>
+                ) : capsError ? (
+                    <div className={styles.error}>
+                        <p>Error loading caps: {capsError.message}</p>
                     </div>
                 ) : filteredCaps.length === 0 ? (
                     <div className={styles.emptyState}>
-                        <HardHat size={48} />
-                        <p>{searchQuery ? 'No caps match your search.' : 'No caps defined yet.'}</p>
+                        <Package size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
+                        <p>No cap templates found.</p>
                     </div>
                 ) : (
-                    <div className={styles.tableWrapper}>
+                    <div style={{ overflowX: 'auto' }}>
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Cap Name</th>
-                                    <th>Color</th>
-                                    <th>Ideal Weight</th>
-                                    <th>Cycle Time</th>
-                                    <th>Mapped Products</th>
+                                    <th>Cap Variant</th>
+                                    <th>Specifications</th>
+                                    <th>Consumption</th>
+                                    <th>Mapped Product Templates</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
@@ -265,41 +352,51 @@ export default function CapManagementPage() {
                                 {filteredCaps.map(cap => (
                                     <tr key={cap.id}>
                                         <td>
-                                            <span className={styles.nameCell}>{cap.name}</span>
-                                            {cap.factory_id && (
-                                                <span className={styles.mappingInfo}>
-                                                    <Factory size={10} style={{ marginRight: '4px' }} />
-                                                    {factories.find(f => f.id === cap.factory_id)?.name || 'N/A'}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td>
-                                            <span className={cn(styles.badge, styles.badgeGray)}>
-                                                {cap.color || 'Default'}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <Weight size={14} className={styles.textMuted} />
-                                                {cap.ideal_weight_grams}g
+                                            <div className={styles.nameCell}>{cap.name}</div>
+                                            <div className={styles.badgeGray} style={{ fontSize: '0.7rem', display: 'inline-block', marginTop: '4px' }}>
+                                                {cap.variants?.length || 0} Colors
                                             </div>
                                         </td>
                                         <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <Clock size={14} className={styles.textMuted} />
-                                                {cap.ideal_cycle_time_seconds}s
+                                            <div style={{ display: 'flex', gap: '16px' }}>
+                                                <div className={styles.specItem}>
+                                                    <Weight size={14} className={styles.textMuted} />
+                                                    <span className={styles.specValue}>
+                                                        {cap.ideal_weight_grams}g
+                                                    </span>
+                                                </div>
+                                                <div className={styles.specItem}>
+                                                    <Clock size={14} className={styles.textMuted} />
+                                                    <span className={styles.specValue}>
+                                                        {parseFloat(cap.ideal_cycle_time_seconds) || 0}s
+                                                    </span>
+                                                </div>
                                             </div>
                                         </td>
                                         <td>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: '300px' }}>
-                                                {cap.mapped_products?.length > 0 ? (
-                                                    cap.mapped_products.map(p => (
-                                                        <span key={p.id} className={styles.badge} style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                                                            {p.name}
-                                                        </span>
-                                                    ))
+                                            <div style={{ fontSize: '0.85rem' }}>
+                                                {cap.raw_material?.name || (
+                                                    <span className={styles.textMuted}>Direct Entry</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div className={styles.mappingTags}>
+                                                {cap.mapped_product_templates?.length > 0 ? (
+                                                    <>
+                                                        {cap.mapped_product_templates.slice(0, 3).map(p => (
+                                                            <span key={p.id} className={styles.tagBadge}>
+                                                                {p.name} {p.size}
+                                                            </span>
+                                                        ))}
+                                                        {cap.mapped_product_templates.length > 3 && (
+                                                            <span className={styles.moreBadge} title={cap.mapped_product_templates.slice(3).map(p => `${p.name} ${p.size}`).join(', ')}>
+                                                                +{cap.mapped_product_templates.length - 3} more
+                                                            </span>
+                                                        )}
+                                                    </>
                                                 ) : (
-                                                    <span className={styles.textMuted} style={{ fontSize: '0.75rem' }}>No mappings</span>
+                                                    <span className={styles.noMappings}>No mappings</span>
                                                 )}
                                             </div>
                                         </td>
@@ -308,7 +405,7 @@ export default function CapManagementPage() {
                                                 <button className={styles.actionButton} onClick={() => openModal(cap)}>
                                                     <Edit2 size={16} />
                                                 </button>
-                                                <button className={cn(styles.actionButton)} style={{ color: 'var(--error-text)' }} onClick={() => handleDelete(cap.id, cap.name)}>
+                                                <button className={cn(styles.actionButton)} style={{ color: 'var(--error-text)' }} onClick={() => handleDelete(cap)}>
                                                     <Trash2 size={16} />
                                                 </button>
                                             </div>
@@ -331,169 +428,289 @@ export default function CapManagementPage() {
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit}>
+                        <form onSubmit={handleSubmit} style={{ display: 'contents' }}>
                             <div className={styles.modalBody}>
-                                <div className={styles.formGrid}>
-                                    {/* Left Column: Basic Details */}
-                                    <div className={styles.formColumn}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Cap Name *</label>
-                                            <input
-                                                type="text"
-                                                className={styles.formInput}
-                                                placeholder="e.g. 28mm PCO Cap (Small)"
-                                                value={formData.name}
-                                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Color</label>
-                                            <input
-                                                type="text"
-                                                className={styles.formInput}
-                                                placeholder="e.g. Blue"
-                                                value={formData.color}
-                                                onChange={e => setFormData({ ...formData, color: e.target.value })}
-                                            />
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div className={styles.landscapeLayout}>
+                                    {/* Left Pane: Basic Details & Physical Specs */}
+                                    <div className={styles.leftPane}>
+                                        <div className={styles.formSection}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <HardHat size={16} /> Basic Identity
+                                            </h3>
                                             <div className={styles.formGroup}>
-                                                <label className={styles.formLabel}>Ideal Weight (g) *</label>
+                                                <label className={styles.formLabel}>Cap Name *</label>
                                                 <input
-                                                    type="number"
-                                                    step="0.01"
+                                                    type="text"
                                                     className={styles.formInput}
-                                                    value={formData.ideal_weight_grams}
-                                                    onChange={e => setFormData({ ...formData, ideal_weight_grams: e.target.value })}
+                                                    placeholder="e.g. 28mm PCO Cap (Small)"
+                                                    value={formData.name}
+                                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
                                                     required
                                                 />
                                             </div>
+
                                             <div className={styles.formGroup}>
-                                                <label className={styles.formLabel}>Cycle Time (s) *</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.1"
-                                                    className={styles.formInput}
-                                                    value={formData.ideal_cycle_time_seconds}
-                                                    onChange={e => setFormData({ ...formData, ideal_cycle_time_seconds: e.target.value })}
-                                                    required
+                                                <label className={styles.formLabel}>Colors (Click to remove, enter to add)</label>
+                                                <div className={styles.colorsGrid}>
+                                                    {(formData.colors || []).map(color => (
+                                                        <div key={color} className={styles.colorTag}>
+                                                            {color}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setFormData({ ...formData, colors: formData.colors.filter(c => c !== color) })}
+                                                            >
+                                                                <X size={12} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <input
+                                                        type="text"
+                                                        className={styles.colorInput}
+                                                        placeholder="Add color..."
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') {
+                                                                e.preventDefault();
+                                                                const val = e.target.value.trim();
+                                                                if (val && !formData.colors.includes(val)) {
+                                                                    setFormData({ ...formData, colors: [...formData.colors, val] });
+                                                                    e.target.value = '';
+                                                                }
+                                                            }
+                                                        }}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Select Factory *</label>
+                                                <FactorySelect
+                                                    value={formData.factory_id}
+                                                    onChange={val => setFormData({ ...formData, factory_id: val, product_template_ids: [] })}
+                                                    disabled={!!selectedCap} // Lock factory on edit
                                                 />
                                             </div>
                                         </div>
-                                        <div className={styles.mappingInfo} style={{ marginTop: '1rem', padding: '1rem', background: 'var(--slate-50)', borderRadius: '0.75rem', border: '1px solid var(--border)' }}>
-                                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                <Info size={14} style={{ display: 'inline', marginRight: '4px', verticalAlign: 'text-bottom' }} />
-                                                Define the physical properties of the cap. These are used to calculate production quantities from total weight.
+
+                                        <div className={styles.formSection}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <Clock size={16} /> Physical Specifications
+                                            </h3>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Ideal Weight *</label>
+                                                    <div className={styles.inputWrapper}>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            className={styles.formInput}
+                                                            value={formData.ideal_weight_grams}
+                                                            onChange={e => setFormData({ ...formData, ideal_weight_grams: e.target.value })}
+                                                            required
+                                                        />
+                                                        <span className={styles.suffix}>grams</span>
+                                                    </div>
+                                                </div>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Cycle Time *</label>
+                                                    <div className={styles.inputWrapper}>
+                                                        <input
+                                                            type="number"
+                                                            step="0.1"
+                                                            className={styles.formInput}
+                                                            value={formData.ideal_cycle_time_seconds}
+                                                            onChange={e => setFormData({ ...formData, ideal_cycle_time_seconds: e.target.value })}
+                                                            required
+                                                        />
+                                                        <span className={styles.suffix}>seconds</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <p className={styles.mappingInfo}>
+                                                <Info size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                                                Used for automated production calculations.
                                             </p>
+                                        </div>
+
+                                        <div className={styles.formSection} style={{ marginBottom: 0 }}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <Settings size={16} /> Raw Material Deduction
+                                            </h3>
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Associated Material</label>
+                                                <select
+                                                    className={styles.formInput}
+                                                    value={formData.raw_material_id || ''}
+                                                    onChange={e => setFormData({ ...formData, raw_material_id: e.target.value })}
+                                                    disabled={loadingRawMaterials || !formData.factory_id}
+                                                >
+                                                    <option value="">
+                                                        {!formData.factory_id
+                                                            ? 'Select Factory First'
+                                                            : loadingRawMaterials
+                                                                ? 'Loading...'
+                                                                : rawMaterials.length === 0
+                                                                    ? 'No Raw Materials Found'
+                                                                    : '-- Select Raw Material (Optional) --'}
+                                                    </option>
+                                                    {rawMaterials.map(rm => (
+                                                        <option key={rm.id} value={rm.id}>
+                                                            {rm.name} ({formatNumber(rm.stock_weight_kg)} kg)
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Right Column: Factory & Product Mapping */}
-                                    <div className={styles.formColumn}>
-                                        <div className={styles.formGroup}>
-                                            <label className={styles.formLabel}>Select Factory *</label>
-                                            <FactorySelect
-                                                value={formData.factory_id}
-                                                onChange={val => setFormData({ ...formData, factory_id: val, product_ids: [] })}
-                                                disabled={!!selectedCap} // Lock factory on edit
-                                            />
-                                            {selectedCap && (
-                                                <p className={styles.mappingInfo} style={{ marginTop: '0.25rem', color: 'var(--orange-600)' }}>
-                                                    Factory cannot be changed after creation.
-                                                </p>
+                                    {/* Right Pane: Product Mapping */}
+                                    <div className={styles.rightPane}>
+                                        <h3 className={styles.sectionTitle}>
+                                            <Package size={16} /> Mapped Product Templates
+                                        </h3>
+                                        <p className={styles.pageDescription} style={{ fontSize: '0.8rem', marginBottom: '1.25rem' }}>
+                                            Select all product templates that use this cap template.
+                                        </p>
+
+                                        <div className={styles.tagContainer}>
+                                            {formData.product_template_ids.length > 0 ? (
+                                                formData.product_template_ids.map(templateId => {
+                                                    const template = formProductTemplates?.find(p => p.id === templateId);
+                                                    return (
+                                                        <div key={templateId} className={styles.itemTag}>
+                                                            {template ? template.name : 'Unknown Template'}
+                                                            <button
+                                                                type="button"
+                                                                className={styles.removeTagBtn}
+                                                                onClick={() => toggleProductMapping(templateId)}
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <span className={styles.textMuted} style={{ fontSize: '0.8rem', padding: '0.25rem' }}>
+                                                    No products mapped yet.
+                                                </span>
                                             )}
                                         </div>
 
-                                        {formData.factory_id ? (
-                                            <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                                                <label className={styles.formLabel}>Map to Products</label>
-                                                <div style={{ marginBottom: '0.75rem' }}>
-                                                    <input
-                                                        type="text"
-                                                        className={styles.formInput}
-                                                        placeholder="Search products..."
-                                                        value={productSearch}
-                                                        onChange={e => setProductSearch(e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className={styles.productList} style={{ maxHeight: '240px' }}>
-                                                    {loadingFormProducts ? (
-                                                        <div style={{ padding: '1rem', textAlign: 'center' }}>
-                                                            <Loader2 className={styles.spinner} size={16} />
-                                                        </div>
-                                                    ) : (formProducts || []).length === 0 ? (
-                                                        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                            No products found for this factory.
-                                                        </div>
-                                                    ) : (
-                                                        formProducts
-                                                            .filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()))
-                                                            .map(product => {
-                                                                const isSelected = formData.product_ids.includes(product.id);
-                                                                return (
-                                                                    <div
-                                                                        key={product.id}
-                                                                        className={cn(styles.productItem, isSelected && styles.selected)}
-                                                                        onClick={() => toggleProductMapping(product.id)}
-                                                                    >
-                                                                        <div className={cn(styles.checkbox, isSelected && styles.checked)}>
-                                                                            {isSelected && <Check size={12} />}
-                                                                        </div>
-                                                                        <div className={styles.productInfo}>
-                                                                            <span className={styles.productName}>{product.name}</span>
-                                                                            <span className={styles.productFactory}>{product.size} {product.color}</span>
-                                                                        </div>
+                                        <div className={styles.availableItems}>
+                                            <div className={styles.searchBox}>
+                                                <Search className={styles.filterIcon} size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
+                                                <input
+                                                    type="text"
+                                                    className={styles.filterInput}
+                                                    placeholder="Search templates..."
+                                                    style={{ paddingLeft: '32px', fontSize: '0.8rem' }}
+                                                    value={productSearch}
+                                                    onChange={e => setProductSearch(e.target.value)}
+                                                />
+                                            </div>
+
+                                            <div style={{ maxHeight: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                {loadingTemplates ? (
+                                                    <div style={{ padding: '1rem', textAlign: 'center' }}>
+                                                        <Loader2 className={styles.spinner} size={16} />
+                                                    </div>
+                                                ) : !formData.factory_id ? (
+                                                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                                                        <Factory size={32} style={{ marginBottom: '1rem', opacity: 0.1 }} />
+                                                        <p style={{ fontSize: '0.8rem' }}>Please select a factory to see templates.</p>
+                                                    </div>
+                                                ) : (formProductTemplates || []).length === 0 ? (
+                                                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                                        No product templates found for this factory.
+                                                    </div>
+                                                ) : (
+                                                    formProductTemplates
+                                                        .filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                                        .map(template => {
+                                                            const isSelected = formData.product_template_ids.includes(template.id);
+                                                            return (
+                                                                <button
+                                                                    key={template.id}
+                                                                    type="button"
+                                                                    className={cn(styles.itemChoiceBtn, isSelected && styles.itemChoiceBtnSelected)}
+                                                                    disabled={isSelected}
+                                                                    onClick={() => toggleProductMapping(template.id)}
+                                                                >
+                                                                    <div>
+                                                                        <div style={{ fontWeight: 500 }}>{template.name}</div>
+                                                                        <div className={styles.itemSubtext}>{template.size}</div>
                                                                     </div>
-                                                                );
-                                                            })
-                                                    )}
-                                                </div>
+                                                                    {!isSelected && <Plus size={14} style={{ opacity: 0.5 }} />}
+                                                                </button>
+                                                            );
+                                                        })
+                                                )}
                                             </div>
-                                        ) : (
-                                            <div className={styles.emptyState} style={{ height: '315px', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: 'var(--slate-50)', border: '1px dashed var(--border)', borderRadius: '0.75rem' }}>
-                                                <div style={{ textAlign: 'center' }}>
-                                                    <Factory size={32} style={{ marginBottom: '1rem', opacity: 0.3, color: 'var(--text-main)' }} />
-                                                    <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 500 }}>Factory required</p>
-                                                    <p style={{ margin: '0.5rem 1rem 0 1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                        Product mappings are restricted by factory location.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
+                                        </div>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div className={styles.modalFooter} style={{ marginTop: '2rem' }}>
-                                    <button
-                                        type="button"
-                                        className={styles.secondaryButton}
-                                        onClick={closeModal}
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className={styles.submitButton}
-                                        disabled={isSaving || !formData.factory_id}
-                                    >
-                                        {isSaving ? (
-                                            <>
-                                                <Loader2 className={styles.spinner} size={16} />
-                                                Saving...
-                                            </>
-                                        ) : (
-                                            selectedCap ? 'Save Changes' : 'Create Cap'
-                                        )}
-                                    </button>
-                                </div>
+                            <div className={styles.modalFooter}>
+                                <button
+                                    type="button"
+                                    className={styles.secondaryButton}
+                                    onClick={closeModal}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className={styles.submitButton}
+                                    disabled={isSaving || !isFormValid}
+                                >
+                                    {isSaving ? (
+                                        <>
+                                            <Loader2 className={styles.spinner} size={16} style={{ marginRight: '8px' }} />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        selectedCap ? 'Save Changes' : 'Create Cap Template'
+                                    )}
+                                </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmCap && (
+                <div className={styles.modalBackdrop} onClick={() => setDeleteConfirmCap(null)}>
+                    <div className={cn(styles.modal, styles.confirmModal)} onClick={e => e.stopPropagation()}>
+                        <div className={styles.confirmContent}>
+                            <div className={styles.confirmIcon}>
+                                <AlertTriangle size={32} />
+                            </div>
+                            <h3 className={styles.confirmTitle}>Confirm Deletion</h3>
+                            <p className={styles.confirmMessage}>
+                                Are you sure you want to delete <strong>{deleteConfirmCap.name}</strong>?
+                                <br />This action will remove the template and all its associated mappings.
+                            </p>
+                            <div className={styles.confirmActions}>
+                                <button
+                                    className={styles.secondaryButton}
+                                    onClick={() => setDeleteConfirmCap(null)}
+                                    disabled={deleteMutation.isPending}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    className={cn(styles.primaryButton, styles.deleteBtn)}
+                                    onClick={confirmDelete}
+                                    disabled={deleteMutation.isPending}
+                                >
+                                    {deleteMutation.isPending ? 'Deleting...' : 'Delete Template'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
         </>
     );
 }
+

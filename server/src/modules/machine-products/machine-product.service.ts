@@ -2,7 +2,8 @@ import { supabase } from '../../config/supabase';
 
 export interface CreateMachineProductDTO {
     machine_id: string;
-    product_id: string;
+    product_template_id: string;
+    product_id?: string;
     ideal_cycle_time_seconds: number;
     capacity_restriction?: number | null;
     enabled?: boolean;
@@ -15,32 +16,32 @@ export class MachineProductService {
             .from('machine_products')
             .select('id')
             .eq('machine_id', data.machine_id)
-            .eq('product_id', data.product_id)
+            .eq('product_template_id', data.product_template_id)
             .single();
 
         if (existing) {
-            throw new Error('This machine-product mapping already exists. Use update instead.');
+            throw new Error('This machine-template mapping already exists. Use update instead.');
         }
 
-        // CRITICAL: Validate machine and product belong to same factory
+        // CRITICAL: Validate machine and template belong to same factory
         const { data: machine } = await supabase
             .from('machines')
             .select('factory_id')
             .eq('id', data.machine_id)
             .single();
 
-        const { data: product } = await supabase
-            .from('products')
+        const { data: template } = await supabase
+            .from('product_templates')
             .select('factory_id')
-            .eq('id', data.product_id)
+            .eq('id', data.product_template_id)
             .single();
 
-        if (!machine || !product) {
-            throw new Error('Invalid machine or product ID');
+        if (!machine || !template) {
+            throw new Error('Invalid machine or product template ID');
         }
 
-        if (machine.factory_id !== product.factory_id) {
-            throw new Error('Cannot map machine and product from different factories');
+        if (machine.factory_id !== template.factory_id) {
+            throw new Error('Cannot map machine and template from different factories');
         }
 
         const { data: mapping, error } = await supabase
@@ -59,7 +60,7 @@ export class MachineProductService {
             .select(`
                 *,
                 machines(id, name, type, category, factory_id),
-                products(id, name, size, color, weight_grams, factory_id)
+                product_templates(id, name, size, weight_grams, factory_id)
             `)
             .order('created_at', { ascending: false });
 
@@ -79,7 +80,10 @@ export class MachineProductService {
             .from('machine_products')
             .select(`
                 *,
-                products(id, name, size, color, weight_grams, selling_price)
+                product_templates(
+                    id, name, size, weight_grams,
+                    variants:products(id, color, sku)
+                )
             `)
             .eq('machine_id', machineId)
             .order('created_at', { ascending: false });
@@ -88,14 +92,15 @@ export class MachineProductService {
         return data;
     }
 
-    async getMappingsByProduct(productId: string) {
+    async getMappingsByProduct(productTemplateId: string) {
         const { data, error } = await supabase
             .from('machine_products')
             .select(`
                 *,
-                machines(id, name, type, category)
+                machines(id, name, type, category, factory_id),
+                product_templates(id, name, size, weight_grams)
             `)
-            .eq('product_id', productId)
+            .eq('product_template_id', productTemplateId)
             .order('created_at', { ascending: false });
 
         if (error) throw new Error(error.message);
@@ -108,7 +113,7 @@ export class MachineProductService {
             .select(`
                 *,
                 machines(id, name, type, category),
-                products(id, name, size, color, weight_grams)
+                product_templates(id, name, size, weight_grams)
             `)
             .eq('id', id)
             .single();

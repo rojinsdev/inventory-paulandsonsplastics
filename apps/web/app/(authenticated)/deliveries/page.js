@@ -31,17 +31,17 @@ export default function DeliveriesPage() {
     // Queries
     const { data: orders = [], isLoading: ordersLoading, error: ordersError } = useQuery({
         queryKey: ['orders', { status: 'reserved' }],
-        queryFn: () => ordersAPI.getAll({ status: 'reserved' }),
+        queryFn: () => ordersAPI.getAll({ status: 'reserved' }).then(res => res?.orders || res?.data || (Array.isArray(res) ? res : [])),
     });
 
     const { data: customers = [], isLoading: customersLoading } = useQuery({
         queryKey: ['customers'],
-        queryFn: () => customersAPI.getAll(),
+        queryFn: () => customersAPI.getAll().then(res => res?.customers || res?.data || (Array.isArray(res) ? res : [])),
     });
 
     const { data: products = [], isLoading: productsLoading } = useQuery({
         queryKey: ['products'],
-        queryFn: () => productsAPI.getAll(),
+        queryFn: () => productsAPI.getAll().then(res => res?.products || res?.data || (Array.isArray(res) ? res : [])),
     });
 
     // Mutation for processing delivery

@@ -1,0 +1,88 @@
+npm warn invalid config cache=false set in command line options
+npm warn invalid config Must be valid filesystem path
+
+> server@1.0.0 test
+> jest
+
+PASS src/utils/__tests__/AppError.test.ts
+  AppError Utility
+    ΓêÜ should create an operational error with correct status code (11 ms)
+    ΓêÜ should set status to "error" for 500 status code (1 ms)
+    ΓêÜ should capture stack trace (15 ms)
+
+PASS src/modules/cash-flow/__tests__/cash-flow.service.test.ts
+  CashFlowService - Shared Costs
+    ΓêÜ should calculate shared cost split correctly (54 ms)
+
+PASS src/modules/sales-orders/__tests__/sales-order.service.test.ts
+  SalesOrderService
+    ΓêÜ should calculate totals and discounts correctly during delivery (13 ms)
+    getPendingPayments
+      ΓêÜ should filter by pending status (balance_due > 0) (2 ms)
+      ΓêÜ should filter by paid status (balance_due = 0) (2 ms)
+      ΓêÜ should return null if order is not found (2 ms)
+      ΓêÜ should filter by overdue status (2 ms)
+      ΓêÜ should not apply balance filter when status is all (1 ms)
+      ΓêÜ should filter by customer_id if provided (1 ms)
+
+PASS src/modules/production/__tests__/production.service.test.ts
+  ProductionService
+    ΓêÜ should submit production successfully and deduct raw materials (14 ms)
+    ΓêÜ should throw error if insufficient raw material (32 ms)
+
+  console.log
+    [Overdue Check] Marked 1 orders as overdue and sent notifications
+
+      at SalesOrderService.checkAndUpdateOverdueOrders (src/modules/sales-orders/sales-order.service.ts:870:17)
+
+PASS src/modules/sales-orders/__tests__/sales-credit.integration.test.ts
+  Sales & Credit Integration - Partial Payment Loop
+    ΓêÜ should handle the full partial payment cycle correctly (15 ms)
+    ΓêÜ should correctly mark orders as overdue and send notifications (71 ms)
+
+  console.log
+    Γ£à PlanningService initialized with updated query logic
+
+      at new PlanningService (src/modules/planning/planning.service.ts:21:17)
+
+[32minfo[39m: Fetching profile for user ID: user-123 {"service":"inventory-system","timestamp":"2026-02-22T17:56:34.931Z"}
+[0mPOST /api/auth/login [32m200[0m 28.383 ms - 199[0m
+[0mPOST /api/auth/login [33m400[0m 2.982 ms - 303[0m
+[33mwarn[39m: Login failed for test@example.com: Invalid login credentials {"service":"inventory-system","timestamp":"2026-02-22T17:56:34.963Z"}
+[0mPOST /api/auth/login [33m401[0m 2.440 ms - 55[0m
+PASS src/modules/auth/__tests__/auth.integration.test.ts (5.071 s)
+  Auth Integration
+    ΓêÜ should login successfully with valid credentials (65 ms)
+    ΓêÜ should return 400 for invalid input (9 ms)
+    ΓêÜ should return 401 for wrong credentials (7 ms)
+
+PASS src/modules/inventory/__tests__/stock-allocation.service.test.ts (5.204 s)
+  StockAllocationService
+    ΓêÜ should fulfill request manually and move stock to reserved (9 ms)
+
+FAIL src/modules/products/__tests__/product.service.test.ts (5.383 s)
+  ProductService
+    updateTemplate
+      ├ù should update template and sync variants (5 ms)
+
+  ΓùÅ ProductService ΓÇ║ updateTemplate ΓÇ║ should update template and sync variants
+
+    TypeError: supabase_1.supabase.from(...).update(...).eq is not a function
+
+      143 |             .from('product_templates')
+      144 |             .update(templateData)
+    > 145 |             .eq('id', id)
+          |              ^
+      146 |             .select()
+      147 |             .single();
+      148 |
+
+      at ProductService.updateTemplate (src/modules/products/product.service.ts:145:14)
+      at Object.<anonymous> (src/modules/products/__tests__/product.service.test.ts:63:42)
+
+Test Suites: 1 failed, 7 passed, 8 total
+Tests:       1 failed, 19 passed, 20 total
+Snapshots:   0 total
+Time:        6.324 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

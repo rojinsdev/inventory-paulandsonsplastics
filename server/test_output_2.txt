@@ -1,40 +1,12 @@
-npm verbose cli C:\Program Files\nodejs\node.exe C:\Users\Rojins\AppData\Roaming\npm\node_modules\npm\bin\npm-cli.js
-npm info using npm@11.0.0
-npm info using node@v22.19.0
-npm verbose title npm test src/modules/cash-flow/__tests__/cash-flow.service.test.ts
-npm verbose argv "test" "src/modules/cash-flow/__tests__/cash-flow.service.test.ts" "--loglevel" "verbose"
-npm verbose logfile logs-max:10 dir:C:\Users\Rojins\AppData\Local\npm-cache\_logs\2026-02-10T21_19_19_784Z-
-npm verbose logfile C:\Users\Rojins\AppData\Local\npm-cache\_logs\2026-02-10T21_19_19_784Z-debug-0.log
-
-> server@1.0.0 test
-> jest src/modules/cash-flow/__tests__/cash-flow.service.test.ts
-
-FAIL src/modules/cash-flow/__tests__/cash-flow.service.test.ts
-  ΓùÅ Test suite failed to run
-
-    ReferenceError: Cannot access 'mockSupabase' before initialization
-
-       9 | // Mock the module
-      10 | jest.mock('../../../config/supabase', () => ({
-    > 11 |     supabase: mockSupabase,
-         |               ^
-      12 | }));
-      13 |
-      14 | describe('CashFlowService - Shared Costs', () => {
-
-      at src/modules/cash-flow/__tests__/cash-flow.service.test.ts:11:15
-      at Object.<anonymous> (src/modules/cash-flow/cash-flow.service.ts:1:1)
-      at Object.<anonymous> (src/modules/cash-flow/__tests__/cash-flow.service.test.ts:1:1)
-
-Test Suites: 1 failed, 1 total
-Tests:       0 total
-Snapshots:   0 total
-Time:        2.034 s
-Ran all test suites matching src/modules/cash-flow/__tests__/cash-flow.service.test.ts.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
-npm verbose cwd D:\WORKS\SAAS\PaulAndSonsPlastics\inventory-production-system\server
-npm verbose os Windows_NT 10.0.26200
-npm verbose node v22.19.0
-npm verbose npm  v11.0.0
-npm verbose exit 1
-npm verbose code 1
+≡ƒº¬ Starting Cap Raw Material Deduction Test...
+   ╬ô┬ú├á Using Test User ID: 9e45952d-2388-4088-adce-247b62613bf9
+1. Creating Test Raw Material...
+   Γ£à Created RM: Test RM 1771147126944 (ID: 4dc8aa46-7963-493c-a00b-47468cee71a5) with 100kg
+2. Creating Test Cap...
+   Γ£à Created Cap: Test Cap 1771147126944 (ID: 6d1e44a8-df7e-4890-97fa-3e04b6bff80c) linked to RM
+3. Submitting Cap Production...
+   Γ£à Submitted production of 10kg
+4. Verifying Deduction...
+   Γ£à SUCCESS: Stock is 90kg (Expected: 90kg)
+5. Cleaning up...
+   Γ£à Cleanup complete.

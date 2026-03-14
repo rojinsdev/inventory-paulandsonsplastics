@@ -1,7 +1,8 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchAPI } from './api';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -23,31 +24,23 @@ export function AuthProvider({ children }) {
 
         if (!token) {
             setLoading(false);
+            setUser(null);
             return;
         }
 
         try {
-            const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
+            const data = await fetchAPI('/auth/me');
+            if (data && data.user) {
                 setUser(data.user);
             } else {
-                // Token invalid, clear it
-                localStorage.removeItem('auth_token');
-                localStorage.removeItem('refresh_token');
                 setUser(null);
             }
         } catch (err) {
             console.error('Session check failed:', err);
-            localStorage.removeItem('auth_token');
-            localStorage.removeItem('refresh_token');
-            setUser(null);
+            // fetchAPI will handle redirects if refresh fails
+            if (err.message.includes('401') || err.message.includes('session expired')) {
+                setUser(null);
+            }
         } finally {
             setLoading(false);
         }
@@ -114,7 +107,7 @@ export function AuthProvider({ children }) {
         }
     };
 
-    const value = {
+    const value = useMemo(() => ({
         user,
         loading,
         error,
@@ -122,7 +115,7 @@ export function AuthProvider({ children }) {
         login,
         logout,
         checkSession,
-    };
+    }), [user, loading, error, login, logout, checkSession]);
 
     return (
         <AuthContext.Provider value={value}>

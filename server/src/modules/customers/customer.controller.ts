@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { customerService } from './customer.service';
 import { z } from 'zod';
+import { AppError } from '../../utils/AppError';
 
 const createCustomerSchema = z.object({
     name: z.string().min(1),
@@ -28,74 +29,49 @@ const createInteractionSchema = z.object({
 
 export class CustomerController {
     async create(req: Request, res: Response) {
-        try {
-            const validatedData = createCustomerSchema.parse(req.body);
-            const customer = await customerService.createCustomer(validatedData);
-            res.status(201).json(customer);
-        } catch (error: any) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: error.issues });
-            } else {
-                res.status(500).json({ error: error.message });
-            }
-        }
+        const validatedData = createCustomerSchema.parse(req.body);
+        const customer = await customerService.createCustomer(validatedData);
+        res.status(201).json(customer);
     }
 
     async list(req: Request, res: Response) {
-        try {
-            const { search } = req.query;
+        const { search } = req.query;
 
-            let customers;
-            if (search) {
-                customers = await customerService.searchCustomers(search as string);
-            } else {
-                customers = await customerService.getAllCustomers();
-            }
-
-            res.json(customers);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
+        let customers;
+        if (search) {
+            customers = await customerService.searchCustomers(search as string);
+        } else {
+            customers = await customerService.getAllCustomers();
         }
+
+        res.json(customers);
     }
 
     async get(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const customer = await customerService.getCustomerById(id);
-            res.json(customer);
-        } catch (error: any) {
-            res.status(404).json({ error: 'Customer not found' });
-        }
+        const { id } = req.params;
+        const customer = await customerService.getCustomerById(id);
+        if (!customer) throw new AppError('Customer not found', 404);
+        res.json(customer);
     }
 
     async update(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const validatedData = createCustomerSchema.partial().parse(req.body);
-            const customer = await customerService.updateCustomer(id, validatedData);
-            res.json(customer);
-        } catch (error: any) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: error.issues });
-            } else if (error.message.includes('not found')) {
-                res.status(404).json({ error: 'Customer not found' });
-            } else {
-                res.status(500).json({ error: error.message });
-            }
-        }
+        const { id } = req.params;
+        const validatedData = createCustomerSchema.partial().parse(req.body);
+        const customer = await customerService.updateCustomer(id, validatedData);
+        if (!customer) throw new AppError('Customer not found', 404);
+        res.json(customer);
     }
 
     async delete(req: Request, res: Response) {
+        const { id } = req.params;
         try {
-            const { id } = req.params;
             const result = await customerService.deleteCustomer(id);
             res.json(result);
         } catch (error: any) {
             if (error.message.includes('foreign key')) {
-                res.status(409).json({ error: 'Cannot delete customer with existing orders' });
-            } else {
-                res.status(404).json({ error: 'Customer not found' });
+                throw new AppError('Cannot delete customer with existing orders', 409);
             }
+            throw error;
         }
     }
 
@@ -104,40 +80,28 @@ export class CustomerController {
     // ============================================================================
 
     async getProfile(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const profile = await customerService.getCustomerProfile(id);
-            res.json(profile);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const { id } = req.params;
+        const profile = await customerService.getCustomerProfile(id);
+        res.json(profile);
     }
 
     async getPurchaseHistory(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const { page, limit } = req.query;
+        const { id } = req.params;
+        const { page, limit } = req.query;
 
-            const options = {
-                page: page ? parseInt(page as string) : 1,
-                limit: limit ? parseInt(limit as string) : 20
-            };
+        const options = {
+            page: page ? parseInt(page as string) : 1,
+            limit: limit ? parseInt(limit as string) : 20
+        };
 
-            const history = await customerService.getCustomerPurchaseHistory(id, options);
-            res.json(history);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const history = await customerService.getCustomerPurchaseHistory(id, options);
+        res.json(history);
     }
 
     async getAnalytics(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const analytics = await customerService.getCustomerAnalytics(id);
-            res.json(analytics);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const { id } = req.params;
+        const analytics = await customerService.getCustomerAnalytics(id);
+        res.json(analytics);
     }
 
     // ============================================================================
@@ -145,34 +109,22 @@ export class CustomerController {
     // ============================================================================
 
     async getInteractions(req: Request, res: Response) {
-        try {
-            const { id } = req.params;
-            const { page, limit } = req.query;
+        const { id } = req.params;
+        const { page, limit } = req.query;
 
-            const options = {
-                page: page ? parseInt(page as string) : 1,
-                limit: limit ? parseInt(limit as string) : 50
-            };
+        const options = {
+            page: page ? parseInt(page as string) : 1,
+            limit: limit ? parseInt(limit as string) : 50
+        };
 
-            const interactions = await customerService.getCustomerInteractions(id, options);
-            res.json(interactions);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const interactions = await customerService.getCustomerInteractions(id, options);
+        res.json(interactions);
     }
 
     async addInteraction(req: Request, res: Response) {
-        try {
-            const validatedData = createInteractionSchema.parse(req.body);
-            const interaction = await customerService.addCustomerInteraction(validatedData);
-            res.status(201).json(interaction);
-        } catch (error: any) {
-            if (error instanceof z.ZodError) {
-                res.status(400).json({ error: error.issues });
-            } else {
-                res.status(500).json({ error: error.message });
-            }
-        }
+        const validatedData = createInteractionSchema.parse(req.body);
+        const interaction = await customerService.addCustomerInteraction(validatedData);
+        res.status(201).json(interaction);
     }
 
     // ============================================================================
@@ -180,52 +132,36 @@ export class CustomerController {
     // ============================================================================
 
     async getBySegment(req: Request, res: Response) {
-        try {
-            const { segment } = req.params;
-            const validSegments = ['vip', 'regular', 'at_risk', 'new', 'inactive'];
+        const { segment } = req.params;
+        const validSegments = ['vip', 'regular', 'at_risk', 'new', 'inactive'];
 
-            if (!validSegments.includes(segment)) {
-                return res.status(400).json({ error: 'Invalid segment' });
-            }
-
-            const customers = await customerService.getCustomersBySegment(segment as any);
-            res.json(customers);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
+        if (!validSegments.includes(segment)) {
+            throw new AppError('Invalid segment', 400);
         }
+
+        const customers = await customerService.getCustomersBySegment(segment as any);
+        res.json(customers);
     }
 
     async getVIP(req: Request, res: Response) {
-        try {
-            const { limit } = req.query;
-            const customers = await customerService.getVIPCustomers(
-                limit ? parseInt(limit as string) : 50
-            );
-            res.json(customers);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const { limit } = req.query;
+        const customers = await customerService.getVIPCustomers(
+            limit ? parseInt(limit as string) : 50
+        );
+        res.json(customers);
     }
 
     async getAtRisk(req: Request, res: Response) {
-        try {
-            const { limit } = req.query;
-            const customers = await customerService.getAtRiskCustomers(
-                limit ? parseInt(limit as string) : 50
-            );
-            res.json(customers);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const { limit } = req.query;
+        const customers = await customerService.getAtRiskCustomers(
+            limit ? parseInt(limit as string) : 50
+        );
+        res.json(customers);
     }
 
     async getStats(req: Request, res: Response) {
-        try {
-            const stats = await customerService.getCustomerStats();
-            res.json(stats);
-        } catch (error: any) {
-            res.status(500).json({ error: error.message });
-        }
+        const stats = await customerService.getCustomerStats();
+        res.json(stats);
     }
 }
 

@@ -18,6 +18,7 @@ class InventoryHubScreen extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(inventoryStockProvider);
+          ref.invalidate(capStockProvider);
           ref.invalidate(productionRequestsProvider);
           ref.invalidate(pendingOrdersProvider);
         },
@@ -52,19 +53,36 @@ class InventoryHubScreen extends ConsumerWidget {
                     Consumer(
                       builder: (context, ref, child) {
                         final stockAsync = ref.watch(inventoryStockProvider);
-                        return stockAsync.when(
-                          data: (stocks) => stocks.isEmpty
-                              ? const StockEmptyCard()
-                              : StockSummaryCard(
-                                  stocks: stocks,
-                                  onTap: () => context.push('/stock-details'),
-                                ),
-                          loading: () => const StockLoadingCard(),
-                          error: (err, stack) => StockErrorCard(
-                            error: err.toString(),
-                            onRetry: () =>
-                                ref.invalidate(inventoryStockProvider),
-                          ),
+                        final capStockAsync = ref.watch(capStockProvider);
+
+                        if (stockAsync.isLoading || capStockAsync.isLoading) {
+                          return const StockLoadingCard();
+                        }
+
+                        if (stockAsync.hasError || capStockAsync.hasError) {
+                          return StockErrorCard(
+                            error: (stockAsync.error ??
+                                    capStockAsync.error ??
+                                    'Unknown error')
+                                .toString(),
+                            onRetry: () {
+                              ref.invalidate(inventoryStockProvider);
+                              ref.invalidate(capStockProvider);
+                            },
+                          );
+                        }
+
+                        final stocks = stockAsync.valueOrNull ?? [];
+                        final capStocks = capStockAsync.valueOrNull ?? [];
+
+                        if (stocks.isEmpty && capStocks.isEmpty) {
+                          return const StockEmptyCard();
+                        }
+
+                        return StockSummaryCard(
+                          stocks: stocks,
+                          capStocks: capStocks,
+                          onTap: () => context.push('/stock-details'),
                         );
                       },
                     ),

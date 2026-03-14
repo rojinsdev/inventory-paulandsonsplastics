@@ -14,7 +14,12 @@ class PackingScreen extends ConsumerStatefulWidget {
 class _PackingScreenState extends ConsumerState<PackingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _quantityController = TextEditingController();
-  String? _selectedProductId;
+
+  String? _selectedProductTemplateId;
+  String? _selectedProductVariantId;
+  String? _selectedCapTemplateId;
+  String? _selectedCapVariantId;
+
 
   @override
   void dispose() {
@@ -24,9 +29,11 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
-      ref
-          .read(inventoryOperationProvider.notifier)
-          .pack(_selectedProductId!, int.parse(_quantityController.text));
+      ref.read(inventoryOperationProvider.notifier).pack(
+            _selectedProductVariantId!,
+            int.parse(_quantityController.text),
+            capId: _selectedCapVariantId,
+          );
     }
   }
 
@@ -64,7 +71,8 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
       );
     });
 
-    final productsAsync = ref.watch(productsProvider);
+    final productTemplatesAsync = ref.watch(productTemplatesProvider);
+    final capTemplatesAsync = ref.watch(capTemplatesProvider);
     final isSubmitting = ref.watch(inventoryOperationProvider).isLoading;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -105,34 +113,146 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
               ),
               const SizedBox(height: 32),
 
-              // Product Selector
-              productsAsync.when(
-                data: (products) => DropdownButtonFormField<String>(
-                  initialValue: _selectedProductId,
+              // Product Template Selector
+              productTemplatesAsync.when(
+                data: (templates) => DropdownButtonFormField<String>(
+                  initialValue: _selectedProductTemplateId,
                   decoration: const InputDecoration(
-                    labelText: 'Product',
+                    labelText: 'Product Type',
                     prefixIcon: Icon(Icons.inventory_2_outlined),
                   ),
-                  items: products
+                  items: templates
                       .map(
-                        (p) => DropdownMenuItem(
-                          value: p.id,
-                          child: Text(p.displayName),
+                        (t) => DropdownMenuItem(
+                          value: t.id,
+                          child: Text(t.name),
                         ),
                       )
                       .toList(),
-                  onChanged: (value) =>
-                      setState(() => _selectedProductId = value),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedProductTemplateId = value;
+                      _selectedProductVariantId = null;
+                      // Optionally pre-select cap template if mapped in future
+                    });
+                  },
                   validator: (value) =>
-                      value == null ? 'Please select a product' : null,
+                      value == null ? 'Please select a product type' : null,
                 ),
                 loading: () => const LinearProgressIndicator(),
-                error: (error, _) => Text(
-                  'Error: $error',
-                  style: const TextStyle(color: Colors.red),
-                ),
+                error: (error, _) => Text('Error: $error'),
               ),
               const SizedBox(height: 24),
+
+              // Product Variant (Color) Selector
+              if (_selectedProductTemplateId != null) ...[
+                productTemplatesAsync.when(
+                  data: (templates) {
+                    final template = templates
+                        .firstWhere((t) => t.id == _selectedProductTemplateId);
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedProductVariantId,
+                      decoration: const InputDecoration(
+                        labelText: 'Color / Variant',
+                        prefixIcon: Icon(Icons.palette_outlined),
+                      ),
+                      items: template.variants
+                          .map(
+                            (v) => DropdownMenuItem(
+                              value: v.id,
+                              child:
+                                  Text(v.color.isEmpty ? 'Standard' : v.color),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => _selectedProductVariantId = value),
+                      validator: (value) =>
+                          value == null ? 'Please select a color' : null,
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (error, _) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 24),
+              ],
+
+              // Cap Template Selector
+              capTemplatesAsync.when(
+                data: (templates) => DropdownButtonFormField<String>(
+                  initialValue: _selectedCapTemplateId,
+                  decoration: const InputDecoration(
+                    labelText: 'Cap Type',
+                    prefixIcon: Icon(Icons.adjust),
+                  ),
+                  items: templates
+                      .map(
+                        (t) => DropdownMenuItem(
+                          value: t.id,
+                          child: Text(t.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedCapTemplateId = value;
+                      _selectedCapVariantId = null;
+                    });
+                  },
+                  validator: (value) =>
+                      value == null ? 'Please select a cap type' : null,
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (error, _) => Text('Error: $error'),
+              ),
+              const SizedBox(height: 24),
+
+              // Cap Variant (Color) Selector
+              if (_selectedCapTemplateId != null) ...[
+                capTemplatesAsync.when(
+                  data: (templates) {
+                    final template = templates
+                        .firstWhere((t) => t.id == _selectedCapTemplateId);
+                    return DropdownButtonFormField<String>(
+                      initialValue: _selectedCapVariantId,
+                      decoration: const InputDecoration(
+                        labelText: 'Cap Color',
+                        prefixIcon: Icon(Icons.colorize_outlined),
+                      ),
+                      items: template.variants
+                          .map(
+                            (v) => DropdownMenuItem(
+                              value: v.id,
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(v.color ?? 'Standard'),
+                                  Text(
+                                    '${v.stockQuantity} qty',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: v.stockQuantity < 100
+                                          ? Colors.red
+                                          : Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) =>
+                          setState(() => _selectedCapVariantId = value),
+                      validator: (value) =>
+                          value == null ? 'Please select a cap color' : null,
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (error, _) => const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 24),
+              ],
 
               // Quantity Input
               TextFormField(
@@ -140,7 +260,7 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Packets Created',
                   prefixIcon: Icon(Icons.numbers),
-                  suffixText: 'packets',
+                  suffixText: 'units',
                 ),
                 keyboardType: TextInputType.number,
                 style: const TextStyle(

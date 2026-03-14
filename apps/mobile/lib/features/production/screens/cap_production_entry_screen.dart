@@ -17,6 +17,7 @@ class _CapProductionEntryScreenState
     extends ConsumerState<CapProductionEntryScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  String? _selectedTemplateId;
   String? _selectedCapId;
   int _shiftNumber = 1;
   DateTime _selectedDate = DateTime.now();
@@ -24,6 +25,7 @@ class _CapProductionEntryScreenState
   TimeOfDay _endTime = const TimeOfDay(hour: 20, minute: 0);
 
   final _totalWeightController = TextEditingController();
+  final _totalProducedController = TextEditingController();
   final _actualCycleTimeController = TextEditingController();
   final _actualWeightController = TextEditingController();
   final _remarksController = TextEditingController();
@@ -31,6 +33,22 @@ class _CapProductionEntryScreenState
   @override
   void initState() {
     super.initState();
+
+    final now = DateTime.now();
+    final hour = now.hour;
+
+    // Shift 1: 08:00 to 19:59 (8 AM to 7:59 PM)
+    // Shift 2: 20:00 to 07:59 (8 PM to 7:59 AM)
+    if (hour >= 8 && hour < 20) {
+      _shiftNumber = 1;
+      _startTime = const TimeOfDay(hour: 8, minute: 0);
+      _endTime = const TimeOfDay(hour: 20, minute: 0);
+    } else {
+      _shiftNumber = 2;
+      _startTime = const TimeOfDay(hour: 20, minute: 0);
+      _endTime = const TimeOfDay(hour: 8, minute: 0);
+    }
+
     // Apply sticky logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final lastEntry = ref.read(lastEntryProvider);
@@ -43,11 +61,12 @@ class _CapProductionEntryScreenState
               hour: int.parse(parts[0]),
               minute: int.parse(parts[1]),
             );
-            // Default end time to 12 hours after start time
-            _endTime = TimeOfDay(
-              hour: (_startTime.hour + 12) % 24,
-              minute: _startTime.minute,
-            );
+            // Default end time logically (12 hours later or at shift boundary)
+            int endHour = (_startTime.hour + 12) % 24;
+            if (_shiftNumber == 1 && endHour > 20) endHour = 20;
+            if (_shiftNumber == 2 && endHour > 8 && endHour < 20) endHour = 8;
+
+            _endTime = TimeOfDay(hour: endHour, minute: _startTime.minute);
           }
         });
       }
@@ -57,6 +76,7 @@ class _CapProductionEntryScreenState
   @override
   void dispose() {
     _totalWeightController.dispose();
+    _totalProducedController.dispose();
     _actualCycleTimeController.dispose();
     _actualWeightController.dispose();
     _remarksController.dispose();
@@ -91,11 +111,35 @@ class _CapProductionEntryScreenState
     }
   }
 
+  double _calculateShiftDuration() {
+    int startMinutes = _startTime.hour * 60 + _startTime.minute;
+    int endMinutes = _endTime.hour * 60 + _endTime.minute;
+
+    // Handle overnight shifts (Shift 2)
+    if (_shiftNumber == 2 && endMinutes < startMinutes) {
+      endMinutes += 24 * 60;
+    }
+
+    return (endMinutes - startMinutes) / 60.0; // Return hours
+  }
+
   void _submit() {
     if (_formKey.currentState!.validate()) {
       if (_selectedCapId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a cap')),
+        );
+        return;
+      }
+
+      final shiftDuration = _calculateShiftDuration();
+      if (shiftDuration <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Invalid shift times: End time must be after start time'),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
@@ -107,7 +151,12 @@ class _CapProductionEntryScreenState
                 '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
             endTime:
                 '${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
-            totalWeightKg: double.parse(_totalWeightController.text),
+            totalWeightKg: _totalWeightController.text.isNotEmpty
+                ? double.parse(_totalWeightController.text)
+                : null,
+            totalProduced: _totalProducedController.text.isNotEmpty
+                ? int.parse(_totalProducedController.text)
+                : null,
             actualCycleTimeSeconds:
                 double.parse(_actualCycleTimeController.text),
             actualWeightGrams: double.parse(_actualWeightController.text),
@@ -421,34 +470,80 @@ class _CapProductionEntryScreenState
                 ),
                 const SizedBox(height: 24),
 
-                // Cap Selection
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedCapId,
-                  decoration: const InputDecoration(
-                    labelText: 'Select Cap',
-                    prefixIcon: Icon(Icons.high_quality),
-                  ),
-                  items: caps.map((cap) {
-                    return DropdownMenuItem(
-                      value: cap.id,
-                      child: Text(cap.displayName),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    setState(() => _selectedCapId = val);
-                    // Pre-fill ideal values
-                    final cap = caps.firstWhere((c) => c.id == val);
-                    if (_actualCycleTimeController.text.isEmpty) {
-                      _actualCycleTimeController.text =
-                          cap.idealCycleTimeSeconds.toString();
-                    }
-                    if (_actualWeightController.text.isEmpty) {
-                      _actualWeightController.text =
-                          cap.idealWeightGrams.toString();
-                    }
-                  },
-                  validator: (val) => val == null ? 'Required' : null,
-                ),
+                // Cap Template Selection
+                ref.watch(capTemplatesProvider).when(
+                      data: (templates) => DropdownButtonFormField<String>(
+                        initialValue: _selectedTemplateId,
+                        decoration: const InputDecoration(
+                          labelText: 'Cap Template',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                        items: templates
+                            .map((t) => DropdownMenuItem(
+                                  value: t.id,
+                                  child: Text(t.displayName),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedTemplateId = value;
+                            _selectedCapId =
+                                null; // Clear variant on template change
+                          });
+                        },
+                        validator: (value) => value == null ? 'Required' : null,
+                      ),
+                      loading: () => const LinearProgressIndicator(),
+                      error: (error, _) => Text('Error: $error',
+                          style: const TextStyle(color: Colors.red)),
+                    ),
+                const SizedBox(height: 24),
+
+                // Cap Variant Selection (Color)
+                if (_selectedTemplateId != null) ...[
+                  ref.watch(capTemplatesProvider).when(
+                        data: (templates) {
+                          final selectedTemplate = templates
+                              .firstWhere((t) => t.id == _selectedTemplateId);
+                          final variants = selectedTemplate.variants;
+
+                          return DropdownButtonFormField<String>(
+                            initialValue: _selectedCapId,
+                            decoration: const InputDecoration(
+                              labelText: 'Cap Color',
+                              prefixIcon: Icon(Icons.palette_outlined),
+                            ),
+                            items: variants
+                                .map((v) => DropdownMenuItem(
+                                      value: v.id,
+                                      child: Text(v.color ?? 'Standard'),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                _selectedCapId = value;
+                                // Pre-fill ideal values
+                                final variant =
+                                    variants.firstWhere((v) => v.id == value);
+                                if (_actualCycleTimeController.text.isEmpty) {
+                                  _actualCycleTimeController.text =
+                                      variant.idealCycleTimeSeconds.toString();
+                                }
+                                if (_actualWeightController.text.isEmpty) {
+                                  _actualWeightController.text =
+                                      variant.idealWeightGrams.toString();
+                                }
+                              });
+                            },
+                            validator: (value) =>
+                                value == null ? 'Required' : null,
+                          );
+                        },
+                        loading: () => const SizedBox.shrink(),
+                        error: (error, _) => const SizedBox.shrink(),
+                      ),
+                  const SizedBox(height: 24),
+                ],
                 const SizedBox(height: 24),
 
                 Text('Production Details',
@@ -463,11 +558,37 @@ class _CapProductionEntryScreenState
                     labelText: 'Total Weight (kg)',
                     prefixIcon: Icon(Icons.scale),
                     suffixText: 'kg',
+                    helperText: 'Optional if Total Produced is provided',
                   ),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  validator: (val) =>
-                      val == null || val.isEmpty ? 'Required' : null,
+                  validator: (val) {
+                    if ((val == null || val.isEmpty) &&
+                        _totalProducedController.text.isEmpty) {
+                      return 'Enter Weight or Total Produced';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+
+                // Total Produced (Units)
+                TextFormField(
+                  controller: _totalProducedController,
+                  decoration: const InputDecoration(
+                    labelText: 'Total Produced (Units)',
+                    prefixIcon: Icon(Icons.pin_outlined),
+                    suffixText: 'units',
+                    helperText: 'Optional if Total Weight is provided',
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (val) {
+                    if ((val == null || val.isEmpty) &&
+                        _totalWeightController.text.isEmpty) {
+                      return 'Enter Weight or Total Produced';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 24),
 

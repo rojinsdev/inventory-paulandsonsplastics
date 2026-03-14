@@ -309,7 +309,7 @@ export class PlanningService {
         // Get all products
         const { data: products, error: productsError } = await supabase
             .from('products')
-            .select('id, product_name, name');
+            .select('id, name');
 
         if (productsError) throw new Error(productsError.message);
 
@@ -407,7 +407,7 @@ export class PlanningService {
     async detectSeasonalPatterns(yearsBack: number = 3): Promise<void> {
         const { data: products } = await supabase
             .from('products')
-            .select('id, product_name, name');
+            .select('id, name');
 
         for (const product of products || []) {
             try {

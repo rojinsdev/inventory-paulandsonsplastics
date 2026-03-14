@@ -390,7 +390,7 @@ export default function RecommendationsPage() {
                 <div className={styles.emptyState}>
                     <Package size={48} />
                     <p>No recommendations found for {targetMonth}</p>
-                    <p className={styles.emptyHint}>Click "Generate Recommendations" to create new ones</p>
+                    <p className={styles.emptyHint}>Click &quot;Generate Recommendations&quot; to create new ones</p>
                 </div>
             )}
 

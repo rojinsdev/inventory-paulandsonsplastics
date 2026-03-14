@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { productionController } from './production.controller';
 import { authenticate, requireRole } from '../../middleware/auth';
+import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
 
@@ -8,56 +9,57 @@ const router = Router();
 router.post('/submit',
     authenticate,
     requireRole('production_manager'),
-    productionController.submit
+    asyncHandler(productionController.submit)
 );
 
 // GET routes - Both admin (web) and production_manager (mobile) can view
 router.get('/',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.list
+    asyncHandler(productionController.list)
 );
 router.get('/logs',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.list
+    asyncHandler(productionController.list)
 );
 router.get('/last-session',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.getLastSession
+    asyncHandler(productionController.getLastSession)
 );
 
 router.get('/daily/:date',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.getDailyProduction
+    asyncHandler(productionController.getDailyProduction)
 );
 
 // Production Requests (Demand Signaling)
 router.get('/requests',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.listRequests
+    asyncHandler(productionController.listRequests)
 );
 
 router.patch('/requests/:id',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.updateRequestStatus
+    asyncHandler(productionController.updateRequestStatus)
 );
 
 // Cap Production
 router.post('/caps/submit',
     authenticate,
     requireRole('production_manager'),
-    productionController.submitCapProduction
+    asyncHandler(productionController.submitCapProduction)
 );
 
 router.get('/caps/logs',
     authenticate,
     requireRole('admin', 'production_manager'),
-    productionController.listCapLogs
+    asyncHandler(productionController.listCapLogs)
 );
+
 
 export default router;

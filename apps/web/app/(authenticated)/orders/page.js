@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
-import { Plus, Loader2, ShoppingCart, Eye, Trash2, Filter, Clock, AlertCircle, CheckCircle2, X } from 'lucide-react';
-import { ordersAPI, customersAPI, productsAPI } from '@/lib/api';
+import { Plus, Loader2, ShoppingCart, Eye, Trash2, Filter, Clock, AlertCircle, CheckCircle2, X, User, Calendar, ClipboardList, Package } from 'lucide-react';
+import { ordersAPI, customersAPI, productsAPI, inventoryAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatDate, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
@@ -53,18 +53,23 @@ export default function OrdersPage() {
                 ...(statusFilter ? { status: statusFilter } : {}),
                 ...(selectedFactory ? { factory_id: selectedFactory } : {}),
             };
-            return ordersAPI.getAll(Object.keys(params).length > 0 ? params : undefined).then(res => Array.isArray(res) ? res : []);
+            return ordersAPI.getAll(Object.keys(params).length > 0 ? params : undefined).then(res => res?.orders || res?.data || (Array.isArray(res) ? res : []));
         },
     });
 
     const { data: customers = [] } = useQuery({
         queryKey: ['customers'],
-        queryFn: () => customersAPI.getAll().then(res => Array.isArray(res) ? res : []),
+        queryFn: () => customersAPI.getAll().then(res => res?.customers || res?.data || (Array.isArray(res) ? res : [])),
     });
 
     const { data: products = [] } = useQuery({
         queryKey: ['products'], // Fetch all products for multi-factory support
-        queryFn: () => productsAPI.getAll().then(res => Array.isArray(res) ? res : []),
+        queryFn: () => productsAPI.getAll().then(res => res?.products || res?.data || (Array.isArray(res) ? res : [])),
+    });
+
+    const { data: availableStock = [] } = useQuery({
+        queryKey: ['availableStock'],
+        queryFn: () => inventoryAPI.getAvailableStock().then(res => res || []),
     });
 
     const loading = ordersLoading;
@@ -138,7 +143,12 @@ export default function OrdersPage() {
     const handleCreate = () => {
         setFormData({
             customer_id: customers[0]?.id || '',
-            items: [{ product_id: products[0]?.id || '', quantity: 1, unit_type: 'bundle' }],
+            items: [{
+                factory_id: factories[0]?.id || '',
+                product_id: '',
+                quantity: 1,
+                unit_type: 'bundle'
+            }],
             notes: '',
             order_date: new Date().toISOString().split('T')[0],
         });
@@ -148,7 +158,12 @@ export default function OrdersPage() {
     const handleAddItem = () => {
         setFormData({
             ...formData,
-            items: [...formData.items, { product_id: products[0]?.id || '', quantity: 1, unit_type: 'bundle' }],
+            items: [...formData.items, {
+                factory_id: factories[0]?.id || '',
+                product_id: '',
+                quantity: 1,
+                unit_type: 'bundle'
+            }],
         });
     };
 
@@ -161,7 +176,12 @@ export default function OrdersPage() {
 
     const handleItemChange = (index, field, value) => {
         const newItems = [...formData.items];
-        newItems[index] = { ...newItems[index], [field]: value };
+        if (field === 'factory_id') {
+            // Reset product when factory changes
+            newItems[index] = { ...newItems[index], [field]: value, product_id: '' };
+        } else {
+            newItems[index] = { ...newItems[index], [field]: value };
+        }
         setFormData({ ...formData, items: newItems });
     };
 
@@ -208,18 +228,43 @@ export default function OrdersPage() {
         label: c.name
     })), [customers]);
 
+    const factoryOptions = useMemo(() => factories.map(f => ({
+        value: f.id,
+        label: f.name
+    })), [factories]);
+
     const productOptions = useMemo(() => products.map(p => {
         const factory = factories.find(f => f.id === p.factory_id);
         const factoryName = factory ? factory.name : 'Unknown Factory';
 
         return {
             value: p.id,
-            label: `[${factoryName}] ${p.name} (${p.size}, ${p.color})`,
+            label: `${p.name} (${p.size}, ${p.color})`,
             factory_id: p.factory_id,
-            factoryName,
-            stock: 0 // Mock stock for now
+            factoryName
         };
     }), [products, factories]);
+
+    const getStockForProduct = (productId) => {
+        const stockItems = availableStock.filter(s => s.product_id === productId);
+        return stockItems.reduce((sum, s) => sum + s.quantity, 0);
+    };
+
+    const orderSummary = useMemo(() => {
+        const totals = {
+            unique_products: formData.items.filter(i => i.product_id).length,
+            total_quantity: formData.items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
+            units: {}
+        };
+
+        formData.items.forEach(item => {
+            if (item.unit_type && item.quantity) {
+                totals.units[item.unit_type] = (totals.units[item.unit_type] || 0) + Number(item.quantity);
+            }
+        });
+
+        return totals;
+    }, [formData.items]);
 
 
 
@@ -394,122 +439,196 @@ export default function OrdersPage() {
                 <div className={styles.modalBackdrop} onClick={() => setModalOpen(false)}>
                     <div className={cn(styles.modal, styles.modalWide)} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>Create Sales Order</h2>
+                            <h2 className={styles.modalTitle}>New Sales Order</h2>
                             <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit}>
-                            <div className={styles.modalBody}>
-                                <div className={styles.formGrid}>
-                                    <div className={styles.formGroup}>
-                                        <label className={styles.formLabel}>Customer</label>
-                                        <CustomSelect
-                                            options={customerOptions}
-                                            value={formData.customer_id}
-                                            onChange={(val) => setFormData({ ...formData, customer_id: val })}
-                                            placeholder="Select Customer"
-                                        />
+
+                        <form onSubmit={handleSubmit} className={styles.splitForm}>
+                            {/* Left Panel: Delivery Details */}
+                            <div className={styles.formPanel}>
+                                <div className={styles.panelTitle}>
+                                    <div className={styles.sectionIcon}>
+                                        <User size={18} />
                                     </div>
-                                    <div className={styles.formGroup}>
-                                        <label className={styles.formLabel}>Delivery Goal</label>
-                                        <input
-                                            type="date"
-                                            className={styles.input}
-                                            value={formData.order_date}
-                                            onChange={(e) => setFormData({ ...formData, order_date: e.target.value })}
-                                        />
-                                    </div>
+                                    <h3>Delivery Details</h3>
                                 </div>
 
-                                <div className={styles.itemHeader}>
-                                    <h3 className={styles.sectionTitle}>Order Items</h3>
-                                    <button
-                                        type="button"
-                                        className={styles.addItemButton}
-                                        onClick={handleAddItem}
-                                    >
-                                        <Plus size={16} />
-                                        <span>Add Item</span>
-                                    </button>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabelModern}>
+                                        <User size={14} /> Customer
+                                    </label>
+                                    <CustomSelect
+                                        options={customerOptions}
+                                        value={formData.customer_id}
+                                        onChange={(val) => setFormData({ ...formData, customer_id: val })}
+                                        placeholder="Select Customer"
+                                    />
                                 </div>
 
-                                <div className={styles.itemsList}>
-                                    {formData.items.map((item, index) => (
-                                        <div key={index} className={styles.itemRow}>
-                                            <div className={styles.productSelect}>
-                                                <CustomSelect
-                                                    options={productOptions}
-                                                    value={item.product_id}
-                                                    onChange={(val) => handleItemChange(index, 'product_id', val)}
-                                                    placeholder="Select Product"
-                                                    searchable={false}
-                                                />
-                                            </div>
-                                            <div className={styles.quantityInput}>
-                                                <input
-                                                    type="number"
-                                                    className={styles.input}
-                                                    value={item.quantity}
-                                                    onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                                                    min="1"
-                                                    placeholder="Qty"
-                                                />
-                                            </div>
-                                            <div className={styles.unitSelect}>
-                                                <CustomSelect
-                                                    options={UNIT_OPTIONS}
-                                                    value={item.unit_type}
-                                                    onChange={(val) => handleItemChange(index, 'unit_type', val)}
-                                                    placeholder="Unit"
-                                                    searchable={false}
-                                                />
-                                            </div>
-                                            <button
-                                                type="button"
-                                                className={styles.removeBtn}
-                                                onClick={() => handleRemoveItem(index)}
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    ))}
+                                <div className={styles.formGroup}>
+                                    <label className={styles.formLabelModern}>
+                                        <Calendar size={14} /> Delivery Goal
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className={styles.inputModern}
+                                        value={formData.order_date}
+                                        onChange={(e) => setFormData({ ...formData, order_date: e.target.value })}
+                                    />
                                 </div>
 
-                                <div className={styles.formGroup} style={{ marginTop: '1.5rem' }}>
-                                    <label className={styles.formLabel}>Special Notes</label>
+                                <div className={styles.notesArea}>
+                                    <label className={styles.formLabelModern}>
+                                        <ClipboardList size={14} /> Special Notes
+                                    </label>
                                     <textarea
                                         className={styles.formTextarea}
                                         value={formData.notes}
                                         onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                        placeholder="Add any specific delivery or packing instructions..."
-                                        rows={3}
+                                        placeholder="Packing instructions, route notes..."
+                                        rows={4}
                                     />
+                                </div>
+
+                                <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
+                                    <button
+                                        type="submit"
+                                        className={styles.submitButton}
+                                        style={{ width: '100%', padding: '12px' }}
+                                        disabled={createMutation.isPending}
+                                    >
+                                        {createMutation.isPending ? (
+                                            <>
+                                                <Loader2 size={18} className={styles.spinner} />
+                                                <span>Creating...</span>
+                                            </>
+                                        ) : (
+                                            <span>Create Order</span>
+                                        )}
+                                    </button>
                                 </div>
                             </div>
 
-                            <div className={styles.modalFooter}>
-                                <button
-                                    type="button"
-                                    className={styles.secondaryButton}
-                                    onClick={() => setModalOpen(false)}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className={styles.submitButton}
-                                    disabled={createMutation.isPending}
-                                >
-                                    {createMutation.isPending ? (
-                                        <>
-                                            <Loader2 size={18} className={styles.spinner} />
-                                            <span>Creating...</span>
-                                        </>
+                            {/* Right Panel: Product Selection */}
+                            <div className={styles.mainPanel}>
+                                <div className={styles.panelHeader}>
+                                    <div className={styles.panelTitle}>
+                                        <Package size={20} className={styles.cautionIcon} />
+                                        <span>Order Items</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className={styles.addBtnModern}
+                                        onClick={handleAddItem}
+                                    >
+                                        <Plus size={18} />
+                                        <span>Add Product</span>
+                                    </button>
+                                </div>
+
+                                <div className={styles.scrollArea}>
+                                    {formData.items.length === 0 ? (
+                                        <div className={styles.itemEmpty}>
+                                            <ShoppingCart size={48} strokeWidth={1} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                                            <div className={styles.itemEmptyTitle}>Your order is empty</div>
+                                            <p className={styles.itemEmptyText}>
+                                                Use the button above to add products to this sales order.
+                                            </p>
+                                        </div>
                                     ) : (
-                                        <span>Create Order</span>
+                                        formData.items.map((item, index) => {
+                                            const filteredProducts = productOptions.filter(p => !item.factory_id || p.factory_id === item.factory_id);
+                                            const currentStock = getStockForProduct(item.product_id);
+
+                                            return (
+                                                <div key={index} className={styles.itemCard}>
+                                                    <div className={styles.itemCardHeader}>
+                                                        <span className={styles.itemNumber}>ITEM #{String(index + 1).padStart(2, '0')}</span>
+                                                        <button
+                                                            type="button"
+                                                            className={styles.removeButton}
+                                                            onClick={() => handleRemoveItem(index)}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+
+                                                    <div className={styles.productSelectGrid}>
+                                                        {/* Factory Select */}
+                                                        <div className={styles.formItem}>
+                                                            <CustomSelect
+                                                                options={factoryOptions}
+                                                                value={item.factory_id}
+                                                                onChange={(val) => handleItemChange(index, 'factory_id', val)}
+                                                                placeholder="Select Factory"
+                                                                searchable={false}
+                                                            />
+                                                        </div>
+
+                                                        {/* Product Select */}
+                                                        <div className={styles.formItem}>
+                                                            <CustomSelect
+                                                                options={filteredProducts}
+                                                                value={item.product_id}
+                                                                onChange={(val) => handleItemChange(index, 'product_id', val)}
+                                                                placeholder="Choose Product..."
+                                                                searchable={true}
+                                                            />
+                                                            {item.product_id && (
+                                                                <div className={styles.stockIndicator}>
+                                                                    <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: currentStock > 0 ? '#10b981' : '#f43f5e' }}></div>
+                                                                    <span>Available Stock: <span className={styles.stockValue}>{currentStock}</span></span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Quantity */}
+                                                        <div className={styles.formItem}>
+                                                            <input
+                                                                type="number"
+                                                                className={styles.inputModern}
+                                                                value={item.quantity}
+                                                                onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
+                                                                placeholder="Qty"
+                                                                min="1"
+                                                            />
+                                                        </div>
+
+                                                        {/* Unit */}
+                                                        <div className={styles.formItem}>
+                                                            <CustomSelect
+                                                                options={UNIT_OPTIONS}
+                                                                value={item.unit_type}
+                                                                onChange={(val) => handleItemChange(index, 'unit_type', val)}
+                                                                placeholder="Unit"
+                                                                searchable={false}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
                                     )}
-                                </button>
+                                </div>
+
+                                <div className={styles.orderSummary}>
+                                    <div className={styles.summaryItem}>
+                                        <div className={styles.summaryLabel}>Products</div>
+                                        <div className={styles.summaryValue}>{orderSummary.unique_products}</div>
+                                    </div>
+                                    {Object.entries(orderSummary.units).map(([unit, qty]) => (
+                                        <div key={unit} className={styles.summaryItem}>
+                                            <div className={styles.summaryLabel}>{unit}s</div>
+                                            <div className={styles.summaryValue}>{qty}</div>
+                                        </div>
+                                    ))}
+                                    <div className={styles.summaryItem}>
+                                        <div className={styles.summaryLabel}>Total Units</div>
+                                        <div className={styles.summaryValue}>{orderSummary.total_quantity}</div>
+                                    </div>
+                                </div>
                             </div>
                         </form>
                     </div>

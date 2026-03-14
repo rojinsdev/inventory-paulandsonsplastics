@@ -52,9 +52,60 @@ export class CapController {
     async getBalances(req: Request, res: Response) {
         try {
             const factoryId = req.query.factory_id as string;
-            if (!factoryId) throw new Error('Factory ID required');
             const balances = await capService.getCapStockBalances(factoryId);
             res.json(balances);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    // --- Template Handlers ---
+
+    async createTemplate(req: Request, res: Response) {
+        try {
+            const { colors, ...templateData } = req.body;
+            const result = await capService.createTemplateWithVariants(templateData, colors);
+            res.status(201).json(result);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async listTemplates(req: Request, res: Response) {
+        try {
+            const factoryId = req.query.factory_id as string | undefined;
+            const templates = await capService.getTemplates(factoryId);
+            res.json(templates);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async getTemplate(req: Request, res: Response) {
+        try {
+            const { id } = req.params;
+            const template = await capService.getTemplateById(id);
+            res.json(template);
+        } catch (error: any) {
+            res.status(404).json({ error: 'Template not found' });
+        }
+    }
+
+    async updateTemplate(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            const template = await capService.updateTemplate(id, req.body);
+            res.json(template);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
+
+    async deleteTemplate(req: AuthRequest, res: Response) {
+        try {
+            const { id } = req.params;
+            await capService.deleteTemplate(id);
+            res.json({ success: true });
         } catch (error: any) {
             res.status(500).json({ error: error.message });
         }

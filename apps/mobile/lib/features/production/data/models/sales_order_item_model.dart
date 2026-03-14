@@ -8,6 +8,7 @@ class SalesOrderItem {
   final int quantity;
   final String unitType;
   final bool isPrepared;
+  final bool isBackordered;
   final DateTime? preparedAt;
   final DateTime? deliveryDate;
   final String? notes;
@@ -22,6 +23,7 @@ class SalesOrderItem {
     required this.quantity,
     required this.unitType,
     required this.isPrepared,
+    required this.isBackordered,
     this.preparedAt,
     this.deliveryDate,
     this.notes,
@@ -48,9 +50,10 @@ class SalesOrderItem {
       productName: product?['name'] ?? 'Unknown Product',
       productSize: product?['size'] as String?,
       productColor: product?['color'] as String?,
-      quantity: itemJson['quantity'] ?? 0,
+      quantity: ((itemJson['quantity'] ?? 0) as num).toInt(),
       unitType: (itemJson['unit_type'] ?? 'bundle') as String,
       isPrepared: itemJson['is_prepared'] ?? false,
+      isBackordered: itemJson['is_backordered'] ?? false,
       preparedAt: itemJson['prepared_at'] != null
           ? DateTime.parse(itemJson['prepared_at'])
           : null,

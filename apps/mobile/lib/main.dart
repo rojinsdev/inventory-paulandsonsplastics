@@ -3,10 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'core/services/notification_service.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 import 'features/auth/providers/auth_provider.dart';
 import 'features/settings/providers/theme_provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint("Handling a background message: ${message.messageId}");
+}
 
 void main() async {
   // Catch all Flutter framework errors
@@ -56,14 +65,28 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
+    debugPrint('Initializing Firebase...');
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    debugPrint('Firebase initialized');
+
     debugPrint('Initializing SharedPreferences...');
     final prefs = await SharedPreferences.getInstance();
     debugPrint('SharedPreferences initialized successfully');
 
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+    );
+
+    debugPrint('Initializing Notification Service (async)...');
+    container.read(notificationServiceProvider).initialize();
+
     debugPrint('Starting app...');
     runApp(
-      ProviderScope(
-        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      UncontrolledProviderScope(
+        container: container,
         child: const MyApp(),
       ),
     );

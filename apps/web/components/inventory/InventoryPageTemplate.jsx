@@ -60,19 +60,15 @@ export default function InventoryPageTemplate({ title, type, description, guide 
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
             const [stockResult, productsResult] = await Promise.all([
-                inventoryAPI.getStock(params).catch(() => []),
-                productsAPI.getAll(params).catch(() => []),
+                inventoryAPI.getStock(params).catch(() => ({ stock: [] })),
+                productsAPI.getAll(params).catch(() => ({ products: [] })),
             ]);
-            if (Array.isArray(stockResult)) {
-                setData(stockResult);
-            } else {
-                setData([]);
-            }
-            if (Array.isArray(productsResult)) {
-                setProducts(productsResult);
-            } else {
-                setProducts([]);
-            }
+
+            const stockData = stockResult?.stock || stockResult?.data || (Array.isArray(stockResult) ? stockResult : []);
+            const productsData = productsResult?.products || productsResult?.data || (Array.isArray(productsResult) ? productsResult : []);
+
+            setData(stockData);
+            setProducts(productsData);
         } catch (err) {
             setError(err.message);
         } finally {

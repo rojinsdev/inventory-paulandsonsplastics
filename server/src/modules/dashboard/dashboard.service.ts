@@ -516,7 +516,7 @@ export class DashboardService {
             .slice(0, 20);
     }
 
-    private async getAlerts(today: string) {
+    public async getAlerts(today: string) {
         // Low stock alerts
         const { data: rawMaterials } = await supabase
             .from('raw_materials')

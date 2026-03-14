@@ -1,0 +1,75 @@
+npm warn invalid config cache=false set in command line options
+npm warn invalid config Must be valid filesystem path
+
+> server@1.0.0 test
+> jest
+
+PASS src/utils/__tests__/AppError.test.ts
+  AppError Utility
+    ΓêÜ should create an operational error with correct status code (18 ms)
+    ΓêÜ should set status to "error" for 500 status code (1 ms)
+    ΓêÜ should capture stack trace (10 ms)
+
+PASS src/modules/cash-flow/__tests__/cash-flow.service.test.ts
+  CashFlowService - Shared Costs
+    ΓêÜ should calculate shared cost split correctly (188 ms)
+
+  console.log
+    [Overdue Check] Marked 1 orders as overdue and sent notifications
+
+      at SalesOrderService.checkAndUpdateOverdueOrders (src/modules/sales-orders/sales-order.service.ts:870:17)
+
+PASS src/modules/sales-orders/__tests__/sales-credit.integration.test.ts
+  Sales & Credit Integration - Partial Payment Loop
+    ΓêÜ should handle the full partial payment cycle correctly (127 ms)
+    ΓêÜ should correctly mark orders as overdue and send notifications (79 ms)
+
+  console.log
+    Γ£à PlanningService initialized with updated query logic
+
+      at new PlanningService (src/modules/planning/planning.service.ts:21:17)
+
+[32minfo[39m: Fetching profile for user ID: user-123 {"service":"inventory-system","timestamp":"2026-02-22T17:54:53.890Z"}
+[0mPOST /api/auth/login [32m200[0m 40.656 ms - 199[0m
+[0mPOST /api/auth/login [33m400[0m 4.968 ms - 303[0m
+[33mwarn[39m: Login failed for test@example.com: Invalid login credentials {"service":"inventory-system","timestamp":"2026-02-22T17:54:53.933Z"}
+[0mPOST /api/auth/login [33m401[0m 3.249 ms - 55[0m
+PASS src/modules/auth/__tests__/auth.integration.test.ts
+  Auth Integration
+    ΓêÜ should login successfully with valid credentials (83 ms)
+    ΓêÜ should return 400 for invalid input (17 ms)
+    ΓêÜ should return 401 for wrong credentials (11 ms)
+
+FAIL src/modules/inventory/__tests__/stock-allocation.service.test.ts
+  ΓùÅ Test suite failed to run
+
+    Your test suite must contain at least one test.
+
+      at onResult (node_modules/@jest/core/build/index.js:1057:18)
+      at node_modules/@jest/core/build/index.js:1127:165
+      at node_modules/emittery/index.js:363:13
+          at Array.map (<anonymous>)
+      at Emittery.emit (node_modules/emittery/index.js:361:23)
+
+PASS src/modules/sales-orders/__tests__/sales-order.service.test.ts (5.418 s)
+  SalesOrderService
+    ΓêÜ should calculate totals and discounts correctly during delivery (10 ms)
+    getPendingPayments
+      ΓêÜ should filter by pending status (balance_due > 0) (1 ms)
+      ΓêÜ should filter by paid status (balance_due = 0) (1 ms)
+      ΓêÜ should return null if order is not found (1 ms)
+      ΓêÜ should filter by overdue status (1 ms)
+      ΓêÜ should not apply balance filter when status is all
+      ΓêÜ should filter by customer_id if provided (1 ms)
+
+PASS src/modules/production/__tests__/production.service.test.ts (5.428 s)
+  ProductionService
+    ΓêÜ should submit production successfully and deduct raw materials (10 ms)
+    ΓêÜ should throw error if insufficient raw material (18 ms)
+
+Test Suites: 1 failed, 6 passed, 7 total
+Tests:       18 passed, 18 total
+Snapshots:   0 total
+Time:        6.368 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

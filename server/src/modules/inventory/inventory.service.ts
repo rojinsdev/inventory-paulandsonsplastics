@@ -2,12 +2,21 @@ import { supabase } from '../../config/supabase';
 import { SettingsService } from '../settings/settings.service';
 import { stockAllocationService } from './stock-allocation.service';
 import { cashFlowService } from '../cash-flow/cash-flow.service';
+import logger from '../../utils/logger';
+import { getPagination } from '../../utils/supabase';
 
-// Helper to get product packing details
+// Helper to get product packing details (uses template-variant architecture)
 async function getProductPackingDetails(productId: string) {
     const { data, error } = await supabase
         .from('products')
-        .select('items_per_packet, packets_per_bundle, items_per_bundle, factory_id, cap_id')
+        .select(`
+            items_per_packet,
+            packets_per_bundle,
+            items_per_bundle,
+            factory_id,
+            color,
+            product_templates!inner(cap_template_id)
+        `)
         .eq('id', productId)
         .single();
 
@@ -15,64 +24,76 @@ async function getProductPackingDetails(productId: string) {
     return data;
 }
 
+// Helper to find a cap variant (cap) matching a cap template and a product color
+async function findCapVariantByTemplate(capTemplateId: string, productColor: string, factoryId: string): Promise<string | null> {
+    // Try to match by color first (exact), then fall back to the first variant
+    const { data: caps, error } = await supabase
+        .from('caps')
+        .select('id, color')
+        .eq('template_id', capTemplateId)
+        .eq('factory_id', factoryId);
+
+    if (error || !caps || caps.length === 0) return null;
+
+    // Exact color match
+    const exactMatch = caps.find(c => c.color?.toLowerCase() === productColor?.toLowerCase());
+    if (exactMatch) return exactMatch.id;
+
+    // Fallback: return first variant
+    return caps[0].id;
+}
+
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
 
 export class InventoryService {
 
     // 1. Pack: Semi-Finished (Loose) -> Packed (Packets)
-    async packItems(productId: string, packetsCreated: number) {
-        const { items_per_packet, factory_id, cap_id } = await getProductPackingDetails(productId);
-        const factory = factory_id || MAIN_FACTORY_ID;
+    async packItems(productId: string, packetsCreated: number, selectedCapId?: string) {
+        const productDetails = await getProductPackingDetails(productId);
+        const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
-        // Get default items per packet from settings if product doesn't specify
-        const defaultItemsPerPacket = await SettingsService.getValue<number>('default_items_per_packet') || 12;
-        const requiredLooseItems = packetsCreated * (items_per_packet || defaultItemsPerPacket);
+        const itemsPerPacket = productDetails.items_per_packet || 12;
 
-        // Check if we have enough semi_finished stock
-        const { data: stock, error: fetchError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', 'semi_finished')
-            .eq('factory_id', factory)
-            .single();
+        // Resolve cap variant via template + product color (new template architecture)
+        const capTemplateId = (productDetails as any).product_templates?.[0]?.cap_template_id
+            ?? (productDetails as any).product_templates?.cap_template_id;
+        const resolvedCapId = selectedCapId
+            || (capTemplateId ? await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) : null);
 
-        if (fetchError && fetchError.code !== 'PGRST116') throw new Error(fetchError.message);
-        if (!stock || stock.quantity < requiredLooseItems) {
-            throw new Error(`Insufficient semi-finished stock. Need ${requiredLooseItems}, have ${stock?.quantity || 0}`);
-        }
+        // Get items per packet from product
+        const requiredLooseItems = packetsCreated * itemsPerPacket;
 
-        // Deduct Semi-Finished
-        const { error: deductError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'semi_finished',
-            factory_id: factory,
-            quantity: stock.quantity - requiredLooseItems,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        // Deduct Semi-Finished stock (no cap — loose items never have a cap dimension)
+        const { error: deductError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factory,
+            p_state: 'semi_finished',
+            p_quantity_change: -requiredLooseItems,
+            p_cap_id: null
+        });
 
         if (deductError) throw new Error(`Failed to deduct semi-finished stock: ${deductError.message}`);
 
-        // Add Packed
-        const { data: packedStock, error: fetchPackedError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', 'packed')
-            .eq('factory_id', factory)
-            .single();
+        // Add Packed stock (with the resolved cap)
+        const { error: addError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factory,
+            p_state: 'packed',
+            p_quantity_change: packetsCreated,
+            p_cap_id: resolvedCapId
+        });
 
-        if (fetchPackedError && fetchPackedError.code !== 'PGRST116') throw new Error(fetchPackedError.message);
-
-        const { error: addError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'packed',
-            factory_id: factory,
-            quantity: (packedStock?.quantity || 0) + packetsCreated,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
-
-        if (addError) throw new Error(`Failed to add packed stock: ${addError.message}`);
+        if (addError) {
+            // Rollback deduction if add fails
+            await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factory,
+                p_state: 'semi_finished',
+                p_quantity_change: requiredLooseItems,
+                p_cap_id: null
+            });
+            throw new Error(`Failed to add packed stock: ${addError.message}`);
+        }
 
         // ================== SMART QUEUE ALLOCATION ==================
         await stockAllocationService.allocateStock(productId, 'packed', packetsCreated, factory);
@@ -80,92 +101,85 @@ export class InventoryService {
         // Log Transaction
         await this.logTransaction('pack', productId, packetsCreated, 'packet', 'semi_finished', 'packed', factory);
 
-        // Deduct Cap if mapped
-        if (cap_id) {
-            await this.deductCapInventory(cap_id, requiredLooseItems, factory, `Deduction for packing ${packetsCreated} packets of ${productId}`);
+        // Deduct Cap Inventory
+        if (resolvedCapId) {
+            await this.deductCapInventory(resolvedCapId, requiredLooseItems, factory, `Deduction for packing ${packetsCreated} packets of ${productId}`);
         }
     }
 
-    // 2. Bundle: Packed (Packets) OR Semi-Finished (Loose) -> Finished (Bundles)
-    async bundlePackets(productId: string, bundlesCreated: number, source: 'packed' | 'semi_finished' = 'packed') {
-        const { packets_per_bundle, items_per_bundle, factory_id, cap_id } = await getProductPackingDetails(productId);
-        const factory = factory_id || MAIN_FACTORY_ID;
+    // 2. Bundle: Packed (Packets) OR Semi-Finished (Loose) -> Finished (Units/Bundles)
+    async bundlePackets(productId: string, bundlesCreated: number, source: 'packed' | 'semi_finished' = 'packed', selectedCapId?: string) {
+        const productDetails = await getProductPackingDetails(productId);
+        const factory = productDetails.factory_id || MAIN_FACTORY_ID;
+
+        const packetsPerBundle = productDetails.packets_per_bundle || 50;
+        const itemsPerBundle = productDetails.items_per_bundle || 600;
+
+        // Resolve cap variant via template + product color
+        const capTemplateId = (productDetails as any).product_templates?.[0]?.cap_template_id
+            ?? (productDetails as any).product_templates?.cap_template_id;
+        const resolvedCapId = selectedCapId
+            || (capTemplateId ? await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) : null);
 
         let requiredQuantity: number;
         const sourceState = source;
 
         if (source === 'packed') {
-            requiredQuantity = bundlesCreated * (packets_per_bundle || 50);
+            requiredQuantity = bundlesCreated * packetsPerBundle;
         } else {
-            // Loose -> Bundle
-            const defaultItemsPerBundle = 600; // packets_per_bundle(50) * items_per_packet(12)
-            requiredQuantity = bundlesCreated * (items_per_bundle || defaultItemsPerBundle);
+            // Loose -> Unit
+            requiredQuantity = bundlesCreated * itemsPerBundle;
         }
 
-        // Check Source Stock
-        const { data: stock, error: fetchError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', sourceState)
-            .eq('factory_id', factory)
-            .single();
-
-        if (fetchError && fetchError.code !== 'PGRST116') throw new Error(fetchError.message);
-        if (!stock || stock.quantity < requiredQuantity) {
-            const unit = source === 'packed' ? 'packets' : 'loose items';
-            throw new Error(`Insufficient ${sourceState} stock. Need ${requiredQuantity} ${unit}, have ${stock?.quantity || 0}`);
-        }
-
-        // Deduct Source
-        const { error: deductError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: sourceState,
-            factory_id: factory,
-            quantity: stock.quantity - requiredQuantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        // Deduct Source atomically
+        const { error: deductError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factory,
+            p_state: sourceState,
+            p_quantity_change: -requiredQuantity,
+            p_cap_id: source === 'packed' ? resolvedCapId : null
+        });
 
         if (deductError) throw new Error(`Failed to deduct ${sourceState} stock: ${deductError.message}`);
 
-        // Add Finished
-        const { data: finishedStock, error: fetchFinishedError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', 'finished')
-            .eq('factory_id', factory)
-            .single();
+        // Add Finished (Bundles) atomically
+        const { error: addError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factory,
+            p_state: 'finished',
+            p_quantity_change: bundlesCreated,
+            p_cap_id: resolvedCapId
+        });
 
-        if (fetchFinishedError && fetchFinishedError.code !== 'PGRST116') throw new Error(fetchFinishedError.message);
-
-        const { error: addError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'finished',
-            factory_id: factory,
-            quantity: (finishedStock?.quantity || 0) + bundlesCreated,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
-
-        if (addError) throw new Error(`Failed to add finished stock: ${addError.message}`);
+        if (addError) {
+            // Rollback deduction if add fails
+            await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factory,
+                p_state: sourceState,
+                p_quantity_change: requiredQuantity,
+                p_cap_id: source === 'packed' ? resolvedCapId : null
+            });
+            throw new Error(`Failed to add finished stock: ${addError.message}`);
+        }
 
         // ================== SMART QUEUE ALLOCATION ==================
         await stockAllocationService.allocateStock(productId, 'finished', bundlesCreated, factory);
 
         // Log Transaction
-        const unitType = source === 'packed' ? 'packet' : 'loose';
         await this.logTransaction('bundle', productId, bundlesCreated, 'bundle', sourceState, 'finished', factory);
 
-        // Deduct Cap ONLY if sourcing from loose (since packed items already had caps deducted)
-        if (source === 'semi_finished' && cap_id) {
-            await this.deductCapInventory(cap_id, requiredQuantity, factory, `Deduction for direct bundling ${bundlesCreated} bundles of ${productId}`);
+        // Deduct Cap ONLY if sourcing from loose (packed items already had caps deducted at packing time)
+        if (source === 'semi_finished') {
+            if (resolvedCapId) {
+                await this.deductCapInventory(resolvedCapId, requiredQuantity, factory, `Deduction for direct bundling ${bundlesCreated} bundles of ${productId}`);
+            }
         }
     }
-
     // 3. Unpack: Reverse Logistics (Bundle/Packet -> Packets/Loose)
-    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished') {
-        const { items_per_packet, packets_per_bundle, items_per_bundle, factory_id } = await getProductPackingDetails(productId);
-        const factory = factory_id || MAIN_FACTORY_ID;
+    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished', capId?: string) {
+        const productDetails = await getProductPackingDetails(productId);
+        const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
         // Validation: Cannot unpack to the same state
         if (fromState === toState) {
@@ -183,71 +197,75 @@ export class InventoryService {
             throw new Error(`Invalid unpack transition: ${fromState} to ${toState}`);
         }
 
-        const defaultItemsPerPacket = await SettingsService.getValue<number>('default_items_per_packet') || 12;
-        const defaultPacketsPerBundle = 50;
-        const defaultItemsPerBundle = 600;
+        const packetsPerBundle = productDetails.packets_per_bundle || 50;
+        const itemsPerBundle = productDetails.items_per_bundle || 600;
+        const itemsPerPacket = productDetails.items_per_packet || 12;
 
         let multiplier = 0;
         if (fromState === 'finished') {
             if (toState === 'packed') {
-                multiplier = packets_per_bundle || defaultPacketsPerBundle;
+                multiplier = packetsPerBundle;
             } else {
-                multiplier = items_per_bundle || defaultItemsPerBundle;
+                multiplier = itemsPerBundle;
             }
         } else if (fromState === 'packed') {
-            multiplier = items_per_packet || defaultItemsPerPacket;
+            multiplier = itemsPerPacket;
         }
 
         const yieldQuantity = quantityToUnpack * multiplier;
 
-        // 1. Check Source stock
-        const { data: sourceStock, error: fetchSourceError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', fromState)
-            .eq('factory_id', factory)
-            .single();
 
-        if (fetchSourceError && fetchSourceError.code !== 'PGRST116') throw new Error(fetchSourceError.message);
-        if (!sourceStock || sourceStock.quantity < quantityToUnpack) {
-            throw new Error(`Insufficient ${fromState} stock. Need ${quantityToUnpack}, have ${sourceStock?.quantity || 0}`);
-        }
-
-        // 2. Deduct Source
-        const { error: deductError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: fromState,
-            factory_id: factory,
-            quantity: sourceStock.quantity - quantityToUnpack,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        // 2. Deduct Source atomically
+        const { error: deductError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factory,
+            p_state: fromState,
+            p_quantity_change: -quantityToUnpack,
+            p_cap_id: capId || null
+        });
 
         if (deductError) throw new Error(`Failed to deduct ${fromState} stock: ${deductError.message}`);
 
-        // 3. Add to Target
-        const { data: targetStock, error: fetchTargetError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', toState)
-            .eq('factory_id', factory)
-            .single();
+        // 3. Add to Target atomically
+        const targetCapId = toState === 'semi_finished' ? null : (capId || null);
 
-        if (fetchTargetError && fetchTargetError.code !== 'PGRST116') throw new Error(fetchTargetError.message);
+        const { error: addError } = await supabase.rpc('adjust_stock', {
+            p_product_id: productId,
+            p_factory_id: factory,
+            p_state: toState,
+            p_quantity_change: yieldQuantity,
+            p_cap_id: targetCapId
+        });
 
-        const { error: addError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: toState,
-            factory_id: factory,
-            quantity: (targetStock?.quantity || 0) + yieldQuantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
-
-        if (addError) throw new Error(`Failed to add ${toState} stock: ${addError.message}`);
+        if (addError) {
+            // Rollback deduction if add fails
+            await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factory,
+                p_state: fromState,
+                p_quantity_change: quantityToUnpack,
+                p_cap_id: capId || null
+            });
+            throw new Error(`Failed to add ${toState} stock: ${addError.message}`);
+        }
 
         // Log Transaction
-        await this.logTransaction('unpack', productId, quantityToUnpack, fromState === 'finished' ? 'bundle' : 'packet', fromState, toState, factory, undefined, `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? 'bundle' : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`);
+        await this.logTransaction('unpack', productId, quantityToUnpack, fromState === 'finished' ? 'bundle' : 'packet', fromState, toState, factory, capId, `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? 'bundle' : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`);
+
+        // 4. Return Caps ONLY if target is semi_finished (loose items — caps removed from product)
+        if (toState === 'semi_finished') {
+            const capTemplateId = (productDetails as any).product_templates?.[0]?.cap_template_id
+                ?? (productDetails as any).product_templates?.cap_template_id;
+            const returnCapId = capId || (capTemplateId ? await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) : null);
+            if (returnCapId) {
+                await this.addCapInventory(
+                    returnCapId,
+                    yieldQuantity,
+                    factory,
+                    `Return for unpacking ${quantityToUnpack} ${fromState === 'finished' ? 'bundle' : 'packet'} of ${productId}`
+                );
+            }
+        }
     }
 
     public async logTransaction(
@@ -280,45 +298,45 @@ export class InventoryService {
         });
 
         if (error) {
-            console.error('⚠️ Failed to log inventory transaction:', error.message);
+            logger.error('Failed to log inventory transaction:', { error: error.message, type, entityId, qty });
             throw new Error(`Inventory transaction logging failed: ${error.message}`);
         }
     }
 
     private async deductCapInventory(capId: string, quantity: number, factoryId: string, note?: string) {
-        // 1. Get current balance
-        const { data: stock, error: fetchError } = await supabase
-            .from('cap_stock_balances')
-            .select('quantity')
-            .eq('cap_id', capId)
-            .eq('factory_id', factoryId)
-            .single();
+        const { error } = await supabase.rpc('adjust_cap_stock', {
+            p_cap_id: capId,
+            p_factory_id: factoryId,
+            p_quantity_change: -quantity
+        });
 
-        if (fetchError && fetchError.code !== 'PGRST116') throw new Error(`Cap stock fetch error: ${fetchError.message}`);
+        if (error) throw new Error(`Cap stock deduction error: ${error.message}`);
+        logger.info(`Deducted ${quantity} caps (ID: ${capId}) for ${note}`);
+    }
 
-        const currentQty = stock?.quantity || 0;
-        if (currentQty < quantity) {
-            // We allow negative stock for caps as per usual business logic if needed, 
-            // but let's warn or throw based on preference. 
-            // Most inventory systems here throw.
-            throw new Error(`Insufficient cap stock. Need ${quantity}, have ${currentQty}`);
-        }
+    private async addCapInventory(capId: string, quantity: number, factoryId: string, note?: string) {
+        const { error } = await supabase.rpc('adjust_cap_stock', {
+            p_cap_id: capId,
+            p_factory_id: factoryId,
+            p_quantity_change: quantity
+        });
 
-        // 2. Update balance
-        const { error: updateError } = await supabase
-            .from('cap_stock_balances')
-            .upsert({
-                cap_id: capId,
-                factory_id: factoryId,
-                quantity: currentQty - quantity,
-                last_updated: new Date().toISOString()
-            }, { onConflict: 'cap_id,factory_id' });
+        if (error) throw new Error(`Cap stock addition error: ${error.message}`);
 
-        if (updateError) throw new Error(`Cap stock deduction error: ${updateError.message}`);
+        // 3. Log to general inventory transactions for visibility
+        await this.logTransaction(
+            'unpack_return',
+            null,
+            quantity,
+            'packet', // Use packet as proxy or similar if 'cap' not allowed, but let's check
+            null,
+            'semi_finished',
+            factoryId,
+            capId, // Use reference_id for capId
+            note || `Returned ${quantity} caps for unpacking`
+        );
 
-        // 3. Log (optional - maybe add a cap_inventory_transactions table? or just use general one)
-        // For now, let's just log to console or general audit if needed.
-        console.log(`✅ Deducted ${quantity} caps (ID: ${capId}) for ${note}`);
+        logger.info(`Returned ${quantity} caps (ID: ${capId}) for ${note}`);
     }
 
     async getStock(productId: string) {
@@ -329,24 +347,33 @@ export class InventoryService {
         return data;
     }
 
-    async getAllStock(factoryId?: string) {
+    async getAllStock(filters?: { factoryId?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page, filters?.size);
+
         let query = supabase
             .from('stock_balances')
             .select(`
                 *,
                 products(name, size, color, selling_price, factory_id)
-            `)
+            `, { count: 'exact' })
             .order('product_id');
 
         // Filter by factory if provided
-        if (factoryId) {
-            query = query.eq('products.factory_id', factoryId);
+        if (filters?.factoryId) {
+            query = query.eq('products.factory_id', filters.factoryId);
         }
 
-        const { data, error } = await query;
+        const { data, error, count } = await query.range(from, to);
 
         if (error) throw new Error(error.message);
-        return data;
+        return {
+            stock: data,
+            pagination: {
+                total: count,
+                page: filters?.page || 1,
+                size: filters?.size || 10
+            }
+        };
     }
 
     async getAvailableStock(factoryId?: string) {
@@ -371,61 +398,102 @@ export class InventoryService {
     }
 
     async getStockOverview(factoryId?: string) {
-        // 1. Get products (factory-specific + global products)
-        let productQuery = supabase.from('products').select('id, name, size, color, factory_id');
+        // 1. Get products (including template info)
+        let productQuery = supabase
+            .from('products')
+            .select('id, name, size, color, factory_id, items_per_packet, packets_per_bundle, items_per_bundle, template_id, product_templates(name, size)');
+
         if (factoryId) {
-            // Include products that either belong to this factory OR are global (null factory_id)
             productQuery = productQuery.or(`factory_id.eq.${factoryId},factory_id.is.null`);
         }
         const { data: products, error: pError } = await productQuery;
         if (pError) throw new Error(pError.message);
 
-        // 2. Get all balances for this factory
-        let balanceQuery = supabase.from('stock_balances').select('*');
+        // 2. Get caps for display
+        const { data: caps } = await supabase.from('caps').select('id, color');
+
+        // 3. Get all balances for this factory
+        let balanceQuery = supabase.from('stock_balances').select('*, caps(color)');
         if (factoryId) {
             balanceQuery = balanceQuery.eq('factory_id', factoryId);
         }
         const { data: balances, error: bError } = await balanceQuery;
         if (bError) throw new Error(bError.message);
 
-        // 3. Aggregate
+        // 4. Aggregate
         const overview = products.map(product => {
             const productBalances = balances.filter(b => b.product_id === product.id);
-            const semiFinished = productBalances.find(b => b.state === 'semi_finished')?.quantity || 0;
-            const packed = productBalances.find(b => b.state === 'packed')?.quantity || 0;
-            const bundled = productBalances.find(b => b.state === 'finished')?.quantity || 0;
+
+            // For packed/finished, they have caps, so we might have multiple combinations
+            // Group by cap_id for packed and finished
+            const combinations: any[] = [];
+
+            // Loose (Semi-finished) - usually no cap
+            const semiFinished = productBalances.filter(b => b.state === 'semi_finished');
+            const semiFinishedQty = semiFinished.reduce((sum, b) => sum + b.quantity, 0);
+
+            // Packed and Finished - with caps
+            const cappedStates = ['packed', 'finished'];
+            const comboMap = new Map<string, any>();
+
+            productBalances.filter(b => cappedStates.includes(b.state)).forEach(b => {
+                const key = b.cap_id || 'no_cap';
+                if (!comboMap.has(key)) {
+                    comboMap.set(key, {
+                        cap_id: b.cap_id,
+                        cap_color: (b as any).caps?.color || 'N/A',
+                        packed_qty: 0,
+                        bundled_qty: 0
+                    });
+                }
+                const combo = comboMap.get(key);
+                if (b.state === 'packed') combo.packed_qty += b.quantity;
+                if (b.state === 'finished') combo.bundled_qty += b.quantity;
+            });
 
             return {
                 product_id: product.id,
+                template_id: product.template_id,
+                template_name: (product as any).product_templates?.name || product.name,
                 product_name: `${product.name} (${product.size})`,
-                semi_finished_qty: semiFinished,
-                packed_qty: packed,
-                bundled_qty: bundled,
+                color: product.color,
+                semi_finished_qty: semiFinishedQty,
+                items_per_packet: (product as any).items_per_packet,
+                packets_per_bundle: (product as any).packets_per_bundle,
+                items_per_bundle: (product as any).items_per_bundle,
+                combinations: Array.from(comboMap.values()),
                 factory_id: product.factory_id
             };
         });
 
-        // Optional: Filter out products with 0 stock across all states if you want a cleaner summary
-        // For now, return all to match the detailed view requirements
         return overview;
     }
 
     // Raw Materials Methods
-    async getRawMaterials(factoryId?: string) {
+    async getRawMaterials(filters?: { factoryId?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page, filters?.size);
+
         let query = supabase
             .from('raw_materials')
-            .select('*')
+            .select('*', { count: 'exact' })
             .order('name');
 
         // Filter by factory if provided
-        if (factoryId) {
-            query = query.eq('factory_id', factoryId);
+        if (filters?.factoryId) {
+            query = query.or(`factory_id.eq.${filters.factoryId},factory_id.is.null`);
         }
 
-        const { data, error } = await query;
+        const { data, error, count } = await query.range(from, to);
 
         if (error) throw new Error(error.message);
-        return data;
+        return {
+            rawMaterials: data,
+            pagination: {
+                total: count,
+                page: filters?.page || 1,
+                size: filters?.size || 10
+            }
+        };
     }
 
     async adjustRawMaterial(id: string, data: { quantity: number; unit: 'bags' | 'kg' | 'tons'; rate_per_kg: number; reason: string; payment_mode?: 'Cash' | 'Credit'; date?: string }) {

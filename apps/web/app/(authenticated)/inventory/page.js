@@ -24,7 +24,7 @@ import styles from './page.module.css';
 export default function StockOverviewPage() {
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
-    const { selectedFactory } = useFactory();
+    const { selectedFactory, factories } = useFactory();
     const searchParams = useSearchParams();
     const initialSearch = searchParams.get('search') || '';
 
@@ -83,16 +83,18 @@ export default function StockOverviewPage() {
     const loadData = async () => {
         try {
             setLoading(true);
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
             // Fetch all stock/products to keep the hub "Master" as requested
             const [stockRes, productsRes] = await Promise.all([
-                inventoryAPI.getStock(),
-                productsAPI.getAll()
+                inventoryAPI.getStock(params),
+                productsAPI.getAll(params)
             ]);
 
-            setStockRaw(stockRes || []);
-            setProducts(productsRes || []);
+            const stockDataArray = stockRes?.stock || stockRes?.data || (Array.isArray(stockRes) ? stockRes : []);
+            setStockRaw(stockDataArray);
+            setProducts(Array.isArray(productsRes) ? productsRes : (productsRes?.data || []));
 
-            if (stockRes && Array.isArray(stockRes)) {
+            if (stockDataArray.length > 0) {
                 const stats = {
                     semi_finished: 0,
                     packed: 0,
@@ -100,7 +102,7 @@ export default function StockOverviewPage() {
                     reserved: 0,
                 };
 
-                stockRes.forEach((item) => {
+                stockDataArray.forEach((item) => {
                     if (stats.hasOwnProperty(item.state)) {
                         stats[item.state] += Number(item.quantity) || 0;
                     }
@@ -207,7 +209,7 @@ export default function StockOverviewPage() {
                             loading={loading}
                             filters={filters}
                             setFilters={setFilters}
-                            factories={useFactory().factories}
+                            factories={factories}
                         />
                     </div>
 

@@ -9,11 +9,48 @@ import styles from '@/app/(authenticated)/page.module.css';
  * @param {Object} props
  * @param {Object} props.data - Financial data (inflow, outflow, balance)
  * @param {string} props.spanClass - Bento span class (expected span2x1)
+ * @param {boolean} props.transparent - If true, omits the card wrapper and header
  */
-export default function BusinessHealthCard({ data, spanClass }) {
-    if (!data) return null;
+export default function BusinessHealthCard({ data, spanClass, transparent }) {
+    if (!data) return (
+        <div className={cn(!transparent && styles.bentoCard, styles[spanClass], styles.loadingState)}>
+            <p>Gathering financial intelligence...</p>
+        </div>
+    );
 
     const { inflow = 0, outflow = 0, survivalBalance = 0 } = data;
+
+    const content = (
+        <div className={styles.healthGrid}>
+            <div className={styles.healthItem}>
+                <div className={styles.healthLabel}>
+                    <ArrowUpRight size={14} className={styles.trendUp} />
+                    <span>Total Inflow</span>
+                </div>
+                <div className={styles.healthValue}>{formatCurrency(inflow)}</div>
+            </div>
+
+            <div className={styles.healthItem}>
+                <div className={styles.healthLabel}>
+                    <ArrowDownRight size={14} className={styles.trendDown} />
+                    <span>Total Outflow</span>
+                </div>
+                <div className={styles.healthValue}>{formatCurrency(outflow)}</div>
+            </div>
+
+            <div className={cn(styles.healthItem, styles.survivalHighlight)}>
+                <div className={styles.healthLabel}>
+                    <span>Survival Balance</span>
+                </div>
+                <div className={styles.healthValue}>{formatCurrency(survivalBalance)}</div>
+                <p className={styles.healthSubtitle}>Cash available after expenses</p>
+            </div>
+        </div>
+    );
+
+    if (transparent) {
+        return content;
+    }
 
     return (
         <div className={cn(styles.bentoCard, styles[spanClass])}>
@@ -23,32 +60,7 @@ export default function BusinessHealthCard({ data, spanClass }) {
                 </div>
                 <h3 className={styles.cardTitle}>Business Health Pulse</h3>
             </div>
-
-            <div className={styles.healthGrid}>
-                <div className={styles.healthItem}>
-                    <div className={styles.healthLabel}>
-                        <ArrowUpRight size={14} className={styles.trendUp} />
-                        <span>Total Inflow</span>
-                    </div>
-                    <div className={styles.healthValue}>{formatCurrency(inflow)}</div>
-                </div>
-
-                <div className={styles.healthItem}>
-                    <div className={styles.healthLabel}>
-                        <ArrowDownRight size={14} className={styles.trendDown} />
-                        <span>Total Outflow</span>
-                    </div>
-                    <div className={styles.healthValue}>{formatCurrency(outflow)}</div>
-                </div>
-
-                <div className={cn(styles.healthItem, styles.survivalHighlight)}>
-                    <div className={styles.healthLabel}>
-                        <span>Survival Balance</span>
-                    </div>
-                    <div className={styles.healthValue}>{formatCurrency(survivalBalance)}</div>
-                    <p className={styles.healthSubtitle}>Cash available after expenses</p>
-                </div>
-            </div>
+            {content}
         </div>
     );
 }
