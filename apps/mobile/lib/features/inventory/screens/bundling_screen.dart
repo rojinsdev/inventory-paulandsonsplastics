@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:collection/collection.dart';
 import '../../production/providers/master_data_provider.dart';
 import '../providers/inventory_provider.dart';
 
@@ -20,6 +21,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
   String? _selectedCapTemplateId;
   String? _selectedCapVariantId;
   String _source = 'packed';
+  String _unitType = 'bundle';
 
   @override
   void dispose() {
@@ -32,6 +34,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
       ref.read(inventoryOperationProvider.notifier).bundle(
             _selectedProductVariantId!,
             int.parse(_quantityController.text),
+            unitType: _unitType,
             source: _source,
             capId: _source == 'semi_finished' ? _selectedCapVariantId : null,
           );
@@ -145,6 +148,88 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 ),
                 loading: () => const LinearProgressIndicator(),
                 error: (error, _) => Text('Error: $error'),
+              ),
+              const SizedBox(height: 24),
+
+              // Final Form Selector (Bundle/Bag/Box)
+              productTemplatesAsync.when(
+                data: (templates) {
+                  final template = _selectedProductTemplateId != null
+                      ? templates.firstWhereOrNull(
+                          (t) => t.id == _selectedProductTemplateId)
+                      : null;
+
+                  final segments = <ButtonSegment<String>>[];
+
+                  // Always show bundle if enabled or if nothing selected (to avoid empty list)
+                  if (template == null || template.bundleEnabled) {
+                    segments.add(const ButtonSegment(
+                      value: 'bundle',
+                      label: Text('Bundle'),
+                      icon: Icon(Icons.inventory_2),
+                    ));
+                  }
+
+                  if (template != null && template.bagEnabled) {
+                    segments.add(const ButtonSegment(
+                      value: 'bag',
+                      label: Text('Bag'),
+                      icon: Icon(Icons.shopping_bag_outlined),
+                    ));
+                  }
+
+                  if (template != null && template.boxEnabled) {
+                    segments.add(const ButtonSegment(
+                      value: 'box',
+                      label: Text('Box'),
+                      icon: Icon(Icons.all_inbox_outlined),
+                    ));
+                  }
+
+                  // If current unitType is not in segments, reset to first available
+                  if (segments.isNotEmpty &&
+                      !segments.any((s) => s.value == _unitType)) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() => _unitType = segments.first.value);
+                      }
+                    });
+                  }
+
+                  if (segments.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Final Packaging Form',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SegmentedButton<String>(
+                        segments: segments,
+                        selected: {_unitType},
+                        onSelectionChanged: (Set<String> newSelection) {
+                          setState(() => _unitType = newSelection.first);
+                        },
+                        style: SegmentedButton.styleFrom(
+                          selectedBackgroundColor: colorScheme.primaryContainer,
+                          selectedForegroundColor:
+                              colorScheme.onPrimaryContainer,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(32)),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (error, _) => const SizedBox.shrink(),
               ),
               const SizedBox(height: 24),
 
@@ -297,12 +382,11 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Quantity Input
               TextFormField(
                 controller: _quantityController,
-                decoration: const InputDecoration(
-                  labelText: 'Bundles Created',
-                  prefixIcon: Icon(Icons.numbers),
+                decoration: InputDecoration(
+                  labelText: '${_unitType[0].toUpperCase()}${_unitType.substring(1)}s Created',
+                  prefixIcon: const Icon(Icons.numbers),
                   suffixText: 'units',
                 ),
                 keyboardType: TextInputType.number,

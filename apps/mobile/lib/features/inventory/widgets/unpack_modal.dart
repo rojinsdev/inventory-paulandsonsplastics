@@ -20,6 +20,11 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
   String _toState = 'packed';
   bool _isProcessing = false;
 
+  String get _unitLabel {
+    final ut = widget.stock.unitType ?? 'bundle';
+    return ut[0].toUpperCase() + ut.substring(1);
+  }
+
   int get _availableStock =>
       _fromState == 'finished' ? widget.stock.bundledQty : widget.stock.packedQty;
 
@@ -55,6 +60,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
             qty,
             _fromState,
             _toState,
+            unitType: widget.stock.unitType ?? 'bundle',
             capId: widget.stock.capId,
           );
 
@@ -85,10 +91,23 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
     final qty = int.tryParse(_quantityController.text) ?? 0;
     int multiplier = 0;
     if (_fromState == 'finished') {
+      final unitType = widget.stock.unitType ?? 'bundle';
       if (_toState == 'packed') {
-        multiplier = widget.stock.packetsPerBundle ?? 50;
+        if (unitType == 'bundle') {
+          multiplier = widget.stock.packetsPerBundle ?? 50;
+        } else if (unitType == 'bag') {
+          multiplier = widget.stock.packetsPerBag ?? 0;
+        } else if (unitType == 'box') {
+          multiplier = widget.stock.packetsPerBox ?? 0;
+        }
       } else {
-        multiplier = widget.stock.itemsPerBundle ?? 600;
+        if (unitType == 'bundle') {
+          multiplier = widget.stock.itemsPerBundle ?? 600;
+        } else if (unitType == 'bag') {
+          multiplier = widget.stock.itemsPerBag ?? 0;
+        } else if (unitType == 'box') {
+          multiplier = widget.stock.itemsPerBox ?? 0;
+        }
       }
     } else {
       multiplier = widget.stock.itemsPerPacket ?? 12;
@@ -159,7 +178,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
-                'Available: $_availableStock ${_fromState == 'finished' ? 'Bundles' : 'Packets'}',
+                'Available: $_availableStock ${_fromState == 'finished' ? _unitLabel : 'Packet'}s',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: (_availableStock == 0)
                       ? colorScheme.error
@@ -173,7 +192,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
           Row(
             children: [
               _SourceChip(
-                label: 'Bundle',
+                label: _unitLabel,
                 isSelected: _fromState == 'finished',
                 onSelected: () => setState(() {
                   _fromState = 'finished';
@@ -245,7 +264,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                 borderRadius: BorderRadius.circular(20),
                 borderSide: BorderSide.none,
               ),
-              suffixText: _fromState == 'finished' ? 'Bundles' : 'Packets',
+              suffixText: _fromState == 'finished' ? _unitLabel : 'Packets',
             ),
           ),
 

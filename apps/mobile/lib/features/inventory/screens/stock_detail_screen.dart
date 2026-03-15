@@ -387,9 +387,15 @@ class _ProductStockCard extends StatelessWidget {
                     _VerticalDivider(),
                     Expanded(
                       child: _StockIndicator(
-                        label: 'Bundles',
+                        label: stock.unitType == null || stock.unitType!.isEmpty
+                            ? 'Bundles'
+                            : '${stock.unitType![0].toUpperCase()}${stock.unitType!.substring(1)}s',
                         value: stock.bundledQty,
-                        icon: Icons.layers_outlined,
+                        icon: stock.unitType == 'bag'
+                            ? Icons.shopping_bag_outlined
+                            : stock.unitType == 'box'
+                                ? Icons.all_inbox_outlined
+                                : Icons.layers_outlined,
                         color: colorScheme.primary,
                         textColor: colorScheme.onSurface,
                       ),

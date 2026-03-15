@@ -13,6 +13,10 @@ async function getProductPackingDetails(productId: string) {
             items_per_packet,
             packets_per_bundle,
             items_per_bundle,
+            packets_per_bag,
+            items_per_bag,
+            packets_per_box,
+            items_per_box,
             factory_id,
             color,
             product_templates!inner(cap_template_id)
@@ -80,7 +84,8 @@ export class InventoryService {
             p_factory_id: factory,
             p_state: 'packed',
             p_quantity_change: packetsCreated,
-            p_cap_id: resolvedCapId
+            p_cap_id: resolvedCapId,
+            p_unit_type: 'packet'
         });
 
         if (addError) {
@@ -107,8 +112,8 @@ export class InventoryService {
         }
     }
 
-    // 2. Bundle: Packed (Packets) OR Semi-Finished (Loose) -> Finished (Units/Bundles)
-    async bundlePackets(productId: string, bundlesCreated: number, source: 'packed' | 'semi_finished' = 'packed', selectedCapId?: string) {
+    // 2. Bundle: Packed (Packets) OR Semi-Finished (Loose) -> Finished (Units: Bundles/Bags/Boxes)
+    async bundlePackets(productId: string, unitsCreated: number, unitType: 'bundle' | 'bag' | 'box', source: 'packed' | 'semi_finished' = 'packed', selectedCapId?: string) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -125,10 +130,18 @@ export class InventoryService {
         const sourceState = source;
 
         if (source === 'packed') {
-            requiredQuantity = bundlesCreated * packetsPerBundle;
+            const packetsPerUnit = unitType === 'box'
+                ? productDetails.packets_per_box
+                : (unitType === 'bag' ? productDetails.packets_per_bag : productDetails.packets_per_bundle);
+
+            requiredQuantity = unitsCreated * (packetsPerUnit || 50);
         } else {
             // Loose -> Unit
-            requiredQuantity = bundlesCreated * itemsPerBundle;
+            const itemsPerUnit = unitType === 'box'
+                ? productDetails.items_per_box
+                : (unitType === 'bag' ? productDetails.items_per_bag : productDetails.items_per_bundle);
+
+            requiredQuantity = unitsCreated * (itemsPerUnit || 600);
         }
 
         // Deduct Source atomically
@@ -137,18 +150,20 @@ export class InventoryService {
             p_factory_id: factory,
             p_state: sourceState,
             p_quantity_change: -requiredQuantity,
-            p_cap_id: source === 'packed' ? resolvedCapId : null
+            p_cap_id: source === 'packed' ? resolvedCapId : null,
+            p_unit_type: source === 'packed' ? 'packet' : ''
         });
 
         if (deductError) throw new Error(`Failed to deduct ${sourceState} stock: ${deductError.message}`);
 
-        // Add Finished (Bundles) atomically
+        // Add Finished (Bundles/Bags/Boxes) atomically
         const { error: addError } = await supabase.rpc('adjust_stock', {
             p_product_id: productId,
             p_factory_id: factory,
             p_state: 'finished',
-            p_quantity_change: bundlesCreated,
-            p_cap_id: resolvedCapId
+            p_quantity_change: unitsCreated,
+            p_cap_id: resolvedCapId,
+            p_unit_type: unitType
         });
 
         if (addError) {
@@ -164,20 +179,20 @@ export class InventoryService {
         }
 
         // ================== SMART QUEUE ALLOCATION ==================
-        await stockAllocationService.allocateStock(productId, 'finished', bundlesCreated, factory);
+        await stockAllocationService.allocateStock(productId, 'finished', unitsCreated, factory);
 
         // Log Transaction
-        await this.logTransaction('bundle', productId, bundlesCreated, 'bundle', sourceState, 'finished', factory);
+        await this.logTransaction('bundle', productId, unitsCreated, unitType, sourceState, 'finished', factory);
 
         // Deduct Cap ONLY if sourcing from loose (packed items already had caps deducted at packing time)
         if (source === 'semi_finished') {
             if (resolvedCapId) {
-                await this.deductCapInventory(resolvedCapId, requiredQuantity, factory, `Deduction for direct bundling ${bundlesCreated} bundles of ${productId}`);
+                await this.deductCapInventory(resolvedCapId, requiredQuantity, factory, `Deduction for direct bundling ${unitsCreated} ${unitType}s of ${productId}`);
             }
         }
     }
     // 3. Unpack: Reverse Logistics (Bundle/Packet -> Packets/Loose)
-    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished', capId?: string) {
+    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished', unitType: string = 'bundle', capId?: string) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -188,28 +203,44 @@ export class InventoryService {
 
         // Specific valid transitions
         if (fromState === 'finished' && toState === 'packed') {
-            // Bundle -> Packets
+            // Finished Unit -> Packets
         } else if (fromState === 'finished' && toState === 'semi_finished') {
-            // Bundle -> Loose
+            // Finished Unit -> Loose
         } else if (fromState === 'packed' && toState === 'semi_finished') {
             // Packet -> Loose
         } else {
             throw new Error(`Invalid unpack transition: ${fromState} to ${toState}`);
         }
 
-        const packetsPerBundle = productDetails.packets_per_bundle || 50;
-        const itemsPerBundle = productDetails.items_per_bundle || 600;
+        let packetsPerUnit = 0;
+        let itemsPerUnit = 0;
+
+        if (unitType === 'bundle') {
+            packetsPerUnit = productDetails.packets_per_bundle || 50;
+            itemsPerUnit = productDetails.items_per_bundle || 600;
+        } else if (unitType === 'bag') {
+            packetsPerUnit = (productDetails as any).packets_per_bag || 0;
+            itemsPerUnit = (productDetails as any).items_per_bag || 0;
+        } else if (unitType === 'box') {
+            packetsPerUnit = (productDetails as any).packets_per_box || 0;
+            itemsPerUnit = (productDetails as any).items_per_box || 0;
+        }
+
         const itemsPerPacket = productDetails.items_per_packet || 12;
 
         let multiplier = 0;
         if (fromState === 'finished') {
             if (toState === 'packed') {
-                multiplier = packetsPerBundle;
+                multiplier = packetsPerUnit;
             } else {
-                multiplier = itemsPerBundle;
+                multiplier = itemsPerUnit;
             }
         } else if (fromState === 'packed') {
             multiplier = itemsPerPacket;
+        }
+
+        if (multiplier === 0) {
+            throw new Error(`Invalid configuration for unpacking ${unitType} of ${productId}. Multiplier is 0.`);
         }
 
         const yieldQuantity = quantityToUnpack * multiplier;
@@ -221,7 +252,8 @@ export class InventoryService {
             p_factory_id: factory,
             p_state: fromState,
             p_quantity_change: -quantityToUnpack,
-            p_cap_id: capId || null
+            p_cap_id: capId || null,
+            p_unit_type: fromState === 'finished' ? unitType : 'packet'
         });
 
         if (deductError) throw new Error(`Failed to deduct ${fromState} stock: ${deductError.message}`);
@@ -234,7 +266,8 @@ export class InventoryService {
             p_factory_id: factory,
             p_state: toState,
             p_quantity_change: yieldQuantity,
-            p_cap_id: targetCapId
+            p_cap_id: targetCapId,
+            p_unit_type: toState === 'packed' ? 'packet' : ''
         });
 
         if (addError) {
@@ -244,13 +277,14 @@ export class InventoryService {
                 p_factory_id: factory,
                 p_state: fromState,
                 p_quantity_change: quantityToUnpack,
-                p_cap_id: capId || null
+                p_cap_id: capId || null,
+                p_unit_type: fromState === 'finished' ? unitType : 'packet'
             });
             throw new Error(`Failed to add ${toState} stock: ${addError.message}`);
         }
 
         // Log Transaction
-        await this.logTransaction('unpack', productId, quantityToUnpack, fromState === 'finished' ? 'bundle' : 'packet', fromState, toState, factory, capId, `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? 'bundle' : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`);
+        await this.logTransaction('unpack', productId, quantityToUnpack, fromState === 'finished' ? unitType : 'packet', fromState, toState, factory, capId, `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? unitType : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`);
 
         // 4. Return Caps ONLY if target is semi_finished (loose items — caps removed from product)
         if (toState === 'semi_finished') {
@@ -262,7 +296,7 @@ export class InventoryService {
                     returnCapId,
                     yieldQuantity,
                     factory,
-                    `Return for unpacking ${quantityToUnpack} ${fromState === 'finished' ? 'bundle' : 'packet'} of ${productId}`
+                    `Return for unpacking ${quantityToUnpack} ${fromState === 'finished' ? unitType : 'packet'} of ${productId}`
                 );
             }
         }
@@ -437,11 +471,12 @@ export class InventoryService {
             const comboMap = new Map<string, any>();
 
             productBalances.filter(b => cappedStates.includes(b.state)).forEach(b => {
-                const key = b.cap_id || 'no_cap';
+                const key = `${b.cap_id || 'no_cap'}_${b.unit_type || ''}`;
                 if (!comboMap.has(key)) {
                     comboMap.set(key, {
                         cap_id: b.cap_id,
                         cap_color: (b as any).caps?.color || 'N/A',
+                        unit_type: b.unit_type,
                         packed_qty: 0,
                         bundled_qty: 0
                     });
@@ -461,6 +496,10 @@ export class InventoryService {
                 items_per_packet: (product as any).items_per_packet,
                 packets_per_bundle: (product as any).packets_per_bundle,
                 items_per_bundle: (product as any).items_per_bundle,
+                packets_per_bag: (product as any).packets_per_bag,
+                items_per_bag: (product as any).items_per_bag,
+                packets_per_box: (product as any).packets_per_box,
+                items_per_box: (product as any).items_per_box,
                 combinations: Array.from(comboMap.values()),
                 factory_id: product.factory_id
             };

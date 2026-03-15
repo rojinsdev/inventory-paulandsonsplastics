@@ -10,7 +10,8 @@ const packSchema = z.object({
 
 const bundleSchema = z.object({
     product_id: z.string().uuid(),
-    bundles_created: z.number().int().positive(),
+    units_created: z.number().int().positive(),
+    unit_type: z.enum(['bundle', 'bag', 'box']).default('bundle'),
     source: z.enum(['packed', 'semi_finished']).optional().default('packed'),
     cap_id: z.string().uuid().optional(),
 });
@@ -20,6 +21,7 @@ const unpackSchema = z.object({
     quantity: z.number().int().positive(),
     from_state: z.enum(['finished', 'packed']),
     to_state: z.enum(['packed', 'semi_finished']),
+    unit_type: z.enum(['bundle', 'bag', 'box', 'packet']).default('bundle'),
     cap_id: z.string().uuid().optional(),
 });
 
@@ -32,14 +34,14 @@ export class InventoryController {
     }
 
     async bundle(req: Request, res: Response) {
-        const { product_id, bundles_created, source, cap_id } = bundleSchema.parse(req.body);
-        await inventoryService.bundlePackets(product_id, bundles_created, source, cap_id);
+        const { product_id, units_created, unit_type, source, cap_id } = bundleSchema.parse(req.body);
+        await inventoryService.bundlePackets(product_id, units_created, unit_type, source, cap_id);
         res.status(200).json({ message: 'Bundling successful' });
     }
 
     async unpack(req: Request, res: Response) {
-        const { product_id, quantity, from_state, to_state, cap_id } = unpackSchema.parse(req.body);
-        await inventoryService.unpack(product_id, quantity, from_state, to_state, cap_id);
+        const { product_id, quantity, from_state, to_state, unit_type, cap_id } = unpackSchema.parse(req.body);
+        await inventoryService.unpack(product_id, quantity, from_state, to_state, unit_type, cap_id);
         res.status(200).json({ message: 'Unpacking successful' });
     }
 

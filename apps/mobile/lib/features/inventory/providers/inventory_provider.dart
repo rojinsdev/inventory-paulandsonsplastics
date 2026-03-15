@@ -58,12 +58,13 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> bundle(String productId, int quantity,
-      {String source = 'packed', String? capId}) async {
+      {String unitType = 'bundle', String source = 'packed', String? capId}) async {
     state = const AsyncValue.loading();
     try {
       await _repository.bundle(
         productId: productId,
-        bundlesCreated: quantity,
+        unitsCreated: quantity,
+        unitType: unitType,
         source: source,
         capId: capId,
       );
@@ -78,6 +79,7 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
     int quantity,
     String fromState,
     String toState, {
+    String unitType = 'bundle',
     String? capId,
   }) async {
     state = const AsyncValue.loading();
@@ -87,6 +89,7 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
         quantity: quantity,
         fromState: fromState,
         toState: toState,
+        unitType: unitType,
         capId: capId,
       );
       state = const AsyncValue.data(null);
@@ -123,6 +126,11 @@ class InventoryStock {
   final int? itemsPerPacket;
   final int? packetsPerBundle;
   final int? itemsPerBundle;
+  final int? packetsPerBag;
+  final int? itemsPerBag;
+  final int? packetsPerBox;
+  final int? itemsPerBox;
+  final String? unitType;
 
   InventoryStock({
     this.productId,
@@ -138,6 +146,11 @@ class InventoryStock {
     this.itemsPerPacket,
     this.packetsPerBundle,
     this.itemsPerBundle,
+    this.packetsPerBag,
+    this.itemsPerBag,
+    this.packetsPerBox,
+    this.itemsPerBox,
+    this.unitType,
   });
 
   factory InventoryStock.fromJson(Map<String, dynamic> json) {
@@ -159,6 +172,11 @@ class InventoryStock {
       itemsPerPacket: json['items_per_packet'] as int?,
       packetsPerBundle: json['packets_per_bundle'] as int?,
       itemsPerBundle: json['items_per_bundle'] as int?,
+      packetsPerBag: json['packets_per_bag'] as int?,
+      itemsPerBag: json['items_per_bag'] as int?,
+      packetsPerBox: json['packets_per_box'] as int?,
+      itemsPerBox: json['items_per_box'] as int?,
+      unitType: (json['unit_type'] ?? json['unit']) as String?,
     );
   }
 

@@ -43,11 +43,14 @@ export default function ProductsPage() {
         colors: ['White'], // For template mode
         weight_grams: '',
         selling_price: '',
-        selling_price: '',
         status: 'active',
         factory_id: '',
         raw_material_id: '',
         cap_template_id: '',
+        packets_per_bag: '',
+        items_per_bag: '',
+        packets_per_box: '',
+        items_per_box: '',
     });
 
     const [initialColors, setInitialColors] = useState([]);
@@ -190,6 +193,13 @@ export default function ProductsPage() {
             factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
             raw_material_id: '',
             cap_template_id: '',
+            packets_per_bag: '',
+            items_per_bag: '',
+            packets_per_box: '',
+            items_per_box: '',
+            bundle_enabled: true,
+            bag_enabled: false,
+            box_enabled: false,
         });
         setModalOpen(true);
     };
@@ -219,6 +229,13 @@ export default function ProductsPage() {
                     factory_id: template.factory_id || '',
                     raw_material_id: template.raw_material_id || '',
                     cap_template_id: template.cap_template_id || '',
+                    packets_per_bag: template.packets_per_bag || '',
+                    items_per_bag: template.items_per_bag || '',
+                    packets_per_box: template.packets_per_box || '',
+                    items_per_box: template.items_per_box || '',
+                    bundle_enabled: template.bundle_enabled ?? true,
+                    bag_enabled: template.bag_enabled ?? false,
+                    box_enabled: template.box_enabled ?? false,
                 });
                 setModalOpen(true);
                 return;
@@ -244,6 +261,13 @@ export default function ProductsPage() {
             factory_id: product.factory_id || '',
             raw_material_id: product.raw_material_id || '',
             cap_template_id: product.cap_template_id || '',
+            packets_per_bag: product.packets_per_bag || '',
+            items_per_bag: product.items_per_bag || '',
+            packets_per_box: product.packets_per_box || '',
+            items_per_box: product.items_per_box || '',
+            bundle_enabled: product.bundle_enabled ?? true,
+            bag_enabled: product.bag_enabled ?? false,
+            box_enabled: product.box_enabled ?? false,
         });
         setModalOpen(true);
     };
@@ -264,6 +288,13 @@ export default function ProductsPage() {
                 factory_id: formData.factory_id,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
+                packets_per_bag: formData.packets_per_bag ? Number(formData.packets_per_bag) : null,
+                items_per_bag: formData.items_per_bag ? Number(formData.items_per_bag) : null,
+                packets_per_box: formData.packets_per_box ? Number(formData.packets_per_box) : null,
+                items_per_box: formData.items_per_box ? Number(formData.items_per_box) : null,
+                bundle_enabled: formData.bundle_enabled,
+                bag_enabled: formData.bag_enabled,
+                box_enabled: formData.box_enabled,
                 colors: formData.colors,
             };
 
@@ -285,6 +316,13 @@ export default function ProductsPage() {
                 items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
+                packets_per_bag: formData.packets_per_bag ? Number(formData.packets_per_bag) : null,
+                items_per_bag: formData.items_per_bag ? Number(formData.items_per_bag) : null,
+                packets_per_box: formData.packets_per_box ? Number(formData.packets_per_box) : null,
+                items_per_box: formData.items_per_box ? Number(formData.items_per_box) : null,
+                bundle_enabled: formData.bundle_enabled,
+                bag_enabled: formData.bag_enabled,
+                box_enabled: formData.box_enabled,
             };
             delete payload.colors;
             saveMutation.mutate(payload);
@@ -312,11 +350,23 @@ export default function ProductsPage() {
     // Validation Logic
     const isFormValid = () => {
         if (!formData.name || !formData.size || !formData.factory_id || !formData.weight_grams || !formData.raw_material_id) return false;
+        
+        // At least one packaging method must be enabled
+        if (!formData.bundle_enabled && !formData.bag_enabled && !formData.box_enabled) return false;
+
+        // Base requirement
+        if (!formData.items_per_packet) return false;
+
+        // Check specifics for enabled methods
+        if (formData.bundle_enabled && !formData.packets_per_bundle) return false;
+        if (formData.bag_enabled && !formData.packets_per_bag) return false;
+        if (formData.box_enabled && !formData.packets_per_box) return false;
+
         if (isTemplateMode) {
-            return formData.colors.length > 0 && formData.items_per_packet && formData.packets_per_bundle;
-        } else {
-            return formData.items_per_packet && formData.packets_per_bundle;
+            return formData.colors.length > 0;
         }
+
+        return true;
     };
 
     return (
@@ -640,25 +690,117 @@ export default function ProductsPage() {
                                                         />
                                                     </div>
                                                 </div>
-                                                {!isTemplateMode && (
-                                                    <div className={styles.formGroup}>
-                                                        <label className={styles.formLabel}>Status</label>
-                                                        <CustomSelect
-                                                            options={[
-                                                                { value: 'active', label: 'Active' },
-                                                                { value: 'inactive', label: 'Inactive' }
-                                                            ]}
-                                                            value={formData.status}
-                                                            onChange={(val) => setFormData({ ...formData, status: val })}
-                                                        />
-                                                    </div>
-                                                )}
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Status</label>
+                                                    <CustomSelect
+                                                        options={[
+                                                            { value: 'active', label: 'Active' },
+                                                            { value: 'inactive', label: 'Inactive' }
+                                                        ]}
+                                                        value={formData.status}
+                                                        onChange={(val) => setFormData({ ...formData, status: val })}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
+
                                     </div>
 
                                     {/* Right Pane: Colors & Logistics */}
                                     <div className={styles.rightPane}>
+                                        <div className={styles.formSection}>
+                                            <h3 className={styles.sectionTitle}>
+                                                <Package size={16} />
+                                                Packing Configuration
+                                            </h3>
+
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Items per Packet *</label>
+                                                <input
+                                                    type="number"
+                                                    className={styles.formInput}
+                                                    value={formData.items_per_packet}
+                                                    onChange={(e) => setFormData({ ...formData, items_per_packet: e.target.value })}
+                                                    required
+                                                    min="1"
+                                                />
+                                            </div>
+
+                                            {/* Bundle Section */}
+                                            <div className={styles.packagingToggleRow}>
+                                                <span className={styles.toggleLabel}>Enable Bundle</span>
+                                                <div 
+                                                    className={`${styles.toggle} ${formData.bundle_enabled ? styles.toggleActive : ''}`}
+                                                    onClick={() => setFormData({ ...formData, bundle_enabled: !formData.bundle_enabled })}
+                                                />
+                                            </div>
+                                            {formData.bundle_enabled && (
+                                                <div className={styles.formRow} style={{ marginBottom: '1.5rem', animation: 'fadeIn 0.2s ease-out' }}>
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Packets per Bundle *</label>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.packets_per_bundle}
+                                                            onChange={(e) => setFormData({ ...formData, packets_per_bundle: e.target.value })}
+                                                            required
+                                                            min="1"
+                                                        />
+                                                        <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_bundle || 0)} items</div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Bag Section */}
+                                            <div className={styles.packagingToggleRow}>
+                                                <span className={styles.toggleLabel}>Enable Bag</span>
+                                                <div 
+                                                    className={`${styles.toggle} ${formData.bag_enabled ? styles.toggleActive : ''}`}
+                                                    onClick={() => setFormData({ ...formData, bag_enabled: !formData.bag_enabled })}
+                                                />
+                                            </div>
+                                            {formData.bag_enabled && (
+                                                <div className={styles.formRow} style={{ marginBottom: '1.5rem', animation: 'fadeIn 0.2s ease-out' }}>
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Packets per Bag *</label>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.packets_per_bag}
+                                                            onChange={(e) => setFormData({ ...formData, packets_per_bag: e.target.value })}
+                                                            required
+                                                            min="1"
+                                                        />
+                                                        <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_bag || 0)} items</div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Box Section */}
+                                            <div className={styles.packagingToggleRow}>
+                                                <span className={styles.toggleLabel}>Enable Box</span>
+                                                <div 
+                                                    className={`${styles.toggle} ${formData.box_enabled ? styles.toggleActive : ''}`}
+                                                    onClick={() => setFormData({ ...formData, box_enabled: !formData.box_enabled })}
+                                                />
+                                            </div>
+                                            {formData.box_enabled && (
+                                                <div className={styles.formRow} style={{ animation: 'fadeIn 0.2s ease-out' }}>
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Packets per Box *</label>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.packets_per_box}
+                                                            onChange={(e) => setFormData({ ...formData, packets_per_box: e.target.value })}
+                                                            required
+                                                            min="1"
+                                                        />
+                                                        <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_box || 0)} items</div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                         <div className={styles.formSection}>
                                             <h3 className={styles.sectionTitle}>
                                                 <Plus size={16} />

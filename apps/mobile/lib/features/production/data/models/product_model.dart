@@ -10,6 +10,13 @@ class Product {
   final int itemsPerPacket;
   final int packetsPerBundle;
   final int itemsPerBundle;
+  final int packetsPerBag;
+  final int itemsPerBag;
+  final int packetsPerBox;
+  final int itemsPerBox;
+  final bool bundleEnabled;
+  final bool bagEnabled;
+  final bool boxEnabled;
 
   Product({
     required this.id,
@@ -23,6 +30,13 @@ class Product {
     this.itemsPerPacket = 0,
     this.packetsPerBundle = 0,
     this.itemsPerBundle = 0,
+    this.packetsPerBag = 0,
+    this.itemsPerBag = 0,
+    this.packetsPerBox = 0,
+    this.itemsPerBox = 0,
+    this.bundleEnabled = true,
+    this.bagEnabled = false,
+    this.boxEnabled = false,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -38,6 +52,13 @@ class Product {
       itemsPerPacket: json['items_per_packet'] as int? ?? 0,
       packetsPerBundle: json['packets_per_bundle'] as int? ?? 0,
       itemsPerBundle: json['items_per_bundle'] as int? ?? 0,
+      packetsPerBag: json['packets_per_bag'] as int? ?? 0,
+      itemsPerBag: json['items_per_bag'] as int? ?? 0,
+      packetsPerBox: json['packets_per_box'] as int? ?? 0,
+      itemsPerBox: json['items_per_box'] as int? ?? 0,
+      bundleEnabled: json['bundle_enabled'] as bool? ?? true,
+      bagEnabled: json['bag_enabled'] as bool? ?? false,
+      boxEnabled: json['box_enabled'] as bool? ?? false,
     );
   }
 

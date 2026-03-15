@@ -135,7 +135,7 @@ export default function StockOverviewPage() {
         {
             key: 'finished',
             label: 'Finished',
-            description: 'Bundles ready',
+            description: 'Final units ready',
             icon: PackageCheck,
             color: 'green',
         },

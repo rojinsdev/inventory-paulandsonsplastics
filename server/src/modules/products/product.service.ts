@@ -10,6 +10,13 @@ export interface CreateProductDTO {
     items_per_packet?: number;
     packets_per_bundle?: number;
     items_per_bundle?: number;
+    packets_per_bag?: number;
+    items_per_bag?: number;
+    packets_per_box?: number;
+    items_per_box?: number;
+    bundle_enabled?: boolean;
+    bag_enabled?: boolean;
+    box_enabled?: boolean;
     status?: 'active' | 'inactive';
     factory_id: string;
     raw_material_id?: string | null;
@@ -23,6 +30,14 @@ export interface ProductTemplate {
     weight_grams: number;
     items_per_packet: number;
     packets_per_bundle: number;
+    items_per_bundle: number;
+    packets_per_bag?: number;
+    items_per_bag?: number;
+    packets_per_box?: number;
+    items_per_box?: number;
+    bundle_enabled: boolean;
+    bag_enabled: boolean;
+    box_enabled: boolean;
     factory_id: string;
     cap_template_id?: string | null;
     status: 'active' | 'inactive';
@@ -118,6 +133,13 @@ export class ProductService {
             items_per_packet: template.items_per_packet,
             packets_per_bundle: template.packets_per_bundle,
             items_per_bundle: template.items_per_bundle,
+            packets_per_bag: template.packets_per_bag,
+            items_per_bag: template.items_per_bag,
+            packets_per_box: template.packets_per_box,
+            items_per_box: template.items_per_box,
+            bundle_enabled: template.bundle_enabled,
+            bag_enabled: template.bag_enabled,
+            box_enabled: template.box_enabled,
             selling_price: template.selling_price,
             factory_id: template.factory_id,
             template_id: template.id,
@@ -157,6 +179,13 @@ export class ProductService {
             items_per_packet: template.items_per_packet,
             packets_per_bundle: template.packets_per_bundle,
             items_per_bundle: template.items_per_bundle,
+            packets_per_bag: template.packets_per_bag,
+            items_per_bag: template.items_per_bag,
+            packets_per_box: template.packets_per_box,
+            items_per_box: template.items_per_box,
+            bundle_enabled: template.bundle_enabled,
+            bag_enabled: template.bag_enabled,
+            box_enabled: template.box_enabled,
             selling_price: template.selling_price,
             raw_material_id: template.raw_material_id,
             cap_template_id: template.cap_template_id,

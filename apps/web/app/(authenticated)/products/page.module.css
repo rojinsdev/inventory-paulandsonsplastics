@@ -250,6 +250,21 @@
     transform: translateX(20px);
 }
 
+.packagingToggleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--border);
+}
+
+.toggleLabel {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
 .actions {
     display: flex;
     gap: 0.5rem;
@@ -323,7 +338,13 @@
     flex-direction: column;
     animation: slideUp 0.3s ease-out;
     overflow: hidden;
-    /* Header/Footer will be fixed */
+}
+
+.modalContent {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
 }
 
 :root[class~="dark"] .modal {
@@ -385,6 +406,7 @@
     flex: 1;
     overflow-y: auto;
     padding: 0;
+    min-height: 0; /* Critical for flex scrolling */
     background-color: var(--surface);
 }
 

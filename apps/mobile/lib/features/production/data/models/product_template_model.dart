@@ -6,6 +6,9 @@ class ProductTemplate {
   final String size;
   final double weightGrams;
   final List<Product> variants;
+  final bool bundleEnabled;
+  final bool bagEnabled;
+  final bool boxEnabled;
 
   ProductTemplate({
     required this.id,
@@ -13,6 +16,9 @@ class ProductTemplate {
     required this.size,
     required this.weightGrams,
     this.variants = const [],
+    this.bundleEnabled = true,
+    this.bagEnabled = false,
+    this.boxEnabled = false,
   });
 
   factory ProductTemplate.fromJson(Map<String, dynamic> json) {
@@ -23,6 +29,9 @@ class ProductTemplate {
       size: json['size'] as String? ?? '',
       weightGrams: (json['weight_grams'] as num? ?? 0.0).toDouble(),
       variants: variantsList.map((v) => Product.fromJson(v)).toList(),
+      bundleEnabled: json['bundle_enabled'] as bool? ?? true,
+      bagEnabled: json['bag_enabled'] as bool? ?? false,
+      boxEnabled: json['box_enabled'] as bool? ?? false,
     );
   }
 

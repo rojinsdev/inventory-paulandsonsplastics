@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState, Fragment } from 'react';
-import { Loader2, Package, Search, Filter, ChevronDown } from 'lucide-react';
+import { Fragment, useState, useMemo } from 'react';
+import { Package, Search, Factory, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { formatNumber, cn } from '@/lib/utils';
 import styles from './InternalStockTable.module.css';
-import { Factory } from 'lucide-react';
 
 export default function InternalStockTable({ stock, products, loading, filters, setFilters, factories = [] }) {
     const [expandedTemplates, setExpandedTemplates] = useState({});
+    const [selectedStock, setSelectedStock] = useState(null);
 
     const toggleTemplate = (templateId) => {
         setExpandedTemplates(prev => ({
@@ -24,28 +24,57 @@ export default function InternalStockTable({ stock, products, loading, filters, 
         const stockData = Array.isArray(stock) ? stock : (stock?.data || []);
 
         // 1. Enrich variants with stock data
-        const enrichedVariants = products.map(product => {
+        const enrichedVariants = [];
+        products.forEach(product => {
             let productStock = stockData.filter(s => s.product_id === product.id);
 
             if (filters?.factory_id) {
                 productStock = productStock.filter(s => s.factory_id === filters.factory_id);
             }
 
-            const getSum = (state) => productStock
-                .filter(s => s.state === state)
-                .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+            // Group finished stock by unit_type
+            const finishedStock = productStock.filter(s => s.state === 'finished');
+            const unitTypes = [...new Set(finishedStock.map(s => s.unit_type || 'bundle'))];
 
-            const finished = getSum('finished');
-            const reserved = getSum('reserved');
+            if (unitTypes.length === 0) {
+                // No finished stock, just one row with 0
+                const semi_finished = productStock.filter(s => s.state === 'semi_finished').reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+                const packed = productStock.filter(s => s.state === 'packed').reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+                enrichedVariants.push({
+                    ...product,
+                    semi_finished,
+                    packed,
+                    finished: 0,
+                    reserved: 0,
+                    available: 0,
+                    unit_type: 'bundle'
+                });
+            } else {
+                unitTypes.forEach(ut => {
+                    const utFinished = finishedStock
+                        .filter(s => (s.unit_type || 'bundle') === ut)
+                        .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
+                    
+                    const utReserved = productStock
+                        .filter(s => s.state === 'reserved' && (s.unit_type || 'bundle') === ut)
+                        .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
 
-            return {
-                ...product,
-                semi_finished: getSum('semi_finished'),
-                packed: getSum('packed'),
-                finished: finished,
-                reserved: reserved,
-                available: Math.max(0, finished - reserved)
-            };
+                    // We distribute semi_finished and packed to the first row of the product or keep them separate?
+                    // Actually, let's put them on all rows for now? No, that's double counting in totals.
+                    // Better: Semi-finished and Packed are "loose" counts for the product template level?
+                    // But InternalStockTable is product-centric.
+                    
+                    enrichedVariants.push({
+                        ...product,
+                        semi_finished: ut === unitTypes[0] ? productStock.filter(s => s.state === 'semi_finished').reduce((sum, s) => sum + (Number(s.quantity) || 0), 0) : 0,
+                        packed: ut === unitTypes[0] ? productStock.filter(s => s.state === 'packed').reduce((sum, s) => sum + (Number(s.quantity) || 0), 0) : 0,
+                        finished: utFinished,
+                        reserved: utReserved,
+                        available: Math.max(0, utFinished - utReserved),
+                        unit_type: ut
+                    });
+                });
+            }
         });
 
         // 2. Group by template
@@ -172,7 +201,7 @@ export default function InternalStockTable({ stock, products, loading, filters, 
                                             <td style={{ textAlign: 'center' }}>
                                                 {hasTemplate && (
                                                     <div className={styles.expandBtn}>
-                                                        <ChevronDown size={14} />
+                                                        {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                                     </div>
                                                 )}
                                             </td>
@@ -203,7 +232,12 @@ export default function InternalStockTable({ stock, products, loading, filters, 
                                                 <td></td>
                                                 <td className={styles.variantIndent}>
                                                     <div className={styles.variantLabel}>
-                                                        {variant.color} | {variant.sku || 'No SKU'}
+                                                        {variant.color} | {variant.sku || 'No SKU'} 
+                                                        {variant.unit_type && (
+                                                            <span className={cn(styles.badge, styles.unitBadge)}>
+                                                                {variant.unit_type}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </td>
                                                 <td style={{ textAlign: 'right' }}>{formatNumber(variant.semi_finished)}</td>

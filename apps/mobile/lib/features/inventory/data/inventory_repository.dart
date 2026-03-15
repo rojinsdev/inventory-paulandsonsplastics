@@ -170,7 +170,8 @@ class InventoryRepository {
 
   Future<void> bundle({
     required String productId,
-    required int bundlesCreated,
+    required int unitsCreated,
+    String unitType = 'bundle',
     String source = 'packed',
     String? capId,
   }) async {
@@ -179,7 +180,8 @@ class InventoryRepository {
         ApiConstants.inventoryBundle,
         data: {
           'product_id': productId,
-          'bundles_created': bundlesCreated,
+          'units_created': unitsCreated,
+          'unit_type': unitType,
           'source': source,
           if (capId != null) 'cap_id': capId,
         },
@@ -197,6 +199,7 @@ class InventoryRepository {
     required int quantity,
     required String fromState,
     required String toState,
+    String unitType = 'bundle',
     String? capId,
   }) async {
     try {
@@ -207,6 +210,7 @@ class InventoryRepository {
           'quantity': quantity,
           'from_state': fromState,
           'to_state': toState,
+          'unit_type': unitType,
           if (capId != null) 'cap_id': capId,
         },
       );
