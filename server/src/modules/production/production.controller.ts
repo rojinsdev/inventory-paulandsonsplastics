@@ -14,15 +14,15 @@ const submitProductionSchema = z.object({
     end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
 
     // For unit-count products
-    total_produced: z.number().int().positive().optional(),
+    total_produced: z.number().int().nonnegative().optional(),
     damaged_count: z.number().int().nonnegative().optional(),
 
     // For weight-based products (caps)
-    total_weight_kg: z.number().positive().optional(),
+    total_weight_kg: z.number().nonnegative().optional(),
 
     // Actual metrics
-    actual_cycle_time_seconds: z.number().positive().optional(),
-    actual_weight_grams: z.number().positive().optional(),
+    actual_cycle_time_seconds: z.number().nonnegative().optional(),
+    actual_weight_grams: z.number().nonnegative().optional(),
 
     // Downtime
     downtime_minutes: z.number().int().optional(),
@@ -36,15 +36,16 @@ const submitCapProductionSchema = z.object({
     shift_number: z.number().int().min(1).max(2),
     start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
     end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
-    total_weight_produced_kg: z.number().positive().optional(),
-    total_produced: z.number().int().positive().optional(),
-    actual_cycle_time_seconds: z.number().positive().optional(),
-    actual_weight_grams: z.number().positive().optional(),
+    total_weight_produced_kg: z.number().nonnegative().optional(),
+    total_produced: z.number().int().nonnegative().optional(),
+    actual_cycle_time_seconds: z.number().nonnegative().optional(),
+    actual_weight_grams: z.number().nonnegative().optional(),
     remarks: z.string().optional(),
 });
 
 export class ProductionController {
     async submit(req: AuthRequest, res: Response) {
+        console.log('Production Submit Request:', JSON.stringify(req.body, null, 2));
         const validatedData = submitProductionSchema.parse(req.body);
 
         const log = await productionService.submitProduction({

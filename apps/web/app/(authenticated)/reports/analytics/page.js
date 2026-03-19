@@ -23,6 +23,7 @@ import styles from './analytics.module.css';
 import { useFactory } from '@/contexts/FactoryContext'; // Import Context
 
 const TIME_PERIODS = [
+    { label: 'Today', value: 'today' },
     { label: 'Last 7 Days', value: '7' },
     { label: 'Last 30 Days', value: '30' },
     { label: 'This Month', value: 'month' },
@@ -32,7 +33,7 @@ const TIME_PERIODS = [
 export default function AnalyticsPage() {
     const { setPageTitle } = useUI();
     const [loading, setLoading] = useState(true);
-    const [timePeriod, setTimePeriod] = useState('7');
+    const [timePeriod, setTimePeriod] = useState('today'); // Set default to Today
     const [showCustomDateRange, setShowCustomDateRange] = useState(false);
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
@@ -52,24 +53,33 @@ export default function AnalyticsPage() {
     }, [timePeriod, selectedFactory]);
 
     const getDateRange = () => {
-        // ... existing code
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+        const now = new Date();
+        // Use local date string (YYYY-MM-DD) to avoid UTC offset issues
+        const getLocalDateString = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        const todayStr = getLocalDateString(now);
 
         switch (timePeriod) {
+            case 'today':
+                return { start_date: todayStr, end_date: todayStr };
             case '7': {
-                const weekAgo = new Date(today);
-                weekAgo.setDate(today.getDate() - 7);
-                return { start_date: weekAgo.toISOString().split('T')[0], end_date: todayStr };
+                const weekAgo = new Date(now);
+                weekAgo.setDate(now.getDate() - 7);
+                return { start_date: getLocalDateString(weekAgo), end_date: todayStr };
             }
             case '30': {
-                const monthAgo = new Date(today);
-                monthAgo.setDate(today.getDate() - 30);
-                return { start_date: monthAgo.toISOString().split('T')[0], end_date: todayStr };
+                const monthAgo = new Date(now);
+                monthAgo.setDate(now.getDate() - 30);
+                return { start_date: getLocalDateString(monthAgo), end_date: todayStr };
             }
             case 'month': {
-                const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-                return { start_date: monthStart.toISOString().split('T')[0], end_date: todayStr };
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                return { start_date: getLocalDateString(monthStart), end_date: todayStr };
             }
             case 'custom':
                 if (customStartDate && customEndDate) {

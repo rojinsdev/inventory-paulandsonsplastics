@@ -14,11 +14,13 @@ import {
     History,
     TrendingUp,
     TrendingDown,
+    HardHat,
 } from 'lucide-react';
 import { useFactory } from '@/contexts/FactoryContext';
-import { inventoryAPI, productsAPI } from '@/lib/api';
-import { formatNumber } from '@/lib/utils';
+import { inventoryAPI, productsAPI, capsAPI } from '@/lib/api';
+import { formatNumber, cn } from '@/lib/utils';
 import InternalStockTable from '@/components/inventory/InternalStockTable';
+import CapStockTable from '@/components/inventory/CapStockTable';
 import styles from './page.module.css';
 
 export default function StockOverviewPage() {
@@ -30,6 +32,9 @@ export default function StockOverviewPage() {
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState('products');
+    
+    // Product Stock State
     const [stockRaw, setStockRaw] = useState([]);
     const [products, setProducts] = useState([]);
     const [filters, setFilters] = useState({
@@ -37,6 +42,14 @@ export default function StockOverviewPage() {
         product_id: '',
         factory_id: '',
     });
+
+    // Cap Stock State
+    const [capStock, setCapStock] = useState([]);
+    const [capFilters, setCapFilters] = useState({
+        search: '',
+        factory_id: '',
+    });
+
     const [stockData, setStockData] = useState({
         semi_finished: 0,
         packed: 0,
@@ -84,15 +97,22 @@ export default function StockOverviewPage() {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
-            // Fetch all stock/products to keep the hub "Master" as requested
-            const [stockRes, productsRes] = await Promise.all([
+            
+            // Fetch everything in parallel
+            const [stockRes, productsRes, capsRes] = await Promise.all([
                 inventoryAPI.getStock(params),
-                productsAPI.getAll(params)
+                productsAPI.getAll(params),
+                capsAPI.getBalances(params)
             ]);
 
+            // Handle Product Stock
             const stockDataArray = stockRes?.stock || stockRes?.data || (Array.isArray(stockRes) ? stockRes : []);
             setStockRaw(stockDataArray);
             setProducts(Array.isArray(productsRes) ? productsRes : (productsRes?.data || []));
+
+            // Handle Cap Stock
+            const capDataArray = capsRes?.balances || capsRes?.data || (Array.isArray(capsRes) ? capsRes : []);
+            setCapStock(capDataArray);
 
             if (stockDataArray.length > 0) {
                 const stats = {
@@ -148,14 +168,12 @@ export default function StockOverviewPage() {
         },
     ];
 
-    const totalItems = stockData.semi_finished + stockData.packed;
-    const totalBundles = stockData.finished + stockData.reserved;
-
     return (
         <>
             <div className="page-header">
                 <div>
-                    <p className="text-muted">Master Internal Stock Hub</p>
+                    <h1 className="h3">Internal Stock Hub</h1>
+                    <p className="text-muted">Master inventory across all production stages</p>
                 </div>
             </div>
 
@@ -195,24 +213,59 @@ export default function StockOverviewPage() {
                         })}
                     </div>
 
-                    {/* Unified Stock Table */}
-                    <div style={{ marginTop: '2.5rem' }}>
-                        <div className="page-header" style={{ marginBottom: '1.25rem' }}>
-                            <div>
-                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Internal Stock Levels</h3>
-                                <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>Real-time inventory across all production stages</p>
-                            </div>
+                    {/* Tab Navigation */}
+                    <div className={styles.tabsContainer}>
+                        <div className={styles.tabsList}>
+                            <button
+                                onClick={() => setActiveTab('products')}
+                                className={cn(
+                                    styles.tabButton,
+                                    activeTab === 'products' && styles.tabActive
+                                )}
+                            >
+                                <Package size={18} />
+                                <span>Products</span>
+                                {activeTab === 'products' && (
+                                    <div className={styles.tabIndicator} />
+                                )}
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('caps')}
+                                className={cn(
+                                    styles.tabButton,
+                                    activeTab === 'caps' && styles.tabActive
+                                )}
+                            >
+                                <HardHat size={18} />
+                                <span>Cap Inventory</span>
+                                {activeTab === 'caps' && (
+                                    <div className={styles.tabIndicator} />
+                                )}
+                            </button>
                         </div>
-                        <InternalStockTable
-                            stock={stockRaw}
-                            products={products}
-                            loading={loading}
-                            filters={filters}
-                            setFilters={setFilters}
-                            factories={factories}
-                        />
                     </div>
 
+                    {/* Tab Content */}
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        {activeTab === 'products' ? (
+                            <InternalStockTable
+                                stock={stockRaw}
+                                products={products}
+                                loading={loading}
+                                filters={filters}
+                                setFilters={setFilters}
+                                factories={factories}
+                            />
+                        ) : (
+                            <CapStockTable
+                                stock={capStock}
+                                loading={loading}
+                                filters={capFilters}
+                                setFilters={setCapFilters}
+                                factories={factories}
+                            />
+                        )}
+                    </div>
                 </>
             )}
         </>

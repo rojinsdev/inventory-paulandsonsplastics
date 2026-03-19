@@ -18,6 +18,7 @@ export interface CreateCapTemplateDTO {
     ideal_weight_grams: number;
     ideal_cycle_time_seconds?: number;
     raw_material_id?: string;
+    machine_id?: string;
     factory_id: string;
     colors: string[];
 }
@@ -153,6 +154,7 @@ export class CapService {
         const {
             product_template_ids,
             colors: _colors, // Double safety
+            machine_id,
             ...templateData
         } = payload;
 
@@ -172,7 +174,8 @@ export class CapService {
             ideal_cycle_time_seconds: template.ideal_cycle_time_seconds || 0.0,
             raw_material_id: template.raw_material_id,
             factory_id: template.factory_id,
-            template_id: template.id
+            template_id: template.id,
+            machine_id: machine_id || null
         }));
 
         const { data: createdVariants, error: vError } = await supabase
@@ -200,7 +203,10 @@ export class CapService {
             .from('cap_templates')
             .select(`
                 *,
-                variants:caps(*),
+                variants:caps(
+                    *,
+                    stock:cap_stock_balances(quantity)
+                ),
                 mapped_product_templates:product_templates(id, name, size)
             `);
 
@@ -218,7 +224,10 @@ export class CapService {
             .from('cap_templates')
             .select(`
                 *,
-                variants:caps(*),
+                variants:caps(
+                    *,
+                    stock:cap_stock_balances(quantity)
+                ),
                 mapped_product_templates:product_templates(id, name, size)
             `)
             .eq('id', id)
@@ -229,7 +238,7 @@ export class CapService {
     }
 
     async updateTemplate(id: string, data: any) {
-        const { product_template_ids, colors, ...templateData } = data;
+        const { product_template_ids, colors, machine_id, ...templateData } = data;
 
         // 1. Update Cap Template metadata
         const { data: template, error } = await supabase
@@ -247,7 +256,8 @@ export class CapService {
             .update({
                 ideal_weight_grams: template.ideal_weight_grams,
                 ideal_cycle_time_seconds: template.ideal_cycle_time_seconds,
-                raw_material_id: template.raw_material_id
+                raw_material_id: template.raw_material_id,
+                machine_id: machine_id || null
             })
             .eq('template_id', id);
 

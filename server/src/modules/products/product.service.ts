@@ -21,6 +21,7 @@ export interface CreateProductDTO {
     factory_id: string;
     raw_material_id?: string | null;
     template_id?: string | null;
+    cap_template_id?: string | null;
 }
 
 export interface ProductTemplate {
@@ -39,7 +40,9 @@ export interface ProductTemplate {
     bag_enabled: boolean;
     box_enabled: boolean;
     factory_id: string;
+    raw_material_id?: string | null;
     cap_template_id?: string | null;
+    selling_price?: number | null;
     status: 'active' | 'inactive';
     created_at: string;
     updated_at: string;

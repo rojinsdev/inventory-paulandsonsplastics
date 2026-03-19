@@ -114,7 +114,7 @@ export default function NotificationDropdown() {
                     </div>
 
                     <div className={styles.footer}>
-                        <button onClick={() => setIsOpen(false)}>Close</button>
+                        <button className={styles.closeBtn} onClick={() => setIsOpen(false)}>Close</button>
                     </div>
                 </div>
             )}

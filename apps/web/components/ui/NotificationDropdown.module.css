@@ -5,8 +5,8 @@
 }
 
 .triggerBtn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-overlay);
+    border: 1px solid var(--glass-border);
     color: var(--text-muted);
     width: 40px;
     height: 40px;
@@ -20,7 +20,7 @@
 }
 
 .triggerBtn:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-overlay-hover);
     color: var(--primary);
     border-color: var(--primary);
     transform: translateY(-2px);
@@ -49,10 +49,11 @@
     top: calc(100% + 12px);
     right: 0;
     width: 360px;
-    background: var(--surface-elevated);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
     z-index: 1000;
     overflow: hidden;
     animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -72,8 +73,8 @@
 
 .header {
     padding: 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.02);
+    border-bottom: 1px solid var(--glass-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -109,7 +110,7 @@
 }
 
 .item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-overlay-hover);
 }
 
 .iconContainer {
@@ -120,7 +121,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-overlay);
 }
 
 .stockIcon {
@@ -214,21 +215,28 @@
 
 .footer {
     padding: 12px;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(0, 0, 0, 0.02);
     display: flex;
     justify-content: center;
+    border-top: 1px solid var(--glass-border);
 }
 
-.footer button {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 12px;
-    cursor: pointer;
-}
 
-.footer button:hover {
+.closeBtn {
+    background: var(--bg-overlay);
+    border: 1px solid var(--glass-border);
     color: var(--text-main);
+    font-size: 12px;
+    padding: 6px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.closeBtn:hover {
+    background: var(--bg-overlay-hover);
+    border-color: var(--primary);
 }
 
 /* Scrollbar */

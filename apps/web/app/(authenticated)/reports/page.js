@@ -126,7 +126,7 @@ export default function ReportsPage() {
 
             {/* Quick Actions */}
             <div className={styles.quickActions}>
-                <div className={styles.actionCard}>
+                <Link href="/reports/analytics" className={styles.actionCard}>
                     <BarChart3 size={24} className={styles.actionIcon} />
                     <div className={styles.actionContent}>
                         <h3 className={styles.actionTitle}>Analytics Dashboard</h3>
@@ -134,7 +134,7 @@ export default function ReportsPage() {
                             View real-time analytics and key performance indicators
                         </p>
                     </div>
-                </div>
+                </Link>
                 <div className={styles.actionCard}>
                     <FileText size={24} className={styles.actionIcon} />
                     <div className={styles.actionContent}>

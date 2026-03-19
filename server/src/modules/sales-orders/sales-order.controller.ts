@@ -30,6 +30,16 @@ export class SalesOrderController {
         res.status(201).json(order);
     }
 
+    async update(req: AuthRequest, res: Response) {
+        const { id } = req.params;
+        const validatedData = createOrderSchema.parse(req.body);
+        const order = await salesOrderService.updateOrder(id, {
+            ...validatedData,
+            user_id: req.user!.id,
+        });
+        res.json(order);
+    }
+
     async list(req: Request, res: Response) {
         const filters = {
             status: req.query.status as string,

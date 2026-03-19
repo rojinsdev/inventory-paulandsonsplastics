@@ -23,9 +23,10 @@ export default function CustomersPage() {
         phone: '',
         email: '',
         address: '',
-        gst_number: '',
+        gstin: '',
         notes: '',
     });
+    const [viewingId, setViewingId] = useState(null);
 
     // Queries
     const { data: customers = [], isLoading: loading, error: queryError, refetch } = useQuery({
@@ -95,7 +96,7 @@ export default function CustomersPage() {
             phone: '',
             email: '',
             address: '',
-            gst_number: '',
+            gstin: '',
             notes: '',
         });
         setModalOpen(true);
@@ -108,7 +109,7 @@ export default function CustomersPage() {
             phone: customer.phone || '',
             email: customer.email || '',
             address: customer.address || '',
-            gst_number: customer.gst_number || '',
+            gstin: customer.gstin || '',
             notes: customer.notes || '',
         });
         setModalOpen(true);
@@ -213,15 +214,23 @@ export default function CustomersPage() {
                                             '—'
                                         )}
                                     </td>
-                                    <td className="text-muted">{customer.gst_number || '—'}</td>
+                                    <td className="text-muted">{customer.gstin || '—'}</td>
                                     <td>
                                         <div className={styles.actions}>
                                             <button
                                                 className="btn btn-sm btn-primary"
-                                                onClick={() => router.push(`/customers/${customer.id}`)}
+                                                onClick={() => {
+                                                    setViewingId(customer.id);
+                                                    router.push(`/customers/${customer.id}`);
+                                                }}
+                                                disabled={viewingId === customer.id}
                                                 title="View Profile"
                                             >
-                                                <Eye size={14} />
+                                                {viewingId === customer.id ? (
+                                                    <Loader2 size={14} className={styles.spinner} />
+                                                ) : (
+                                                    <Eye size={14} />
+                                                )}
                                             </button>
                                             <button
                                                 className="btn btn-sm btn-outline"
@@ -310,8 +319,8 @@ export default function CustomersPage() {
                                         <input
                                             type="text"
                                             className={styles.formInput}
-                                            value={formData.gst_number}
-                                            onChange={(e) => setFormData({ ...formData, gst_number: e.target.value })}
+                                            value={formData.gstin}
+                                            onChange={(e) => setFormData({ ...formData, gstin: e.target.value })}
                                             placeholder="GSTIN"
                                         />
                                     </div>

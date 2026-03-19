@@ -458,7 +458,7 @@ export class DashboardService {
                 .limit(5),
             supabase
                 .from('sales_orders')
-                .select('created_at, status, customer_id, customers(name)')
+                .select('created_at, status, customer_id, customer:customers(name)')
                 .order('created_at', { ascending: false })
                 .limit(5)
         ]);
@@ -504,7 +504,7 @@ export class DashboardService {
             salesOrders.data.forEach((order: any) => {
                 activities.push({
                     type: 'sales',
-                    description: `Order ${order.status} for ${order.customers?.name || 'customer'}`,
+                    description: `Order ${order.status} for ${order.customer?.name || 'customer'}`,
                     timestamp: order.created_at
                 });
             });
@@ -575,7 +575,7 @@ export class DashboardService {
         // Pending orders (reserved status)
         const { data: pendingOrders } = await supabase
             .from('sales_orders')
-            .select('id, order_date, status, customers(name)')
+            .select('id, order_date, status, customer:customers(name)')
             .eq('status', 'reserved')
             .order('order_date', { ascending: true })
             .limit(10);
@@ -586,7 +586,7 @@ export class DashboardService {
             const daysPending = Math.floor((todayDate.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
             return {
                 orderId: order.id,
-                customerName: order.customers?.name || 'Unknown',
+                customerName: order.customer?.name || 'Unknown',
                 orderDate: order.order_date,
                 daysPending
             };
@@ -599,7 +599,7 @@ export class DashboardService {
 
         const { data: upcomingDeliveries } = await supabase
             .from('sales_orders')
-            .select('id, order_date, status, customers(name)')
+            .select('id, order_date, status, customer:customers(name)')
             .eq('status', 'reserved')
             .gte('order_date', today)
             .lte('order_date', nextWeekStr)
@@ -611,7 +611,7 @@ export class DashboardService {
             const daysUntil = Math.floor((deliveryDate.getTime() - todayDate.getTime()) / (1000 * 60 * 60 * 24));
             return {
                 orderId: order.id,
-                customerName: order.customers?.name || 'Unknown',
+                customerName: order.customer?.name || 'Unknown',
                 deliveryDate: order.order_date,
                 daysUntil
             };

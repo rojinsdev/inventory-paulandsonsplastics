@@ -64,6 +64,12 @@
     --info-bg: #dbeafe;
     --info-text: #1e40af;
 
+    --surface-elevated: #ffffff;
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.08);
+    --bg-overlay: rgba(0, 0, 0, 0.04);
+    --bg-overlay-hover: rgba(0, 0, 0, 0.08);
+
     /* Transitions */
     --transition-fast: 150ms ease;
     --transition-base: 200ms ease;
@@ -116,6 +122,12 @@
     --error-text: #f87171;
     --info-bg: rgba(96, 165, 250, 0.15);
     --info-text: #60a5fa;
+
+    /* Glass Effect */
+    --glass-bg: rgba(24, 24, 27, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --bg-overlay: rgba(255, 255, 255, 0.04);
+    --bg-overlay-hover: rgba(255, 255, 255, 0.08);
 
     /* Global slate overrides for consistency */
     --slate-50: #09090b;

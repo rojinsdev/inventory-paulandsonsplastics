@@ -56,14 +56,20 @@ export const errorHandler = (err: any, req: Request, res: Response, next: NextFu
     if (process.env.NODE_ENV === 'development') {
         sendErrorDev(err, req, res);
     } else {
+        // Create a copy of the error to avoid mutating the original
         let error = { ...err };
         error.message = err.message;
-        error.isOperational = err.isOperational;
-        error.statusCode = err.statusCode;
+        error.stack = err.stack;
+        error.statusCode = err.statusCode || 500;
+        error.status = err.status || 'error';
+        error.isOperational = err.isOperational || false;
 
         // Handle specific JWT errors
-        if (err.name === 'JsonWebTokenError') error = new AppError('Invalid token. Please log in again!', 401);
-        if (err.name === 'TokenExpiredError') error = new AppError('Your token has expired! Please log in again.', 401);
+        if (err.name === 'JsonWebTokenError') {
+            error = new AppError('Invalid token. Please log in again!', 401);
+        } else if (err.name === 'TokenExpiredError') {
+            error = new AppError('Your token has expired! Please log in again.', 401);
+        }
 
         sendErrorProd(error, req, res);
     }

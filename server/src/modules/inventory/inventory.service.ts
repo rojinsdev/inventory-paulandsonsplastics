@@ -73,7 +73,8 @@ export class InventoryService {
             p_factory_id: factory,
             p_state: 'semi_finished',
             p_quantity_change: -requiredLooseItems,
-            p_cap_id: null
+            p_cap_id: null,
+            p_unit_type: ''
         });
 
         if (deductError) throw new Error(`Failed to deduct semi-finished stock: ${deductError.message}`);
@@ -95,7 +96,8 @@ export class InventoryService {
                 p_factory_id: factory,
                 p_state: 'semi_finished',
                 p_quantity_change: requiredLooseItems,
-                p_cap_id: null
+                p_cap_id: null,
+                p_unit_type: ''
             });
             throw new Error(`Failed to add packed stock: ${addError.message}`);
         }
@@ -173,7 +175,8 @@ export class InventoryService {
                 p_factory_id: factory,
                 p_state: sourceState,
                 p_quantity_change: requiredQuantity,
-                p_cap_id: source === 'packed' ? resolvedCapId : null
+                p_cap_id: source === 'packed' ? resolvedCapId : null,
+                p_unit_type: source === 'packed' ? 'packet' : ''
             });
             throw new Error(`Failed to add finished stock: ${addError.message}`);
         }

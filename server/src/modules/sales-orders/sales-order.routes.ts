@@ -10,6 +10,7 @@ router.use(authenticate);
 
 // Creation and Management (Admin Only)
 router.post('/', requireRole('admin'), asyncHandler(salesOrderController.create));
+router.put('/:id', requireRole('admin'), asyncHandler(salesOrderController.update));
 router.get('/', requireRole('admin', 'production_manager'), asyncHandler(salesOrderController.list));
 
 // Payment History and Tracking (MUST come before /:id route)

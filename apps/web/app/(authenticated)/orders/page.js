@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
-import { Plus, Loader2, ShoppingCart, Eye, Trash2, Filter, Clock, AlertCircle, CheckCircle2, X, User, Calendar, ClipboardList, Package } from 'lucide-react';
+import { Plus, Loader2, ShoppingCart, Eye, Trash2, Edit, Filter, Clock, AlertCircle, CheckCircle2, X, User, Calendar, ClipboardList, Package } from 'lucide-react';
 import { ordersAPI, customersAPI, productsAPI, inventoryAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatDate, cn } from '@/lib/utils';
@@ -42,6 +42,8 @@ export default function OrdersPage() {
         notes: '',
         order_date: new Date().toISOString().split('T')[0],
     });
+    const [isEditing, setIsEditing] = useState(false);
+    const [editOrderId, setEditOrderId] = useState(null);
 
 
 
@@ -84,6 +86,18 @@ export default function OrdersPage() {
             setModalOpen(false);
         },
         onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: ({ id, data }) => ordersAPI.update(id, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            setModalOpen(false);
+            setIsEditing(false);
+            setEditOrderId(null);
+        },
+        onError: (err) => alert('Error updating order: ' + err.message)
     });
 
     const cancelMutation = useMutation({
@@ -141,16 +155,40 @@ export default function OrdersPage() {
     };
 
     const handleCreate = () => {
+        setIsEditing(false);
+        setEditOrderId(null);
         setFormData({
-            customer_id: customers[0]?.id || '',
+            customer_id: customerOptions[0]?.value || '',
             items: [{
-                factory_id: factories[0]?.id || '',
+                factory_id: factoryOptions[0]?.value || '',
                 product_id: '',
                 quantity: 1,
                 unit_type: 'bundle'
             }],
             notes: '',
             order_date: new Date().toISOString().split('T')[0],
+        });
+        setModalOpen(true);
+    };
+
+    const handleEdit = (order) => {
+        setIsEditing(true);
+        setEditOrderId(order.id);
+        
+        const items = order.sales_order_items || order.items || [];
+        setFormData({
+            customer_id: order.customer_id,
+            items: items.map(item => {
+                const p = products.find(prod => prod.id === item.product_id);
+                return {
+                    factory_id: p?.factory_id || '',
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    unit_type: item.unit_type || 'bundle'
+                };
+            }),
+            notes: order.notes || '',
+            order_date: order.delivery_date || new Date().toISOString().split('T')[0],
         });
         setModalOpen(true);
     };
@@ -192,7 +230,7 @@ export default function OrdersPage() {
             return;
         }
 
-        createMutation.mutate({
+        const payload = {
             customer_id: formData.customer_id,
             delivery_date: formData.order_date || new Date().toISOString().split('T')[0],
             items: formData.items.map((item) => ({
@@ -201,7 +239,13 @@ export default function OrdersPage() {
                 unit_type: item.unit_type,
             })),
             notes: formData.notes,
-        });
+        };
+
+        if (isEditing) {
+            updateMutation.mutate({ id: editOrderId, data: payload });
+        } else {
+            createMutation.mutate(payload);
+        }
     };
 
     const handleCancel = async (order) => {
@@ -413,13 +457,22 @@ export default function OrdersPage() {
                                                                 <Eye size={14} />
                                                             </button>
                                                             {(order.status === 'pending' || order.status === 'reserved') && (
-                                                                <button
-                                                                    className={styles.actionButton}
-                                                                    onClick={() => handleCancel(order)}
-                                                                    title="Cancel Order"
-                                                                >
-                                                                    <Trash2 size={14} />
-                                                                </button>
+                                                                <>
+                                                                    <button
+                                                                        className={styles.actionButton}
+                                                                        onClick={() => handleEdit(order)}
+                                                                        title="Edit Order"
+                                                                    >
+                                                                        <Edit size={14} />
+                                                                    </button>
+                                                                    <button
+                                                                        className={styles.actionButton}
+                                                                        onClick={() => handleCancel(order)}
+                                                                        title="Cancel Order"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </>
                                                             )}
                                                         </div>
                                                     </td>
@@ -439,7 +492,9 @@ export default function OrdersPage() {
                 <div className={styles.modalBackdrop} onClick={() => setModalOpen(false)}>
                     <div className={cn(styles.modal, styles.modalWide)} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
-                            <h2 className={styles.modalTitle}>New Sales Order</h2>
+                            <h2 className={styles.modalTitle}>
+                                {isEditing ? `Edit Sales Order #${editOrderId?.slice(-6).toUpperCase()}` : 'New Sales Order'}
+                            </h2>
                             <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
@@ -497,15 +552,15 @@ export default function OrdersPage() {
                                         type="submit"
                                         className={styles.submitButton}
                                         style={{ width: '100%', padding: '12px' }}
-                                        disabled={createMutation.isPending}
+                                        disabled={createMutation.isPending || updateMutation.isPending}
                                     >
-                                        {createMutation.isPending ? (
+                                        {createMutation.isPending || updateMutation.isPending ? (
                                             <>
                                                 <Loader2 size={18} className={styles.spinner} />
-                                                <span>Creating...</span>
+                                                <span>{isEditing ? 'Updating...' : 'Creating...'}</span>
                                             </>
                                         ) : (
-                                            <span>Create Order</span>
+                                            <span>{isEditing ? 'Update Order' : 'Create Order'}</span>
                                         )}
                                     </button>
                                 </div>

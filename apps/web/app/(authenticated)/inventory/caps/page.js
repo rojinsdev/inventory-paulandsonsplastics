@@ -9,7 +9,7 @@ import {
     Clock, Weight, Info, Settings,
     TrendingUp, ArrowUpRight, AlertTriangle
 } from 'lucide-react';
-import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI } from '@/lib/api';
+import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI, machinesAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
@@ -37,6 +37,7 @@ export default function CapManagementPage() {
         ideal_weight_grams: '',
         ideal_cycle_time_seconds: '',
         factory_id: '',
+        machine_id: '',
         product_template_ids: [] // Mapping at template level
     });
 
@@ -57,6 +58,14 @@ export default function CapManagementPage() {
         enabled: !!formData.factory_id && isModalOpen,
     });
     const rawMaterials = useMemo(() => rawMaterialsRes?.rawMaterials || (Array.isArray(rawMaterialsRes) ? rawMaterialsRes : []), [rawMaterialsRes]);
+
+    // Fetch Machines for assignment (filtered by factory)
+    const { data: machinesRes, isLoading: loadingMachines } = useQuery({
+        queryKey: ['machines', formData.factory_id],
+        queryFn: () => machinesAPI.getAll({ factory_id: formData.factory_id }),
+        enabled: !!formData.factory_id && isModalOpen,
+    });
+    const machines = useMemo(() => machinesRes?.data || (Array.isArray(machinesRes) ? machinesRes : []), [machinesRes]);
 
     const { data: capsRes, isLoading: loadingCaps, error: capsError } = useQuery({
         queryKey: ['cap-templates', selectedFactory],
@@ -179,6 +188,7 @@ export default function CapManagementPage() {
                 ideal_weight_grams: cap.ideal_weight_grams || '',
                 ideal_cycle_time_seconds: cap.ideal_cycle_time_seconds || '',
                 factory_id: cap.factory_id || '',
+                machine_id: cap.machine_id || '',
                 raw_material_id: cap.raw_material_id || '',
                 product_template_ids: cap.mapped_product_templates?.map(p => p.id) || []
             });
@@ -190,6 +200,7 @@ export default function CapManagementPage() {
                 ideal_weight_grams: '',
                 ideal_cycle_time_seconds: '',
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
+                machine_id: '',
                 raw_material_id: '',
                 product_template_ids: []
             });
@@ -208,7 +219,9 @@ export default function CapManagementPage() {
         const payload = {
             ...formData,
             ideal_weight_grams: parseFloat(formData.ideal_weight_grams),
-            ideal_cycle_time_seconds: parseFloat(formData.ideal_cycle_time_seconds)
+            ideal_cycle_time_seconds: parseFloat(formData.ideal_cycle_time_seconds),
+            machine_id: formData.machine_id || null,
+            raw_material_id: formData.raw_material_id || null
         };
 
         if (selectedCap) {
@@ -485,9 +498,34 @@ export default function CapManagementPage() {
                                                 <label className={styles.formLabel}>Select Factory *</label>
                                                 <FactorySelect
                                                     value={formData.factory_id}
-                                                    onChange={val => setFormData({ ...formData, factory_id: val, product_template_ids: [] })}
+                                                    onChange={val => setFormData({ ...formData, factory_id: val, machine_id: '', product_template_ids: [] })}
                                                     disabled={!!selectedCap} // Lock factory on edit
                                                 />
+                                            </div>
+
+                                            <div className={styles.formGroup}>
+                                                <label className={styles.formLabel}>Associated Machine</label>
+                                                <select
+                                                    className={styles.formInput}
+                                                    value={formData.machine_id || ''}
+                                                    onChange={e => setFormData({ ...formData, machine_id: e.target.value })}
+                                                    disabled={loadingMachines || !formData.factory_id}
+                                                >
+                                                    <option value="">
+                                                        {!formData.factory_id
+                                                            ? 'Select Factory First'
+                                                            : loadingMachines
+                                                                ? 'Loading...'
+                                                                : machines.length === 0
+                                                                    ? 'No Machines Found'
+                                                                    : '-- Select Machine (Optional) --'}
+                                                    </option>
+                                                    {machines.map(m => (
+                                                        <option key={m.id} value={m.id}>
+                                                            {m.name} {m.category ? `(${m.category})` : ''}
+                                                        </option>
+                                                    ))}
+                                                </select>
                                             </div>
                                         </div>
 
@@ -515,7 +553,7 @@ export default function CapManagementPage() {
                                                     <div className={styles.inputWrapper}>
                                                         <input
                                                             type="number"
-                                                            step="0.1"
+                                                            step="any"
                                                             className={styles.formInput}
                                                             value={formData.ideal_cycle_time_seconds}
                                                             onChange={e => setFormData({ ...formData, ideal_cycle_time_seconds: e.target.value })}

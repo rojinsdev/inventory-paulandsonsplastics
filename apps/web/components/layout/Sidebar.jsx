@@ -28,8 +28,10 @@ import {
     PieChart,
     LineChart,
     TrendingUp,
+    Menu,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { useUI } from '@/contexts/UIContext';
 import styles from './Sidebar.module.css';
 
 const menuSections = [
@@ -108,6 +110,7 @@ const menuSections = [
 ];
 
 export default function Sidebar() {
+    const { isSidebarCollapsed, toggleSidebar } = useUI();
     const pathname = usePathname();
     const { logout } = useAuth();
     // Initialize state from localStorage if available, otherwise default
@@ -133,6 +136,11 @@ export default function Sidebar() {
     }, [expandedItems]);
 
     const toggleExpand = (label) => {
+        if (isSidebarCollapsed) {
+            toggleSidebar();
+            setExpandedItems([label]);
+            return;
+        }
         setExpandedItems(prev =>
             prev.includes(label)
                 ? prev.filter(item => item !== label)
@@ -144,23 +152,34 @@ export default function Sidebar() {
     const isGroupActive = (submenu) => submenu?.some(item => pathname === item.href);
 
     return (
-        <aside className={styles.sidebar}>
+        <aside className={`${styles.sidebar} ${isSidebarCollapsed ? styles.collapsed : ''}`}>
             {/* Workspace Header */}
             <div className={styles.header}>
-                <div className={styles.logoBadge}>
-                    <Layers size={20} className={styles.logoIcon} />
+                <div className={styles.headerMain}>
+                    <div className={styles.logoBadge}>
+                        <Layers size={20} className={styles.logoIcon} />
+                    </div>
+                    {!isSidebarCollapsed && (
+                        <div className={styles.orgInfo}>
+                            <span className={styles.orgName}>Paul & Sons</span>
+                            <span className={styles.orgRole}>Admin Portal</span>
+                        </div>
+                    )}
                 </div>
-                <div className={styles.orgInfo}>
-                    <span className={styles.orgName}>Paul & Sons</span>
-                    <span className={styles.orgRole}>Admin Portal</span>
-                </div>
+                <button 
+                    className={styles.toggleBtn} 
+                    onClick={toggleSidebar}
+                    title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                >
+                    <Menu size={20} />
+                </button>
             </div>
 
             {/* Navigation */}
             <nav className={styles.nav}>
                 {menuSections.map((section) => (
                     <div key={section.section} className={styles.menuSection}>
-                        <div className={styles.sectionHeader}>{section.section}</div>
+                        {!isSidebarCollapsed && <div className={styles.sectionHeader}>{section.section}</div>}
                         {section.items.map((item) => {
                             const Icon = item.icon;
                             const isExpanded = expandedItems.includes(item.label);
@@ -174,16 +193,19 @@ export default function Sidebar() {
                                         <button
                                             onClick={() => toggleExpand(item.label)}
                                             className={`${styles.menuItem} ${isParentActive ? styles.activeParent : ''}`}
+                                            title={isSidebarCollapsed ? item.label : ''}
                                         >
                                             <div className={styles.menuItemContent}>
                                                 <Icon size={20} className={styles.menuIcon} />
-                                                <span className={styles.menuLabel}>{item.label}</span>
+                                                {!isSidebarCollapsed && <span className={styles.menuLabel}>{item.label}</span>}
                                             </div>
-                                            <div className={styles.expandIcon}>
-                                                {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                            </div>
+                                            {!isSidebarCollapsed && (
+                                                <div className={styles.expandIcon}>
+                                                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                                </div>
+                                            )}
                                         </button>
-                                        {isExpanded && (
+                                        {!isSidebarCollapsed && isExpanded && (
                                             <div className={styles.submenu}>
                                                 <div className={styles.submenuLine}></div>
                                                 <div className={styles.submenuItems}>
@@ -208,10 +230,11 @@ export default function Sidebar() {
                                     key={item.href}
                                     href={item.href}
                                     className={`${styles.menuItem} ${isActive(item.href) ? styles.active : ''}`}
+                                    title={isSidebarCollapsed ? item.label : ''}
                                 >
                                     <div className={styles.menuItemContent}>
                                         <Icon size={20} className={styles.menuIcon} />
-                                        <span className={styles.menuLabel}>{item.label}</span>
+                                        {!isSidebarCollapsed && <span className={styles.menuLabel}>{item.label}</span>}
                                     </div>
                                 </Link>
                             );
@@ -222,9 +245,9 @@ export default function Sidebar() {
 
             {/* Footer / Logout */}
             <div className={styles.footer}>
-                <button onClick={logout} className={styles.logoutBtn}>
+                <button onClick={logout} className={styles.logoutBtn} title={isSidebarCollapsed ? "Logout" : ""}>
                     <LogOut size={20} />
-                    <span>Logout</span>
+                    {!isSidebarCollapsed && <span>Logout</span>}
                 </button>
             </div>
         </aside>

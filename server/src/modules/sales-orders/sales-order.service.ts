@@ -200,7 +200,8 @@ export class SalesOrderService {
             p_factory_id: factoryId,
             p_state: sourceState,
             p_quantity_change: -quantity,
-            p_cap_id: null // Assuming reservaStock from source state doesn't target specific cap_id here or handles it via default null
+            p_cap_id: null,
+            p_unit_type: unitType
         });
 
         if (deductError) {
@@ -214,7 +215,8 @@ export class SalesOrderService {
             p_factory_id: factoryId,
             p_state: 'reserved',
             p_quantity_change: quantity,
-            p_cap_id: null
+            p_cap_id: null,
+            p_unit_type: unitType
         });
 
         if (reserveError) {
@@ -225,7 +227,8 @@ export class SalesOrderService {
                 p_factory_id: factoryId,
                 p_state: sourceState,
                 p_quantity_change: quantity,
-                p_cap_id: null
+                p_cap_id: null,
+                p_unit_type: unitType
             });
             throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
         }
@@ -414,7 +417,7 @@ export class SalesOrderService {
             .from('sales_orders')
             .select(`
                 *,
-                customers(name, phone, type),
+                customer:customers(name, phone, type),
                 sales_order_items!inner(
                     id,
                     product_id,
@@ -458,13 +461,14 @@ export class SalesOrderService {
             .from('sales_orders')
             .select(`
                 *,
-                customers(name, phone, type),
+                customer:customers(name, phone, type),
                 sales_order_items(
                     id,
                     product_id,
                     quantity,
                     unit_type,
                     is_backordered,
+                    is_prepared,
                     products(name, size, color, selling_price, factory_id)
                 )
             `)
@@ -480,6 +484,143 @@ export class SalesOrderService {
             return null;
         }
         return data;
+    }
+
+    async updateOrder(id: string, data: CreateSalesOrderDTO) {
+        // 1. Fetch current order with its items
+        const order = await this.getOrderById(id);
+        if (!order) {
+            logger.warn('Attempted to update non-existent order', { orderId: id });
+            throw new Error('Order not found');
+        }
+
+        // Only allow editing for pending/reserved orders
+        if (order.status !== 'pending' && order.status !== 'reserved') {
+            logger.warn('Attempted to edit order in restricted status', { orderId: id, status: order.status });
+            throw new Error(`Cannot edit order in ${order.status} status`);
+        }
+
+        // 2. Rollback current inventory requirements
+        // A. Unreserve stock for current items
+        for (const item of order.sales_order_items) {
+            const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
+            
+            // If it's NOT backordered, it means it's fully reserved.
+            // If it IS backordered, it might be partially reserved if is_prepared is false but availableStock was > 0.
+            // However, the current system doesn't track partial reservation quantity in sales_order_items.
+            // For now, we follow the existing pattern: unreserve full quantity for non-backordered.
+            if (!item.is_backordered) {
+                await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
+            } else if (item.is_prepared) {
+                // If it was backordered but now prepared, it is effectively reserved.
+                await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
+            }
+        }
+
+        // B. Cancel/Delete pending production requests related to this order
+        // This ensures the mobile app feed is cleared of stale requests.
+        const { error: cancelReqError } = await supabase
+            .from('production_requests')
+            .delete()
+            .eq('sales_order_id', id)
+            .in('status', ['pending', 'in_production', 'ready']); // Cancel any that aren't 'completed'
+        
+        if (cancelReqError) {
+            logger.error('Failed to clear stale production requests during order update', { error: cancelReqError.message, orderId: id });
+            // Continue as this is not a fatal error for the order itself
+        }
+
+        // 3. Update Order core metadata
+        const { error: updateOrderError } = await supabase
+            .from('sales_orders')
+            .update({
+                customer_id: data.customer_id,
+                delivery_date: data.delivery_date,
+                notes: data.notes,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (updateOrderError) {
+            logger.error('Failed to update sales order metadata', { error: updateOrderError.message, orderId: id });
+            throw new Error(updateOrderError.message);
+        }
+
+        // 4. Reset Items: Delete existing items and re-insert new ones
+        const { error: deleteItemsError } = await supabase
+            .from('sales_order_items')
+            .delete()
+            .eq('order_id', id);
+
+        if (deleteItemsError) {
+            logger.error('Failed to delete old sales order items during update', { error: deleteItemsError.message, orderId: id });
+            throw new Error(`Failed to reset order items: ${deleteItemsError.message}`);
+        }
+
+        // 5. Re-apply Reservation and Production Request Logic for NEW items
+        for (const item of data.items) {
+            const unit_type = item.unit_type || 'bundle';
+
+            // Fetch current product info
+            const { data: product } = await supabase
+                .from('products')
+                .select('selling_price, factory_id')
+                .eq('id', item.product_id)
+                .single();
+
+            const factoryId = product?.factory_id || MAIN_FACTORY_ID;
+            const availableStock = await this.getAvailableStock(item.product_id, unit_type, factoryId);
+            const isBackordered = availableStock < item.quantity;
+
+            // Insert new item
+            const { error: itemError } = await supabase
+                .from('sales_order_items')
+                .insert({
+                    order_id: id,
+                    product_id: item.product_id,
+                    quantity: item.quantity,
+                    unit_type: unit_type,
+                    unit_price: product?.selling_price || 0,
+                    is_backordered: isBackordered
+                });
+
+            if (itemError) {
+                logger.error('Failed to insert new item during order update', { error: itemError.message, orderId: id, item });
+                throw new Error(`Failed to update order item: ${itemError.message}`);
+            }
+
+            // Handle stock reservation or production request
+            if (!isBackordered) {
+                await this.reserveStock(item.product_id, item.quantity, unit_type, factoryId);
+            } else {
+                const needed = item.quantity - availableStock;
+                await this.createProductionRequest(item.product_id, factoryId, needed, unit_type, id);
+                
+                if (availableStock > 0) {
+                    await this.reserveStock(item.product_id, availableStock, unit_type, factoryId);
+                }
+            }
+        }
+
+        // 6. Audit Logging
+        try {
+            await auditService.logAction(
+                data.user_id,
+                'update_sales_order',
+                'sales_orders',
+                id,
+                {
+                    old_order_items: order.sales_order_items.map((i: any) => ({ product_id: i.product_id, quantity: i.quantity })),
+                    new_order_items: data.items,
+                    customer_id: data.customer_id
+                }
+            );
+        } catch (auditError: any) {
+            logger.error('Failed to log audit action for sales order update', { error: auditError.message, orderId: id });
+        }
+
+        logger.info('Sales order updated successfully', { orderId: id, userId: data.user_id });
+        return this.getOrderById(id);
     }
 
     async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled' | 'pending', userId: string) {
@@ -990,7 +1131,7 @@ export class SalesOrderService {
             .from('sales_orders')
             .select(`
                 *,
-                customers(name, phone, email),
+                customer:customers(name, phone, email),
                 sales_order_items(*, products(name)),
                 payments(*)
             `)

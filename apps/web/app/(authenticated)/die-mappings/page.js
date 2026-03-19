@@ -381,13 +381,14 @@ export default function DieMappingsPage() {
                                         <label className={styles.formLabel}>Ideal Cycle Time (seconds) *</label>
                                         <input
                                             type="number"
+                                            step="any"
                                             className={styles.formInput}
                                             value={formData.ideal_cycle_time_seconds}
                                             onChange={(e) =>
                                                 setFormData({ ...formData, ideal_cycle_time_seconds: e.target.value })
                                             }
                                             required
-                                            min="1"
+                                            min="0.1"
                                             placeholder="Time to produce one unit"
                                         />
                                     </div>

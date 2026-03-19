@@ -25,7 +25,7 @@ export class MachineService {
     async getAllMachines(factoryId?: string) {
         let query = supabase
             .from('machines')
-            .select('*, factories(name, code)')
+            .select('*, factories(name, code), machine_products(product_template_id, ideal_cycle_time_seconds)')
             .order('created_at', { ascending: true });
 
         // Filter by factory if provided

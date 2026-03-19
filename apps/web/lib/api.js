@@ -231,6 +231,7 @@ export const ordersAPI = {
     getAll: (params) => fetchAPI(`/orders${params ? '?' + new URLSearchParams(params) : ''}`),
     getById: (id) => fetchAPI(`/orders/${id}`),
     create: (data) => fetchAPI('/orders', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/orders/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deliver: (id) => fetchAPI(`/orders/${id}/deliver`, { method: 'PUT' }),
     cancel: (id) => fetchAPI(`/orders/${id}/cancel`, { method: 'PUT' }),
     processDelivery: (id, data) => fetchAPI(`/orders/${id}/process-delivery`, { method: 'POST', body: JSON.stringify(data) }),
@@ -342,6 +343,7 @@ export const capsAPI = {
     createTemplate: (data) => fetchAPI('/caps/templates', { method: 'POST', body: JSON.stringify(data) }),
     updateTemplate: (id, data) => fetchAPI(`/caps/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteTemplate: (id) => fetchAPI(`/caps/templates/${id}`, { method: 'DELETE' }),
+    getBalances: (params) => fetchAPI(`/caps/balances${params ? '?' + new URLSearchParams(params) : ''}`),
 };
 
 // ============ CASH FLOW ============

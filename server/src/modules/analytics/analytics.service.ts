@@ -12,7 +12,8 @@ export class AnalyticsService {
         flagged_only?: boolean;
         factory_id?: string;
     }) {
-        let query = supabase
+        // Fetch standard production logs
+        let prodQuery = supabase
             .from('production_logs')
             .select(`
                 id,
@@ -26,23 +27,98 @@ export class AnalyticsService {
                 flagged_for_review,
                 machines!inner(name, category, factory_id),
                 products(name, size, color)
-            `)
-            .order('units_lost_to_cycle', { ascending: false });
+            `);
 
-        if (filters?.start_date) query = query.gte('date', filters.start_date);
-        if (filters?.end_date) query = query.lte('date', filters.end_date);
-        if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
-        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
-        if (filters?.flagged_only) query = query.eq('flagged_for_review', true);
+        if (filters?.start_date) prodQuery = prodQuery.gte('date', filters.start_date);
+        if (filters?.end_date) prodQuery = prodQuery.lte('date', filters.end_date);
+        if (filters?.machine_id) prodQuery = prodQuery.eq('machine_id', filters.machine_id);
+        if (filters?.factory_id) prodQuery = prodQuery.eq('machines.factory_id', filters.factory_id);
+        if (filters?.flagged_only) prodQuery = prodQuery.eq('flagged_for_review', true);
 
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
+        // Fetch cap production logs
+        let capQuery = supabase
+            .from('cap_production_logs')
+            .select(`
+                id,
+                date,
+                shift_number,
+                start_time,
+                end_time,
+                actual_quantity:calculated_quantity,
+                actual_cycle_time_seconds,
+                factory_id,
+                caps!inner(name, color, ideal_cycle_time_seconds, machine_id)
+            `);
+
+        if (filters?.start_date) capQuery = capQuery.gte('date', filters.start_date);
+        if (filters?.end_date) capQuery = capQuery.lte('date', filters.end_date);
+        if (filters?.factory_id) capQuery = capQuery.eq('factory_id', filters.factory_id);
+        if (filters?.machine_id) capQuery = capQuery.eq('caps.machine_id', filters.machine_id);
+
+        const [prodResult, capResult] = await Promise.all([prodQuery, capQuery]);
+        
+        if (prodResult.error) throw new Error(prodResult.error.message);
+        if (capResult.error) throw new Error(capResult.error.message);
+
+        const prodLogs = prodResult.data || [];
+        const capLogs = (capResult.data || []).map((log: any) => {
+            // Calculate production time in minutes from start/end times
+            let productionTimeMinutes = 0;
+            if (log.start_time && log.end_time) {
+                const [startH, startM] = log.start_time.split(':').map(Number);
+                const [endH, endM] = log.end_time.split(':').map(Number);
+                
+                let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                if (diffMinutes < 0) diffMinutes += 24 * 60; // Handle midnight cross
+                
+                productionTimeMinutes = diffMinutes;
+            } else {
+                productionTimeMinutes = 12 * 60; // Fallback
+            }
+            
+            // downtime_minutes not in cap logs
+            productionTimeMinutes = productionTimeMinutes - 0;
+            
+            const cap = log.caps;
+            const idealCycleTime = cap?.ideal_cycle_time_seconds || 0;
+            const cavities = 1;
+            
+            let theoreticalQuantity = 0;
+            if (idealCycleTime > 0) {
+                theoreticalQuantity = Math.floor((productionTimeMinutes * 60) / (idealCycleTime / cavities));
+            }
+            
+            const unitsLost = Math.max(0, theoreticalQuantity - log.actual_quantity);
+            const flagged = idealCycleTime > 0 && log.actual_cycle_time_seconds > (idealCycleTime * 1.05);
+
+            return {
+                id: log.id,
+                date: log.date,
+                shift_number: log.shift_number,
+                start_time: log.start_time,
+                end_time: log.end_time,
+                actual_quantity: log.actual_quantity || 0,
+                actual_cycle_time_seconds: log.actual_cycle_time_seconds,
+                units_lost_to_cycle: unitsLost,
+                flagged_for_review: flagged,
+                machines: null,
+                products: {
+                    name: cap?.name,
+                    size: 'Cap',
+                    color: cap?.color
+                }
+            };
+        });
+
+        const allLogs = [...prodLogs, ...capLogs]
+            .filter(log => !filters?.flagged_only || log.flagged_for_review)
+            .sort((a, b) => (b.units_lost_to_cycle || 0) - (a.units_lost_to_cycle || 0));
 
         return {
-            total_sessions: data?.length || 0,
-            total_units_lost: data?.reduce((sum, log) => sum + (log.units_lost_to_cycle || 0), 0) || 0,
-            flagged_sessions: data?.filter(log => log.flagged_for_review).length || 0,
-            sessions: data,
+            total_sessions: allLogs.length,
+            total_units_lost: allLogs.reduce((sum, log) => sum + (log.units_lost_to_cycle || 0), 0),
+            flagged_sessions: allLogs.filter(log => log.flagged_for_review).length,
+            sessions: allLogs,
         };
     }
 
@@ -56,7 +132,7 @@ export class AnalyticsService {
         product_id?: string;
         factory_id?: string;
     }) {
-        let query = supabase
+        let prodQuery = supabase
             .from('production_logs')
             .select(`
                 id,
@@ -70,17 +146,53 @@ export class AnalyticsService {
             `)
             .order('weight_wastage_kg', { ascending: false });
 
-        if (filters?.start_date) query = query.gte('date', filters.start_date);
-        if (filters?.end_date) query = query.lte('date', filters.end_date);
-        if (filters?.product_id) query = query.eq('product_id', filters.product_id);
-        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
+        if (filters?.start_date) prodQuery = prodQuery.gte('date', filters.start_date);
+        if (filters?.end_date) prodQuery = prodQuery.lte('date', filters.end_date);
+        if (filters?.product_id) prodQuery = prodQuery.eq('product_id', filters.product_id);
+        if (filters?.factory_id) prodQuery = prodQuery.eq('machines.factory_id', filters.factory_id);
 
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
+        let capQuery = supabase
+            .from('cap_production_logs')
+            .select(`
+                id,
+                date,
+                shift_number,
+                actual_quantity:calculated_quantity,
+                factory_id,
+                caps:cap_id(name, color, ideal_weight_grams)
+            `);
+
+        if (filters?.start_date) capQuery = capQuery.gte('date', filters.start_date);
+        if (filters?.end_date) capQuery = capQuery.lte('date', filters.end_date);
+        if (filters?.factory_id) capQuery = capQuery.eq('factory_id', filters.factory_id);
+
+        const [prodResult, capResult] = await Promise.all([prodQuery, capQuery]);
+        if (prodResult.error) throw new Error(prodResult.error.message);
+        if (capResult.error) throw new Error(capResult.error.message);
+
+        const prodLogs = prodResult.data || [];
+        const capLogs = (capResult.data || []).map((log: any) => ({
+            id: log.id,
+            date: log.date,
+            shift_number: log.shift_number,
+            actual_quantity: log.actual_quantity,
+            actual_weight_grams: 0, // No weight tracking for caps yet
+            weight_wastage_kg: 0,
+            machines: log.machines,
+            products: {
+                name: log.caps?.name,
+                size: 'Cap',
+                color: log.caps?.color,
+                weight_grams: log.caps?.weight_grams
+            }
+        }));
+
+        const allLogs = [...prodLogs, ...capLogs]
+            .sort((a, b) => (b.weight_wastage_kg || 0) - (a.weight_wastage_kg || 0));
 
         return {
-            total_wastage_kg: data?.reduce((sum, log) => sum + (log.weight_wastage_kg || 0), 0) || 0,
-            sessions: data,
+            total_wastage_kg: allLogs.reduce((sum, log) => sum + (log.weight_wastage_kg || 0), 0),
+            sessions: allLogs,
         };
     }
 
@@ -94,27 +206,44 @@ export class AnalyticsService {
         machine_id?: string;
         factory_id?: string;
     }) {
-        let query = supabase
-            .from('production_logs')
-            .select(`
-                downtime_minutes,
-                downtime_reason,
-                date,
-                shift_number,
-                machines!inner(name, factory_id)
-            `)
-            .gt('downtime_minutes', 0);
+        const fetchFromTable = async (table: string) => {
+            const hasMachine = table === 'production_logs';
+            let query = supabase
+                .from(table)
+                .select(`
+                    downtime_minutes,
+                    downtime_reason,
+                    date,
+                    shift_number
+                    ${hasMachine ? ', machines!inner(name, factory_id)' : ', factory_id'}
+                `)
+                .gt('downtime_minutes', 0);
 
-        if (filters?.start_date) query = query.gte('date', filters.start_date);
-        if (filters?.end_date) query = query.lte('date', filters.end_date);
-        if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
-        if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
+            if (filters?.start_date) query = query.gte('date', filters.start_date);
+            if (filters?.end_date) query = query.lte('date', filters.end_date);
+            if (filters?.machine_id && hasMachine) query = query.eq('machine_id', filters.machine_id);
+            if (filters?.factory_id) {
+                if (hasMachine) {
+                    query = query.eq('machines.factory_id', filters.factory_id);
+                } else {
+                    query = query.eq('factory_id', filters.factory_id);
+                }
+            }
 
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
+            const { data, error } = await query;
+            if (error) throw new Error(error.message);
+            return data || [];
+        };
+
+        const [prodLogs] = await Promise.all([
+            fetchFromTable('production_logs')
+        ]);
+
+        const capLogs: any[] = []; // cap_production_logs doesn't have downtime columns yet
+        const allLogs = [...prodLogs, ...capLogs];
 
         // Group by reason
-        const breakdown = data?.reduce((acc: any, log: any) => {
+        const breakdown = allLogs.reduce((acc: any, log: any) => {
             const reason = log.downtime_reason || 'Unspecified';
             if (!acc[reason]) {
                 acc[reason] = {
@@ -129,9 +258,9 @@ export class AnalyticsService {
         }, {});
 
         return {
-            total_downtime_minutes: data?.reduce((sum, log) => sum + (log.downtime_minutes || 0), 0) || 0,
+            total_downtime_minutes: allLogs.reduce((sum, log) => sum + (log.downtime_minutes || 0), 0),
             breakdown: Object.values(breakdown || {}),
-            sessions: data,
+            sessions: allLogs,
         };
     }
 
@@ -145,10 +274,12 @@ export class AnalyticsService {
         machine_id?: string;
         factory_id?: string;
     }) {
-        let query = supabase
+        const prodQuery = supabase
             .from('production_logs')
             .select(`
                 date,
+                start_time,
+                end_time,
                 shift_number,
                 efficiency_percentage,
                 actual_quantity,
@@ -158,16 +289,83 @@ export class AnalyticsService {
             `)
             .order('date', { ascending: true });
 
-        if (filters?.start_date) query = query.gte('date', filters.start_date);
-        if (filters?.end_date) query = query.lte('date', filters.end_date);
-        if (filters?.machine_id) query = query.eq('machine_id', filters.machine_id);
-        if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
+        const capQuery = supabase
+            .from('cap_production_logs')
+            .select(`
+                id,
+                date,
+                start_time,
+                end_time,
+                shift_number,
+                actual_quantity:calculated_quantity,
+                actual_cycle_time_seconds,
+                factory_id,
+                caps!inner(ideal_cycle_time_seconds, machine_id, machines(name, category, factory_id))
+            `)
+            .order('date', { ascending: true });
 
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
+        if (filters?.start_date) {
+            prodQuery.gte('date', filters.start_date);
+            capQuery.gte('date', filters.start_date);
+        }
+        if (filters?.end_date) {
+            prodQuery.lte('date', filters.end_date);
+            capQuery.lte('date', filters.end_date);
+        }
+        if (filters?.machine_id) {
+            prodQuery.eq('machine_id', filters.machine_id);
+            capQuery.eq('caps.machine_id', filters.machine_id);
+        }
+        if (filters?.factory_id) {
+            prodQuery.eq('machines.factory_id', filters.factory_id);
+            capQuery.eq('caps.machines.factory_id', filters.factory_id);
+        }
+
+        const [prodResult, capResult] = await Promise.all([prodQuery, capQuery]);
+        if (prodResult.error) throw new Error(prodResult.error.message);
+        if (capResult.error) throw new Error(capResult.error.message);
+
+        const prodLogs = prodResult.data || [];
+        const capLogs = (capResult.data || []).map((log: any) => {
+            let productionTimeMinutes = 0;
+            if (log.start_time && log.end_time) {
+                const [startH, startM] = log.start_time.split(':').map(Number);
+                const [endH, endM] = log.end_time.split(':').map(Number);
+                let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                if (diffMinutes < 0) diffMinutes += 24 * 60;
+                productionTimeMinutes = diffMinutes;
+            } else {
+                productionTimeMinutes = 12 * 60;
+            }
+            const actualProductionTime = productionTimeMinutes - 0;
+            const idealCycleTime = log.caps?.ideal_cycle_time_seconds || 0;
+            const cavities = 1;
+
+            let theoreticalQuantity = 0;
+            let efficiency = 0;
+
+            if (idealCycleTime > 0) {
+                theoreticalQuantity = Math.floor((productionTimeMinutes * 60) / (idealCycleTime / cavities));
+                if (theoreticalQuantity > 0) {
+                    efficiency = Math.min(100, Number(((log.actual_quantity / theoreticalQuantity) * 100).toFixed(2)));
+                }
+            }
+
+            return {
+                date: log.date,
+                shift_number: log.shift_number,
+                efficiency_percentage: efficiency,
+                actual_quantity: log.actual_quantity,
+                theoretical_quantity: theoreticalQuantity,
+                machine_id: log.machine_id || log.caps?.machine_id,
+                machines: log.machines || log.caps?.machines
+            };
+        });
+
+        const allLogs = [...prodLogs, ...capLogs];
 
         // Group by machine
-        const byMachine = data?.reduce((acc: any, log: any) => {
+        const byMachine = allLogs.reduce((acc: any, log: any) => {
             const machineId = log.machine_id;
             if (!acc[machineId]) {
                 acc[machineId] = {
@@ -208,10 +406,12 @@ export class AnalyticsService {
         end_date?: string;
         factory_id?: string;
     }) {
-        let query = supabase
+        const prodQuery = supabase
             .from('production_logs')
             .select(`
                 shift_number,
+                start_time,
+                end_time,
                 efficiency_percentage,
                 actual_quantity,
                 units_lost_to_cycle,
@@ -220,15 +420,73 @@ export class AnalyticsService {
                 machines!inner(factory_id)
             `);
 
-        if (filters?.start_date) query = query.gte('date', filters.start_date);
-        if (filters?.end_date) query = query.lte('date', filters.end_date);
-        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
+        const capQuery = supabase
+            .from('cap_production_logs')
+            .select(`
+                id,
+                shift_number,
+                start_time,
+                end_time,
+                actual_quantity:calculated_quantity,
+                actual_cycle_time_seconds,
+                factory_id,
+                caps:cap_id(ideal_cycle_time_seconds)
+            `);
 
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
+        if (filters?.start_date) {
+            prodQuery.gte('date', filters.start_date);
+            capQuery.gte('date', filters.start_date);
+        }
+        if (filters?.end_date) {
+            prodQuery.lte('date', filters.end_date);
+            capQuery.lte('date', filters.end_date);
+        }
+        if (filters?.factory_id) {
+            prodQuery.eq('machines.factory_id', filters.factory_id);
+            capQuery.eq('factory_id', filters.factory_id);
+        }
 
-        const shift1 = data?.filter(log => log.shift_number === 1) || [];
-        const shift2 = data?.filter(log => log.shift_number === 2) || [];
+        const [prodResult, capResult] = await Promise.all([prodQuery, capQuery]);
+        if (prodResult.error) throw new Error(prodResult.error.message);
+        if (capResult.error) throw new Error(capResult.error.message);
+
+        const prodLogs = prodResult.data || [];
+        const capLogs = (capResult.data || []).map((log: any) => {
+            let productionTimeMinutes = 0;
+            if (log.start_time && log.end_time) {
+                const [startH, startM] = log.start_time.split(':').map(Number);
+                const [endH, endM] = log.end_time.split(':').map(Number);
+                let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                if (diffMinutes < 0) diffMinutes += 24 * 60;
+                productionTimeMinutes = diffMinutes;
+            } else {
+                productionTimeMinutes = 12 * 60;
+            }
+            const actualProductionTime = productionTimeMinutes - 0;
+            const idealCycleTime = log.caps?.ideal_cycle_time_seconds || 0;
+            const cavities = 1;
+
+            let theoreticalQuantity = 0;
+            let efficiency = 0;
+            if (idealCycleTime > 0) {
+                theoreticalQuantity = Math.floor((productionTimeMinutes * 60) / (idealCycleTime / cavities));
+                efficiency = theoreticalQuantity > 0 ? (log.actual_quantity / theoreticalQuantity) * 100 : 0;
+            }
+
+            return {
+                shift_number: log.shift_number,
+                efficiency_percentage: efficiency,
+                actual_quantity: log.actual_quantity || 0,
+                units_lost_to_cycle: Math.max(0, theoreticalQuantity - (log.actual_quantity || 0)),
+                downtime_minutes: 0,
+                weight_wastage_kg: 0,
+            };
+        });
+
+        const allLogs = [...prodLogs, ...capLogs];
+
+        const shift1 = allLogs.filter(log => log.shift_number === 1);
+        const shift2 = allLogs.filter(log => log.shift_number === 2);
 
         const calculateStats = (logs: any[]) => ({
             sessions: logs.length,
@@ -256,10 +514,12 @@ export class AnalyticsService {
         end_date?: string;
         factory_id?: string;
     }) {
-        let query = supabase
+        const prodQuery = supabase
             .from('production_logs')
             .select(`
                 actual_quantity,
+                start_time,
+                end_time,
                 units_lost_to_cycle,
                 weight_wastage_kg,
                 downtime_minutes,
@@ -267,20 +527,73 @@ export class AnalyticsService {
                 machines!inner(factory_id)
             `);
 
-        if (filters?.start_date) query = query.gte('date', filters.start_date);
-        if (filters?.end_date) query = query.lte('date', filters.end_date);
-        if (filters?.factory_id) query = query.eq('machines.factory_id', filters.factory_id);
+        const capQuery = supabase
+            .from('cap_production_logs')
+            .select(`
+                start_time,
+                end_time,
+                actual_quantity:calculated_quantity,
+                actual_cycle_time_seconds,
+                factory_id,
+                caps:cap_id(ideal_cycle_time_seconds)
+            `);
 
-        const { data, error } = await query;
-        if (error) throw new Error(error.message);
+        if (filters?.start_date) {
+            prodQuery.gte('date', filters.start_date);
+            capQuery.gte('date', filters.start_date);
+        }
+        if (filters?.end_date) {
+            prodQuery.lte('date', filters.end_date);
+            capQuery.lte('date', filters.end_date);
+        }
+        if (filters?.factory_id) {
+            prodQuery.eq('machines.factory_id', filters.factory_id);
+            capQuery.eq('factory_id', filters.factory_id);
+        }
+
+        const [prodResult, capResult] = await Promise.all([prodQuery, capQuery]);
+        if (prodResult.error) throw new Error(prodResult.error.message);
+        if (capResult.error) throw new Error(capResult.error.message);
+
+        const prodLogs = prodResult.data || [];
+        const capLogs = (capResult.data || []).map((log: any) => {
+            let productionTimeMinutes = 0;
+            if (log.start_time && log.end_time) {
+                const [startH, startM] = log.start_time.split(':').map(Number);
+                const [endH, endM] = log.end_time.split(':').map(Number);
+                let diffMinutes = (endH * 60 + endM) - (startH * 60 + startM);
+                if (diffMinutes < 0) diffMinutes += 24 * 60;
+                productionTimeMinutes = diffMinutes;
+            } else {
+                productionTimeMinutes = 12 * 60;
+            }
+            const actualProductionTime = productionTimeMinutes - 0;
+            const idealCycleTime = log.caps?.ideal_cycle_time_seconds || 0;
+            const cavities = 1;
+
+            let theoreticalQuantity = 0;
+            if (idealCycleTime > 0) {
+                theoreticalQuantity = Math.floor((productionTimeMinutes * 60) / (idealCycleTime / cavities));
+            }
+
+            return {
+                actual_quantity: log.actual_quantity || 0,
+                units_lost_to_cycle: Math.max(0, theoreticalQuantity - (log.actual_quantity || 0)),
+                weight_wastage_kg: 0,
+                downtime_minutes: 0,
+                flagged_for_review: idealCycleTime > 0 && log.actual_cycle_time_seconds > (idealCycleTime * 1.05)
+            };
+        });
+
+        const allLogs = [...prodLogs, ...capLogs];
 
         return {
-            total_sessions: data?.length || 0,
-            total_production: data?.reduce((sum, log) => sum + log.actual_quantity, 0) || 0,
-            total_units_lost_to_cycle: data?.reduce((sum, log) => sum + (log.units_lost_to_cycle || 0), 0) || 0,
-            total_weight_wastage_kg: data?.reduce((sum, log) => sum + (log.weight_wastage_kg || 0), 0) || 0,
-            total_downtime_minutes: data?.reduce((sum, log) => sum + (log.downtime_minutes || 0), 0) || 0,
-            flagged_sessions: data?.filter(log => log.flagged_for_review).length || 0,
+            total_sessions: allLogs.length,
+            total_production: allLogs.reduce((sum, log) => sum + log.actual_quantity, 0),
+            total_units_lost_to_cycle: allLogs.reduce((sum, log) => sum + (log.units_lost_to_cycle || 0), 0),
+            total_weight_wastage_kg: allLogs.reduce((sum, log) => sum + (log.weight_wastage_kg || 0), 0),
+            total_downtime_minutes: allLogs.reduce((sum, log) => sum + (log.downtime_minutes || 0), 0),
+            flagged_sessions: allLogs.filter(log => log.flagged_for_review).length,
         };
     }
 }

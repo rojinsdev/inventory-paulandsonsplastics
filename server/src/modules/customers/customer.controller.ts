@@ -5,15 +5,15 @@ import { AppError } from '../../utils/AppError';
 
 const createCustomerSchema = z.object({
     name: z.string().min(1),
-    phone: z.string().optional(),
+    phone: z.string().optional().transform(v => v === '' ? undefined : v),
     type: z.enum(['permanent', 'seasonal', 'other']).optional(),
     notes: z.string().optional(),
-    email: z.string().email().optional(),
+    email: z.string().email().optional().or(z.literal('')).transform(v => v === '' ? undefined : v),
     address: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
     pincode: z.string().optional(),
-    gstin: z.string().optional(),
+    gstin: z.string().optional().transform(v => v === '' ? undefined : v),
     credit_limit: z.number().optional(),
     payment_terms: z.enum(['immediate', 'net_15', 'net_30', 'net_60']).optional(),
     tags: z.array(z.string()).optional(),
