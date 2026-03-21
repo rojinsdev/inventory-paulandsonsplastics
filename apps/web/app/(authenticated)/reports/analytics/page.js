@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import MetricCard from '@/components/dashboard/MetricCard';
 import {
@@ -47,62 +47,48 @@ export default function AnalyticsPage() {
     const [machineEfficiency, setMachineEfficiency] = useState(null);
     const [shiftComparison, setShiftComparison] = useState(null);
 
-    useEffect(() => {
-        setPageTitle('Production Analytics');
-        fetchAllAnalytics();
-    }, [timePeriod, selectedFactory]);
-
-    const getDateRange = () => {
-        const now = new Date();
-        // Use local date string (YYYY-MM-DD) to avoid UTC offset issues
-        const getLocalDateString = (date) => {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-
-        const todayStr = getLocalDateString(now);
+    const getDateRange = useCallback(() => {
+        const today = new Date();
+        const start = new Date();
+        const end = new Date();
 
         switch (timePeriod) {
             case 'today':
-                return { start_date: todayStr, end_date: todayStr };
-            case '7': {
-                const weekAgo = new Date(now);
-                weekAgo.setDate(now.getDate() - 7);
-                return { start_date: getLocalDateString(weekAgo), end_date: todayStr };
-            }
-            case '30': {
-                const monthAgo = new Date(now);
-                monthAgo.setDate(now.getDate() - 30);
-                return { start_date: getLocalDateString(monthAgo), end_date: todayStr };
-            }
-            case 'month': {
-                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-                return { start_date: getLocalDateString(monthStart), end_date: todayStr };
-            }
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+                break;
+            case '7':
+                start.setDate(today.getDate() - 7);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+                break;
+            case '30':
+                start.setDate(today.getDate() - 30);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+                break;
+            case 'month':
+                start.setDate(1);
+                start.setHours(0, 0, 0, 0);
+                end.setHours(23, 59, 59, 999);
+                break;
             case 'custom':
-                if (customStartDate && customEndDate) {
-                    return { start_date: customStartDate, end_date: customEndDate };
-                }
-                return null;
+                if (!customStartDate || !customEndDate) return null;
+                return {
+                    start_date: customStartDate,
+                    end_date: customEndDate,
+                };
             default:
                 return null;
         }
-    };
 
-    const handleCustomDateApply = () => {
-        if (customStartDate && customEndDate) {
-            if (new Date(customStartDate) > new Date(customEndDate)) {
-                alert('Start date must be before end date');
-                return;
-            }
-            fetchAllAnalytics();
-            setShowCustomDateRange(false);
-        }
-    };
+        return {
+            start_date: start.toISOString().split('T')[0],
+            end_date: end.toISOString().split('T')[0],
+        };
+    }, [timePeriod, customStartDate, customEndDate]);
 
-    const fetchAllAnalytics = async () => {
+    const fetchAllAnalytics = useCallback(async () => {
         setLoading(true);
         try {
             const dateRange = getDateRange();
@@ -138,7 +124,17 @@ export default function AnalyticsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [getDateRange, selectedFactory]);
+
+    const handleCustomDateApply = useCallback(() => {
+        setShowCustomDateRange(false);
+        fetchAllAnalytics();
+    }, [fetchAllAnalytics]);
+
+    useEffect(() => {
+        setPageTitle('Production Analytics');
+        fetchAllAnalytics();
+    }, [timePeriod, selectedFactory, fetchAllAnalytics, setPageTitle]);
 
     if (loading) {
         return (

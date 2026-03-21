@@ -14,13 +14,8 @@ export function AuthProvider({ children }) {
     const [error, setError] = useState(null);
     const router = useRouter();
 
-    // Check session on mount
-    useEffect(() => {
-        checkSession();
-    }, []);
-
     const checkSession = useCallback(async () => {
-        const token = localStorage.getItem('auth_token');
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
 
         if (!token) {
             setLoading(false);
@@ -37,14 +32,20 @@ export function AuthProvider({ children }) {
             }
         } catch (err) {
             console.error('Session check failed:', err);
-            // fetchAPI will handle redirects if refresh fails
-            if (err.message.includes('401') || err.message.includes('session expired')) {
+            if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('session expired'))) {
                 setUser(null);
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('refresh_token');
             }
         } finally {
             setLoading(false);
         }
     }, []);
+
+    // Check session on mount
+    useEffect(() => {
+        checkSession();
+    }, [checkSession]);
 
     const login = async (email, password) => {
         setError(null);

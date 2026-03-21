@@ -45,3 +45,20 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Large Dumps
+database/migrations/master_production_schema.sql
+apps/mobile/full_analyze_output.txt
+apps/mobile/final_analyze_output.txt
+
+# Temp files
+tmp/
+
+# Logs / dumps
+*.log
+
+# Node
+node_modules/
+
+# Env
+.env
