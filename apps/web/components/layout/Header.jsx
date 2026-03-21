@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth';
 
 import { useSettings } from '@/contexts/SettingsContext';
@@ -148,9 +149,11 @@ export default function Header({ title }) {
                         onClick={() => setShowSettings(true)}
                         aria-label="Open settings"
                     >
-                        <img
+                        <Image
                             src="/assets/avatar.png"
                             alt="User Avatar"
+                            width={32}
+                            height={32}
                             className={styles.avatarImg}
                         />
                     </button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { useAuth } from '@/lib/auth';
 import { Loader2, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import styles from './page.module.css';
@@ -45,11 +46,13 @@ export default function LoginPage() {
             <div className={styles.formSection}>
                 <div className={styles.formContainer}>
                     <div className={styles.welcomeHeader}>
-                        <img
+                        <Image
                             src="/assets/logo.png"
                             alt="Logo"
+                            width={240}
+                            height={60}
+                            priority
                             style={{
-                                width: '240px',
                                 height: 'auto',
                                 marginBottom: '2rem',
                                 display: 'inline-block'

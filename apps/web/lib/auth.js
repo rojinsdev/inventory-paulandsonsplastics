@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
         checkSession();
     }, [checkSession]);
 
-    const login = async (email, password) => {
+    const login = useCallback(async (email, password) => {
         setError(null);
         setLoading(true);
 
@@ -85,9 +85,9 @@ export function AuthProvider({ children }) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [router]);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         try {
             const token = localStorage.getItem('auth_token');
             if (token) {
@@ -106,7 +106,7 @@ export function AuthProvider({ children }) {
             setUser(null);
             router.push('/login');
         }
-    };
+    }, [router]);
 
     const value = useMemo(() => ({
         user,

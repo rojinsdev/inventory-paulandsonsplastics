@@ -15,9 +15,10 @@ import {
     TrendingUp,
     TrendingDown,
     HardHat,
+    Layers,
 } from 'lucide-react';
 import { useFactory } from '@/contexts/FactoryContext';
-import { inventoryAPI, productsAPI, capsAPI } from '@/lib/api';
+import { inventoryAPI, productsAPI, capsAPI, innersAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import InternalStockTable from '@/components/inventory/InternalStockTable';
 import CapStockTable from '@/components/inventory/CapStockTable';
@@ -103,7 +104,7 @@ export default function StockOverviewPage() {
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
             
             // Fetch everything in parallel
-            const [stockRes, productsRes, capsRes] = await Promise.all([
+            const [stockRes, productsRes, capsRes, innersRes] = await Promise.all([
                 inventoryAPI.getStock(params),
                 productsAPI.getAll(params),
                 capsAPI.getBalances(params),

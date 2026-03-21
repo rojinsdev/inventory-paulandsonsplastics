@@ -7,7 +7,7 @@ import {
     Loader2, Plus, Search, Filter, Trash2, Edit2,
     Check, X, HardHat, Package, Factory,
     Clock, Weight, Info, Settings,
-    TrendingUp, ArrowUpRight, AlertTriangle
+    TrendingUp, ArrowUpRight, AlertTriangle, Layers
 } from 'lucide-react';
 import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI, machinesAPI, innersAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';

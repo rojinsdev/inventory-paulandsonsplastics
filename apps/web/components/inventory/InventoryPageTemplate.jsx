@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { useFactory } from '@/contexts/FactoryContext';
 import InventoryStateTable from './InventoryStateTable';
@@ -51,11 +51,7 @@ export default function InventoryPageTemplate({ title, type, description, guide 
         product_id: '',
     });
 
-    useEffect(() => {
-        loadData();
-    }, [selectedFactory]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
@@ -74,7 +70,11 @@ export default function InventoryPageTemplate({ title, type, description, guide 
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedFactory]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     // Filter data for the specific type
     const filteredByType = useMemo(() => {
