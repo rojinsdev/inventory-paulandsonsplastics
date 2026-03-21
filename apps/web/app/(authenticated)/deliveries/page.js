@@ -102,7 +102,7 @@ export default function DeliveriesPage() {
             product_id: item.product_id,
             quantity: item.quantity,
             unit_type: item.unit_type,
-            unit_price: getProductPrice(item.product_id)
+            unit_price: item.unit_price || getProductPrice(item.product_id)
         }));
         setDeliveryForm({
             items,

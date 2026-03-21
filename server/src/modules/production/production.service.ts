@@ -533,7 +533,7 @@ export class ProductionService {
             .select(`
                 *,
                 products (name, size, color, factory_id),
-                sales_orders!left(order_number)
+                sales_order:sales_orders!left(order_number:id)
             `)
             .order('created_at', { ascending: false });
 
@@ -556,7 +556,7 @@ export class ProductionService {
         const productIds = [...new Set(rawData.map(r => r.product_id))];
         const { data: stockData } = await supabase
             .from('stock_balances')
-            .select('product_id, quantity, state, factory_id')
+            .select('product_id, quantity, state, factory_id, unit_type')
             .in('product_id', productIds);
 
         const stateMapping: Record<string, string> = {
@@ -567,18 +567,34 @@ export class ProductionService {
 
         return rawData.map(req => {
             const requiredState = stateMapping[req.unit_type];
-            const matchingStock = stockData?.filter(s =>
-                s.product_id === req.product_id &&
+            const productStock = stockData?.filter(s => s.product_id === req.product_id) || [];
+            
+            // Current satisfying stock
+            const matchingStock = productStock.filter(s =>
                 s.state === requiredState &&
-                s.factory_id === req.factory_id
+                s.factory_id === req.factory_id &&
+                (s.unit_type === (req.unit_type === 'loose' ? '' : req.unit_type))
             );
             
-            const totalStock = matchingStock?.reduce((sum, s) => sum + Number(s.quantity), 0) || 0;
+            const availableStock = matchingStock.reduce((sum, s) => sum + Number(s.quantity), 0);
+
+            // Detailed Summary for UI context
+            const stockSummary = {
+                loose: productStock.filter(s => s.state === 'semi_finished').reduce((sum, s) => sum + Number(s.quantity), 0),
+                packed: productStock.filter(s => s.state === 'packed').reduce((sum, s) => sum + Number(s.quantity), 0),
+                finished: productStock.filter(s => s.state === 'finished').reduce((sum, s) => sum + Number(s.quantity), 0),
+                factory_specific: {
+                    loose: productStock.filter(s => s.state === 'semi_finished' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
+                    packed: productStock.filter(s => s.state === 'packed' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
+                    finished: productStock.filter(s => s.state === 'finished' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
+                }
+            };
 
             return {
                 ...req,
-                available_stock: totalStock,
-                is_satisfiable: totalStock >= req.quantity
+                available_stock: availableStock,
+                is_satisfiable: availableStock >= req.quantity,
+                stock_summary: stockSummary
             };
         });
     }

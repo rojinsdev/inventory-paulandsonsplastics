@@ -17,6 +17,7 @@ export interface CreateSalesOrderDTO {
         product_id: string;
         quantity: number;
         unit_type?: 'bundle' | 'packet' | 'loose'; // Default to bundle if not provided
+        unit_price?: number; // Optional: Custom rate for this customer
     }>;
     notes?: string;
     user_id: string; // Added: Track which admin created the order
@@ -70,7 +71,7 @@ export class SalesOrderService {
                     product_id: item.product_id,
                     quantity: item.quantity,
                     unit_type: unit_type,
-                    unit_price: product?.selling_price || 0,
+                    unit_price: item.unit_price ?? product?.selling_price ?? 0,
                     is_backordered: isBackordered
                 });
 
@@ -322,62 +323,57 @@ export class SalesOrderService {
         };
         const targetState = stateMapping[unitType] || 'finished';
 
-        // 1. Move stock back from reserved
-        const { data: reservedStock, error: fetchReservedError } = await supabase
+        // 1. Fetch ALL reserved stock records for this specific combination
+        const { data: balances, error: fetchError } = await supabase
             .from('stock_balances')
-            .select('quantity')
+            .select('quantity, cap_id')
             .eq('product_id', productId)
             .eq('state', 'reserved')
             .eq('factory_id', factoryId)
-            .eq('unit_type', unitType)
-            .single();
+            .eq('unit_type', unitType);
 
-        if (fetchReservedError && fetchReservedError.code !== 'PGRST116') {
-            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchReservedError.message, productId, factoryId, unitType });
-            throw new Error(`Failed to fetch reserved stock: ${fetchReservedError.message}`);
+        if (fetchError) {
+            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchError.message, productId, factoryId, unitType });
+            throw new Error(`Failed to fetch reserved stock: ${fetchError.message}`);
         }
 
-        const { error: unreserveError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'reserved',
-            factory_id: factoryId,
-            unit_type: unitType,
-            quantity: (reservedStock?.quantity || 0) - quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
-
-        if (unreserveError) {
-            logger.error('Failed to deduct from reserved stock during unreservation', { error: unreserveError.message, productId, quantity, factoryId, unitType });
-            throw new Error(`Failed to update reserved stock: ${unreserveError.message}`);
+        const totalReserved = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
+        if (totalReserved < quantity) {
+            logger.warn('Attempted to unreserve more than available in reserved state', { productId, quantity, totalReserved });
+            // We'll proceed with what we have, but log the warning
         }
 
-        // 2. Add back to original state
-        const { data: sourceStock, error: fetchSourceError } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', targetState)
-            .eq('factory_id', factoryId)
-            .eq('unit_type', unitType)
-            .single();
+        let remainingToUnreserve = Math.min(quantity, totalReserved);
+        const sortedBalances = [...(balances || [])].sort((a, b) => Number(b.quantity) - Number(a.quantity));
 
-        if (fetchSourceError && fetchSourceError.code !== 'PGRST116') {
-            logger.error('Failed to fetch source stock for unreservation', { error: fetchSourceError.message, productId, factoryId, targetState, unitType });
-            throw new Error(`Failed to fetch source stock: ${fetchSourceError.message}`);
-        }
+        for (const balance of sortedBalances) {
+            if (remainingToUnreserve <= 0) break;
 
-        const { error: addBackError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: targetState,
-            factory_id: factoryId,
-            unit_type: unitType,
-            quantity: (sourceStock?.quantity || 0) + quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
+            const moveAmount = Math.min(remainingToUnreserve, Number(balance.quantity));
 
-        if (addBackError) {
-            logger.error('Failed to add back to source stock during unreservation', { error: addBackError.message, productId, quantity, factoryId, targetState, unitType });
-            throw new Error(`Failed to update source stock: ${addBackError.message}`);
+            // Deduct from reserved
+            const { error: deductError } = await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factoryId,
+                p_state: 'reserved',
+                p_quantity_change: -moveAmount,
+                p_cap_id: balance.cap_id,
+                p_unit_type: unitType
+            });
+            if (deductError) throw new Error(`Failed to deduct reserved stock: ${deductError.message}`);
+
+            // Add back to target state
+            const { error: addBackError } = await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factoryId,
+                p_state: targetState,
+                p_quantity_change: moveAmount,
+                p_cap_id: balance.cap_id,
+                p_unit_type: unitType
+            });
+            if (addBackError) throw new Error(`Failed to add back to target stock: ${addBackError.message}`);
+
+            remainingToUnreserve -= moveAmount;
         }
 
         // 3. Log Audit Trail
@@ -391,38 +387,50 @@ export class SalesOrderService {
 
     private async deliverStock(productId: string, quantity: number, unitType: string, factoryId: string) {
         // Permanently remove from reserved (stock is sold)
-        const { data: reservedStock, error: fetchReservedError } = await supabase
+        // 1. Fetch ALL reserved stock records
+        const { data: balances, error: fetchError } = await supabase
             .from('stock_balances')
-            .select('quantity')
+            .select('quantity, cap_id')
             .eq('product_id', productId)
             .eq('state', 'reserved')
             .eq('factory_id', factoryId)
-            .eq('unit_type', unitType)
-            .single();
+            .eq('unit_type', unitType);
 
-        if (fetchReservedError && fetchReservedError.code !== 'PGRST116') {
-            logger.error('Failed to fetch reserved stock for delivery', { error: fetchReservedError.message, productId, factoryId, unitType });
-            throw new Error(`Failed to fetch reserved stock: ${fetchReservedError.message}`);
+        if (fetchError) {
+            logger.error('Failed to fetch reserved stock for delivery', { error: fetchError.message, productId, factoryId, unitType });
+            throw new Error(`Failed to fetch reserved stock: ${fetchError.message}`);
         }
 
-        const { error: deliverError } = await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'reserved',
-            factory_id: factoryId,
-            unit_type: unitType,
-            quantity: (reservedStock?.quantity || 0) - quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
+        const totalReserved = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
+        if (totalReserved < quantity) {
+            logger.warn('Attempted to deliver more than available in reserved state', { productId, quantity, totalReserved });
+        }
 
-        if (deliverError) {
-            logger.error('Failed to deduct from reserved stock during delivery', { error: deliverError.message, productId, quantity, factoryId, unitType });
-            throw new Error(`Failed to update reserved stock for delivery: ${deliverError.message}`);
+        let remainingToDeliver = Math.min(quantity, totalReserved);
+        const sortedBalances = [...(balances || [])].sort((a, b) => Number(b.quantity) - Number(a.quantity));
+
+        for (const balance of sortedBalances) {
+            if (remainingToDeliver <= 0) break;
+
+            const deliverAmount = Math.min(remainingToDeliver, Number(balance.quantity));
+
+            // Deduct from reserved atomically and permanently (since it's delivered)
+            const { error: deductError } = await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factoryId,
+                p_state: 'reserved',
+                p_quantity_change: -deliverAmount,
+                p_cap_id: balance.cap_id,
+                p_unit_type: unitType
+            });
+            if (deductError) throw new Error(`Failed to deduct reserved stock for delivery: ${deductError.message}`);
+
+            remainingToDeliver -= deliverAmount;
         }
 
         // Log Audit Trail
-        // Note: Defaulting to 'bundle' as delivery unit for now, ideally passed from caller
         try {
-            await inventoryService.logTransaction('delivery', productId, quantity, 'bundle', 'reserved', null, factoryId);
+            await inventoryService.logTransaction('delivery', productId, quantity, unitType, 'reserved', null, factoryId);
         } catch (auditError: any) {
             logger.error('Failed to log inventory transaction for stock delivery', { error: auditError.message, productId, quantity, factoryId });
         }
@@ -599,7 +607,7 @@ export class SalesOrderService {
                     product_id: item.product_id,
                     quantity: item.quantity,
                     unit_type: unit_type,
-                    unit_price: product?.selling_price || 0,
+                    unit_price: item.unit_price ?? product?.selling_price ?? 0,
                     is_backordered: isBackordered
                 });
 

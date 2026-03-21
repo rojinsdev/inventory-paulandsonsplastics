@@ -12,6 +12,7 @@ class ProductionRequest {
   final DateTime createdAt;
   final int availableStock;
   final bool isSatisfiable;
+  final StockSummary? stockSummary;
 
   ProductionRequest({
     required this.id,
@@ -27,11 +28,18 @@ class ProductionRequest {
     required this.createdAt,
     this.availableStock = 0,
     this.isSatisfiable = false,
+    this.stockSummary,
   });
 
   factory ProductionRequest.fromJson(Map<String, dynamic> json) {
     final product = json['products'] as Map<String, dynamic>?;
-    final salesOrder = json['sales_orders'] as Map<String, dynamic>?;
+    final salesOrder = json['sales_order'] as Map<String, dynamic>?;
+
+    String? formattedOrderNumber;
+    if (salesOrder != null && salesOrder['order_number'] != null) {
+      final id = salesOrder['order_number'].toString();
+      formattedOrderNumber = '#${id.split('-').last.toUpperCase().substring(0, 6)}';
+    }
 
     return ProductionRequest(
       id: json['id'],
@@ -43,10 +51,13 @@ class ProductionRequest {
       unitType: json['unit_type'] ?? 'bundle',
       status: json['status'] ?? 'pending',
       salesOrderId: json['sales_order_id'],
-      orderNumber: salesOrder?['order_number'],
+      orderNumber: formattedOrderNumber,
       createdAt: DateTime.parse(json['created_at']),
       availableStock: ((json['available_stock'] ?? 0) as num).toInt(),
       isSatisfiable: json['is_satisfiable'] ?? false,
+      stockSummary: json['stock_summary'] != null 
+          ? StockSummary.fromJson(json['stock_summary']) 
+          : null,
     );
   }
 
@@ -62,4 +73,47 @@ class ProductionRequest {
         'available_stock': availableStock,
         'is_satisfiable': isSatisfiable,
       };
+}
+
+class StockSummary {
+  final int loose;
+  final int packed;
+  final int finished;
+  final FactorySpecificStock factorySpecific;
+
+  StockSummary({
+    required this.loose,
+    required this.packed,
+    required this.finished,
+    required this.factorySpecific,
+  });
+
+  factory StockSummary.fromJson(Map<String, dynamic> json) {
+    return StockSummary(
+      loose: ((json['loose'] ?? 0) as num).toInt(),
+      packed: ((json['packed'] ?? 0) as num).toInt(),
+      finished: ((json['finished'] ?? 0) as num).toInt(),
+      factorySpecific: FactorySpecificStock.fromJson(json['factory_specific'] ?? {}),
+    );
+  }
+}
+
+class FactorySpecificStock {
+  final int loose;
+  final int packed;
+  final int finished;
+
+  FactorySpecificStock({
+    required this.loose,
+    required this.packed,
+    required this.finished,
+  });
+
+  factory FactorySpecificStock.fromJson(Map<String, dynamic> json) {
+    return FactorySpecificStock(
+      loose: ((json['loose'] ?? 0) as num).toInt(),
+      packed: ((json['packed'] ?? 0) as num).toInt(),
+      finished: ((json['finished'] ?? 0) as num).toInt(),
+    );
+  }
 }

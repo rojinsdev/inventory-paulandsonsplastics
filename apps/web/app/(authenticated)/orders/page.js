@@ -163,7 +163,8 @@ export default function OrdersPage() {
                 factory_id: factoryOptions[0]?.value || '',
                 product_id: '',
                 quantity: 1,
-                unit_type: 'bundle'
+                unit_type: 'bundle',
+                unit_price: ''
             }],
             notes: '',
             order_date: new Date().toISOString().split('T')[0],
@@ -184,7 +185,8 @@ export default function OrdersPage() {
                     factory_id: p?.factory_id || '',
                     product_id: item.product_id,
                     quantity: item.quantity,
-                    unit_type: item.unit_type || 'bundle'
+                    unit_type: item.unit_type || 'bundle',
+                    unit_price: item.unit_price || ''
                 };
             }),
             notes: order.notes || '',
@@ -200,7 +202,8 @@ export default function OrdersPage() {
                 factory_id: factories[0]?.id || '',
                 product_id: '',
                 quantity: 1,
-                unit_type: 'bundle'
+                unit_type: 'bundle',
+                unit_price: ''
             }],
         });
     };
@@ -237,6 +240,7 @@ export default function OrdersPage() {
                 product_id: item.product_id,
                 quantity: Number(item.quantity),
                 unit_type: item.unit_type,
+                unit_price: item.unit_price ? Number(item.unit_price) : undefined,
             })),
             notes: formData.notes,
         };
@@ -683,6 +687,19 @@ export default function OrdersPage() {
                                                                 searchable={false}
                                                             />
                                                         </div>
+                                                        
+                                                        {/* Rate (Optional) */}
+                                                        <div className={styles.formItem}>
+                                                            <input
+                                                                type="number"
+                                                                className={styles.inputModern}
+                                                                value={item.unit_price}
+                                                                onChange={(e) => handleItemChange(index, 'unit_price', e.target.value)}
+                                                                placeholder="Rate (Opt)"
+                                                                min="0"
+                                                                step="0.01"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
@@ -766,6 +783,7 @@ export default function OrdersPage() {
                                             <th className={styles.colFactory}>Factory</th>
                                             <th className={styles.colQuantity}>Quantity</th>
                                             <th className={styles.colUnit}>Unit</th>
+                                            <th className={styles.colRate}>Rate</th>
                                             <th className={styles.colStatus}>Preparation Status</th>
                                         </tr>
                                     </thead>
@@ -780,6 +798,7 @@ export default function OrdersPage() {
                                                     <td className={styles.colFactory}>{f?.name || 'Unknown'}</td>
                                                     <td className={styles.colQuantity}>{item.quantity}</td>
                                                     <td className={styles.colUnit}>{item.unit_type || 'bundle'}</td>
+                                                    <td className={styles.colRate}>₹{item.unit_price || '0'}</td>
                                                     <td className={styles.colStatus}>
                                                         <div className={styles.prepStatusWrapper}>
                                                             <div className={cn(styles.badge, item.is_prepared ? styles.badgeSuccess : styles.badgeWarning)}>

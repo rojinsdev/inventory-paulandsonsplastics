@@ -36,7 +36,8 @@ const app = express();
 app.use(helmet());
 
 // CORS Policy
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
+import { config } from './config/env';
+const allowedOrigins = config.allowedOrigins;
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps)
@@ -47,8 +48,7 @@ app.use(cors({
                          origin.includes('localhost') ||
                          origin.includes('127.0.0.1') ||
                          origin.endsWith('.vercel.app') || 
-                         process.env.NODE_ENV === 'development' ||
-                         !process.env.NODE_ENV; // Default to dev if not set
+                         config.nodeEnv === 'development';
 
         if (isAllowed) {
             callback(null, true);

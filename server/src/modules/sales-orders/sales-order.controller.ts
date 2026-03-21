@@ -12,6 +12,7 @@ const createOrderSchema = z.object({
         product_id: z.string().uuid(),
         quantity: z.number().int().positive(),
         unit_type: z.enum(['bundle', 'packet', 'loose']).optional(),
+        unit_price: z.number().positive().optional(),
     })).min(1),
     notes: z.string().optional(),
 });

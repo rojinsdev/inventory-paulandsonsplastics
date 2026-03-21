@@ -260,6 +260,51 @@ class _RequestRow extends ConsumerWidget {
               ],
             ),
           ),
+          if (request.stockSummary != null && !request.isSatisfiable && request.status != 'completed') ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade100),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.hub_outlined, size: 14, color: Colors.blue.shade900),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Stock Breakdown (Current Factory)',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: Colors.blue.shade900,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _StockDetailRow(
+                    label: 'Loose Items',
+                    value: request.stockSummary!.factorySpecific.loose,
+                    unit: 'LOOSE',
+                  ),
+                  _StockDetailRow(
+                    label: 'Packets',
+                    value: request.stockSummary!.factorySpecific.packed,
+                    unit: 'PACKET',
+                  ),
+                  _StockDetailRow(
+                    label: 'Finished Bundles',
+                    value: request.stockSummary!.factorySpecific.finished,
+                    unit: 'BUNDLE',
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (!request.isSatisfiable && request.status != 'completed') ...[
             const SizedBox(height: 12),
             Row(
@@ -534,6 +579,46 @@ class _GuideStep extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _StockDetailRow extends StatelessWidget {
+  final String label;
+  final int value;
+  final String unit;
+
+  const _StockDetailRow({
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            '$value $unit',
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: value > 0 ? colorScheme.primary : colorScheme.error,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

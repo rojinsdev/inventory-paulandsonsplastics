@@ -43,22 +43,25 @@ export class StockAllocationService {
 
         if (!fromState) throw new Error(`Invalid unit type for fulfillment: ${unitType}`);
 
-        // 2. Validate sufficient stock exists in the required state
-        const { data: stock } = await supabase
+        // 2. Validate sufficient stock exists in the required state (aggregate across all caps)
+        const { data: balances, error: stockError } = await supabase
             .from('stock_balances')
-            .select('quantity')
+            .select('quantity, cap_id')
             .eq('product_id', request.product_id)
             .eq('state', fromState)
             .eq('factory_id', request.factory_id)
-            .eq('unit_type', unitType)
-            .single();
+            .eq('unit_type', unitType);
 
-        if (!stock || stock.quantity < request.quantity) {
-            throw new AppError(`Insufficient ${unitType} stock (${fromState}). Have ${stock?.quantity || 0}, need ${request.quantity}.`, 400);
+        if (stockError) throw new Error(`Stock fetch error: ${stockError.message}`);
+
+        const totalAvailable = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
+
+        if (totalAvailable < request.quantity) {
+            throw new AppError(`Insufficient ${unitType} stock (${fromState}). Have ${totalAvailable}, need ${request.quantity}.`, 400);
         }
 
-        // 3. Move stock to reserved
-        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id, unitType);
+        // 3. Move stock to reserved (pass the fetched balances for sequential deduction)
+        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id, unitType, balances || []);
 
         // 4. Update Sales Order Item
         // Note: This updates all items for this product in this order. 
@@ -98,44 +101,56 @@ export class StockAllocationService {
         return updatedRequest;
     }
 
-    private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, unitType: string) {
-        // Deduct from source state
-        const { data: sourceStock } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', fromState)
-            .eq('factory_id', factoryId)
-            .eq('unit_type', unitType)
-            .single();
+    private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, unitType: string, preFetchedBalances: any[] = []) {
+        let balances = preFetchedBalances;
+        
+        if (balances.length === 0) {
+            const { data } = await supabase
+                .from('stock_balances')
+                .select('quantity, cap_id')
+                .eq('product_id', productId)
+                .eq('state', fromState)
+                .eq('factory_id', factoryId)
+                .eq('unit_type', unitType);
+            balances = data || [];
+        }
 
-        await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: fromState,
-            factory_id: factoryId,
-            unit_type: unitType,
-            quantity: (sourceStock?.quantity || 0) - quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
+        let remainingToDeduct = quantity;
+        const sortedBalances = [...balances].sort((a, b) => Number(b.quantity) - Number(a.quantity));
 
-        // Add to reserved
-        const { data: reservedStock } = await supabase
-            .from('stock_balances')
-            .select('quantity')
-            .eq('product_id', productId)
-            .eq('state', 'reserved')
-            .eq('factory_id', factoryId)
-            .eq('unit_type', unitType)
-            .single();
+        for (const balance of sortedBalances) {
+            if (remainingToDeduct <= 0) break;
 
-        await supabase.from('stock_balances').upsert({
-            product_id: productId,
-            state: 'reserved',
-            factory_id: factoryId,
-            unit_type: unitType,
-            quantity: (reservedStock?.quantity || 0) + quantity,
-            last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
+            const deductAmount = Math.min(remainingToDeduct, Number(balance.quantity));
+
+            // Deduct from source state
+            const { error: deductError } = await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factoryId,
+                p_state: fromState,
+                p_quantity_change: -deductAmount,
+                p_cap_id: balance.cap_id,
+                p_unit_type: unitType
+            });
+            if (deductError) throw new Error(`Failed to deduct stock: ${deductError.message}`);
+
+            // Add to reserved state
+            const { error: reserveError } = await supabase.rpc('adjust_stock', {
+                p_product_id: productId,
+                p_factory_id: factoryId,
+                p_state: 'reserved',
+                p_quantity_change: deductAmount,
+                p_cap_id: balance.cap_id,
+                p_unit_type: unitType
+            });
+            if (reserveError) throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
+
+            remainingToDeduct -= deductAmount;
+        }
+
+        if (remainingToDeduct > 0) {
+            throw new Error(`Insufficient stock found during sequential deduction. Missing ${remainingToDeduct} units.`);
+        }
     }
 
     private async updateProductionRequest(orderId: string, productId: string, quantitySatisfied: number) {

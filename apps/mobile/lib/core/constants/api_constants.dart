@@ -1,8 +1,8 @@
 class ApiConstants {
   // Use 10.0.2.2 for Android Emulator to access localhost of the host machine
   // Use local IP (e.g., 192.168.x.x) for physical device
-  // Currently using Ethernet 5 (likely USB Tethering): http://10.211.125.158:4000/api
-  static const String baseUrl = 'http://10.211.125.158:4000/api';
+  // Currently using Ethernet 5 (likely USB Tethering): http://10.211.125.181:4000/api
+  static const String baseUrl = 'http://10.211.125.181:4000/api';
 
   static const String loginEndpoint = '/auth/login';
   static const String meEndpoint = '/auth/me';

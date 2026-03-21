@@ -382,7 +382,7 @@
 
 /* Involved Factory Preparation Table */
 .colProduct {
-    width: 40%;
+    width: 30%;
 }
 
 .colFactory {
@@ -395,6 +395,11 @@
 }
 
 .colUnit {
+    width: 10%;
+    text-align: center !important;
+}
+
+.colRate {
     width: 10%;
     text-align: center !important;
 }
@@ -1290,7 +1295,7 @@
 .productSelectGrid {
     padding: 20px;
     display: grid;
-    grid-template-columns: 200px 1fr 120px 140px;
+    grid-template-columns: 180px 1fr 100px 120px 120px;
     gap: 16px;
     align-items: start;
 }
