@@ -35,15 +35,21 @@ const app = express();
 app.use(helmet());
 
 // CORS Policy
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'];
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
 app.use(cors({
     origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+        // Allow localhost in dev, and specific allowed origins or Vercel previews in prod
+        const isAllowed = allowedOrigins.includes(origin) || 
+                         origin.endsWith('.vercel.app') || 
+                         process.env.NODE_ENV === 'development';
+
+        if (isAllowed) {
             callback(null, true);
         } else {
+            logger.warn(`Blocked by CORS: ${origin}`);
             callback(null, false);
         }
     },

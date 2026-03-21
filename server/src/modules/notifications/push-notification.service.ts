@@ -23,21 +23,26 @@ export class PushNotificationService {
 
         try {
             const serviceAccountPath = config.firebase.serviceAccountPath;
-            if (!serviceAccountPath) {
-                logger.warn('Firebase service account path not configured. Push notifications will be disabled.');
+            let serviceAccount;
+            const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+            if (serviceAccountJson) {
+                logger.info('Initializing Firebase from environment variable');
+                serviceAccount = JSON.parse(serviceAccountJson);
+            } else if (serviceAccountPath) {
+                const absolutePath = path.isAbsolute(serviceAccountPath)
+                    ? serviceAccountPath
+                    : path.join(process.cwd(), serviceAccountPath);
+
+                if (!fs.existsSync(absolutePath)) {
+                    logger.error(`Firebase service account file not found at ${absolutePath}`);
+                    return;
+                }
+                serviceAccount = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
+            } else {
+                logger.warn('Firebase configuration missing. Push notifications disabled.');
                 return;
             }
-
-            const absolutePath = path.isAbsolute(serviceAccountPath)
-                ? serviceAccountPath
-                : path.join(process.cwd(), serviceAccountPath);
-
-            if (!fs.existsSync(absolutePath)) {
-                logger.error(`Firebase service account file not found at ${absolutePath}`);
-                return;
-            }
-
-            const serviceAccount = JSON.parse(fs.readFileSync(absolutePath, 'utf8'));
 
             admin.initializeApp({
                 credential: admin.credential.cert(serviceAccount),
