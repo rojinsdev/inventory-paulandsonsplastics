@@ -52,6 +52,21 @@ export interface SubmitCapProductionDTO {
     user_id: string;
 }
 
+export interface SubmitInnerProductionDTO {
+    inner_id: string;
+    factory_id?: string;
+    date: string;
+    shift_number: number;
+    start_time: string;
+    end_time: string;
+    total_weight_produced_kg?: number;
+    total_produced?: number;
+    actual_weight_grams?: number;
+    actual_cycle_time_seconds?: number;
+    remarks?: string;
+    user_id: string;
+}
+
 export class ProductionService {
     /**
      * Submit Production - NEW SESSION-BASED LOGIC
@@ -412,7 +427,7 @@ export class ProductionService {
         // Find matching cap variant (matching color and template)
         const { data: cap, error } = await supabase
             .from('caps')
-            .select('id, name')
+            .select('id, name, inner_id')
             .eq('template_id', capTemplateId)
             .eq('color', color)
             .eq('factory_id', factoryId)
@@ -439,6 +454,43 @@ export class ProductionService {
             userId,
             true // isDeduction
         );
+
+        // NEW: Handle Inner Consumption if mapped
+        if (cap.inner_id) {
+            await this.handleInnerConsumption(cap.inner_id, quantity, factoryId, referenceId, userId);
+        }
+    }
+
+    private async handleInnerConsumption(innerId: string, quantity: number, factoryId: string, referenceId: string, userId: string) {
+        // Deduct inner stock
+        await this.updateInnerStock(innerId, -quantity, factoryId);
+
+        // Log transaction
+        await inventoryService.logTransaction(
+            'inner_consumption',
+            innerId,
+            quantity,
+            'loose',
+            'inner',
+            null,
+            factoryId,
+            referenceId,
+            userId,
+            true // isDeduction
+        );
+    }
+
+    private async updateInnerStock(innerId: string, quantity: number, factoryId: string) {
+        const { error } = await supabase.rpc('adjust_inner_stock', {
+            p_inner_id: innerId,
+            p_factory_id: factoryId,
+            p_quantity_change: quantity
+        });
+
+        if (error) {
+            logger.error('Inner stock adjustment RPC error:', error);
+            throw new AppError(`Inner inventory update error: ${error.message}`, 500);
+        }
     }
 
     private async updateCapStock(capId: string, quantity: number, factoryId: string) {
@@ -797,6 +849,170 @@ export class ProductionService {
         };
     }
 
+    // ================== INNER PRODUCTION ==================
+
+    async submitInnerProduction(data: SubmitInnerProductionDTO) {
+        const factoryId = data.factory_id || MAIN_FACTORY_ID;
+        // 1. Get Inner Details
+        const { data: inner, error: innerError } = await supabase
+            .from('inners')
+            .select(`
+                id,
+                template:inner_templates(name, ideal_weight_grams, raw_material_id)
+            `)
+            .eq('id', data.inner_id)
+            .single();
+
+        if (innerError || !inner) {
+            logger.error('Inner not found:', innerError);
+            throw new AppError(`Inner not found: ${innerError?.message || 'Unknown error'}`, 404);
+        }
+
+        const template = (inner as any).template;
+
+        // 2. Calculate Quantity & Deduction Weight
+        let initial_quantity: number | undefined = data.total_produced;
+        let initial_weight_kg: number | undefined = data.total_weight_produced_kg;
+
+        if (initial_quantity === undefined && initial_weight_kg !== undefined) {
+            initial_quantity = Math.floor((initial_weight_kg * 1000) / template.ideal_weight_grams);
+        } else if (initial_quantity !== undefined && initial_weight_kg === undefined) {
+            initial_weight_kg = Number(((initial_quantity * template.ideal_weight_grams) / 1000).toFixed(4));
+        } else if (initial_quantity === undefined && initial_weight_kg === undefined) {
+            throw new AppError('Either total_produced or total_weight_produced_kg must be provided', 400);
+        }
+
+        const final_quantity: number = initial_quantity!;
+        const final_weight_kg: number = initial_weight_kg!;
+
+        if (final_quantity < 0) {
+            throw new AppError('Produced quantity cannot be negative', 400);
+        }
+
+        // 3. Raw Material Check & Deduction
+        if (template.raw_material_id) {
+            const { data: rawMaterial, error: rmError } = await supabase
+                .from('raw_materials')
+                .select('id, stock_weight_kg')
+                .eq('id', template.raw_material_id)
+                .eq('factory_id', factoryId)
+                .single();
+
+            if (rmError || !rawMaterial) {
+                logger.error('Assigned raw material not found:', rmError);
+                throw new AppError(`Assigned raw material not found in this factory`, 404);
+            }
+
+            if (rawMaterial.stock_weight_kg < final_weight_kg) {
+                throw new AppError(`Insufficient raw material. Need ${final_weight_kg.toFixed(2)}kg, have ${rawMaterial.stock_weight_kg.toFixed(2)}kg`, 400);
+            }
+
+            // Atomic Deduct using RPC
+            const { error: rpcError } = await supabase.rpc('adjust_raw_material_stock', {
+                p_material_id: template.raw_material_id,
+                p_weight_change: -final_weight_kg
+            });
+
+            if (rpcError) {
+                logger.error('Inner raw material RPC update error:', rpcError);
+                throw new AppError(`Raw material deduction error: ${rpcError.message}`, 500);
+            }
+        }
+
+        // 4. Log Production
+        logger.info('Inserting inner production log:', {
+            ...data,
+            factory_id: factoryId,
+            total_weight_produced_kg: final_weight_kg,
+            calculated_quantity: final_quantity
+        });
+
+        const { data: log, error: logError } = await supabase
+            .from('inner_production_logs')
+            .insert([{
+                ...data,
+                factory_id: factoryId,
+                total_weight_produced_kg: final_weight_kg,
+                calculated_quantity: final_quantity,
+                actual_weight_grams: data.actual_weight_grams ?? template.ideal_weight_grams,
+                actual_cycle_time_seconds: data.actual_cycle_time_seconds || 0
+            }])
+            .select()
+            .single();
+
+        if (logError) {
+            logger.error('Inner production log insertion failed:', logError);
+            throw new AppError(`Inner production log error: ${logError.message}`, 500);
+        }
+
+        // 5. Update Stock Balance
+        if (final_quantity > 0) {
+            await this.updateInnerStock(data.inner_id, final_quantity, factoryId);
+        }
+
+        // 6. Log Raw Material Consumption Transaction
+        if (template.raw_material_id) {
+            await inventoryService.logTransaction(
+                'raw_material_consumption',
+                template.raw_material_id,
+                final_weight_kg,
+                'kg',
+                'raw_material',
+                null,
+                factoryId,
+                log.id,
+                undefined,
+                true
+            );
+        }
+
+        // 7. Audit
+        await auditService.logAction(
+            data.user_id,
+            'submit_inner_production',
+            'inner_production_logs',
+            log.id,
+            { calculated_quantity: final_quantity, weight_kg: final_weight_kg }
+        );
+
+
+        return log;
+    }
+
+    async getInnerProductionLogs(filters?: { factory_id?: string; inner_id?: string; start_date?: string; end_date?: string; page?: number; size?: number }) {
+        const { from, to } = getPagination(filters?.page || 1, filters?.size || 20);
+
+        let query = supabase
+            .from('inner_production_logs')
+            .select(`
+                *,
+                inners(color, inner_templates(name))
+            `, { count: 'exact' })
+            .order('date', { ascending: false })
+            .range(from, to);
+
+        if (filters?.factory_id) query = query.eq('factory_id', filters.factory_id);
+        if (filters?.inner_id) query = query.eq('inner_id', filters.inner_id);
+        if (filters?.start_date) query = query.gte('date', filters.start_date);
+        if (filters?.end_date) query = query.lte('date', filters.end_date);
+
+        const { data, error, count } = await query;
+        if (error) {
+            logger.error('Get inner production logs error:', error);
+            throw new AppError(error.message, 500);
+        }
+
+        return {
+            data,
+            pagination: {
+                total: count || 0,
+                page: filters?.page || 1,
+                size: filters?.size || 20,
+                pages: Math.ceil((count || 0) / (filters?.size || 20))
+            }
+        };
+    }
 }
+
 
 export const productionService = new ProductionService();

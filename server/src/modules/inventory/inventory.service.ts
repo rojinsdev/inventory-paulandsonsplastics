@@ -19,8 +19,9 @@ async function getProductPackingDetails(productId: string) {
             items_per_box,
             factory_id,
             color,
-            product_templates!inner(cap_template_id)
+            product_templates!inner(cap_template_id, inner_template_id)
         `)
+
         .eq('id', productId)
         .single();
 
@@ -349,7 +350,25 @@ export class InventoryService {
 
         if (error) throw new Error(`Cap stock deduction error: ${error.message}`);
         logger.info(`Deducted ${quantity} caps (ID: ${capId}) for ${note}`);
+
+        // Handle nested inner deduction
+        const { data: cap } = await supabase.from('caps').select('inner_id').eq('id', capId).single();
+        if (cap?.inner_id) {
+            await this.deductInnerInventory(cap.inner_id, quantity, factoryId, `Auto deduction via cap consumption: ${note}`);
+        }
     }
+
+    private async deductInnerInventory(innerId: string, quantity: number, factoryId: string, note?: string) {
+        const { error } = await supabase.rpc('adjust_inner_stock', {
+            p_inner_id: innerId,
+            p_factory_id: factoryId,
+            p_quantity_change: -quantity
+        });
+
+        if (error) throw new Error(`Inner stock deduction error: ${error.message}`);
+        logger.info(`Deducted ${quantity} inners (ID: ${innerId}) for ${note}`);
+    }
+
 
     private async addCapInventory(capId: string, quantity: number, factoryId: string, note?: string) {
         const { error } = await supabase.rpc('adjust_cap_stock', {
@@ -374,7 +393,38 @@ export class InventoryService {
         );
 
         logger.info(`Returned ${quantity} caps (ID: ${capId}) for ${note}`);
+
+        // Handle nested inner return
+        const { data: cap } = await supabase.from('caps').select('inner_id').eq('id', capId).single();
+        if (cap?.inner_id) {
+            await this.addInnerInventory(cap.inner_id, quantity, factoryId, `Auto return via cap return: ${note}`);
+        }
     }
+
+    private async addInnerInventory(innerId: string, quantity: number, factoryId: string, note?: string) {
+        const { error } = await supabase.rpc('adjust_inner_stock', {
+            p_inner_id: innerId,
+            p_factory_id: factoryId,
+            p_quantity_change: quantity
+        });
+
+        if (error) throw new Error(`Inner stock addition error: ${error.message}`);
+
+        await this.logTransaction(
+            'inner_return',
+            null,
+            quantity,
+            'packet',
+            null,
+            'semi_finished',
+            factoryId,
+            innerId,
+            note || `Returned ${quantity} inners`
+        );
+
+        logger.info(`Returned ${quantity} inners (ID: ${innerId}) for ${note}`);
+    }
+
 
     async getStock(productId: string) {
         const { data } = await supabase

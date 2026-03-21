@@ -65,6 +65,7 @@ const menuSections = [
                     { label: 'Machines', href: '/machines' },
                     { label: 'Products', href: '/products' },
                     { label: 'Caps', href: '/inventory/caps' },
+                    { label: 'Inners', href: '/inventory/inners' },
                     { label: 'Packing Rules', href: '/packing-rules' },
                     { label: 'Machine Mapping', href: '/die-mappings' },
                 ],

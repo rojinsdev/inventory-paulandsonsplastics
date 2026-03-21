@@ -35,6 +35,14 @@ class ProductionTypeSelectionScreen extends StatelessWidget {
               color: colorScheme.secondary,
               onTap: () => context.push('/production/cap-submit'),
             ),
+            const SizedBox(height: 24),
+            _SelectionCard(
+              title: 'Inner Production',
+              description: 'Log production for inner liners (Weight-based).',
+              icon: Icons.layers_outlined,
+              color: Colors.orange,
+              onTap: () => context.push('/production/inner-submit'),
+            ),
             const Spacer(),
             Text(
               'Select the type of production you want to log for this shift.',

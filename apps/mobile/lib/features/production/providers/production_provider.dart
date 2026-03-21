@@ -101,6 +101,42 @@ class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<bool>> {
       state = AsyncValue.error(e, st);
     }
   }
+
+  Future<void> submitInner({
+    required String innerId,
+    required int shiftNumber,
+    required String startTime,
+    required String endTime,
+    double? totalWeightKg,
+    int? totalProduced,
+    required double actualCycleTimeSeconds,
+    required double actualWeightGrams,
+    String? remarks,
+    required DateTime date,
+  }) async {
+    state = const AsyncValue.loading();
+    try {
+      await _repository.submitInnerProduction(
+        innerId: innerId,
+        shiftNumber: shiftNumber,
+        startTime: startTime,
+        endTime: endTime,
+        totalWeightKg: totalWeightKg,
+        totalProduced: totalProduced,
+        actualCycleTimeSeconds: actualCycleTimeSeconds,
+        actualWeightGrams: actualWeightGrams,
+        remarks: remarks,
+        date: date,
+      );
+
+      // Update sticky data
+      _ref.read(lastEntryProvider.notifier).update(date, endTime);
+
+      state = const AsyncValue.data(false);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
 }
 
 // Sticky Start Time Logic

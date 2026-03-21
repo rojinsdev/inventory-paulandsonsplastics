@@ -9,6 +9,7 @@ import '../../features/settings/screens/more_screen.dart';
 import '../../features/production/screens/production_entry_screen.dart';
 import '../../features/production/screens/production_type_selection_screen.dart';
 import '../../features/production/screens/cap_production_entry_screen.dart';
+import '../../features/production/screens/inner_production_entry_screen.dart';
 import '../../features/inventory/screens/packing_screen.dart';
 
 import '../../features/inventory/screens/bundling_screen.dart';
@@ -95,6 +96,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/production/cap-submit',
         builder: (context, state) => const CapProductionEntryScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/production/inner-submit',
+        builder: (context, state) => const InnerProductionEntryScreen(),
       ),
       GoRoute(
         parentNavigatorKey: _rootNavigatorKey,

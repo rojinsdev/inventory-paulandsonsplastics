@@ -43,6 +43,21 @@ const submitCapProductionSchema = z.object({
     remarks: z.string().optional(),
 });
 
+const submitInnerProductionSchema = z.object({
+    inner_id: z.string().uuid(),
+    factory_id: z.string().uuid().optional(),
+    date: z.string(),
+    shift_number: z.number().int().min(1).max(2),
+    start_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+    end_time: z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/),
+    total_weight_produced_kg: z.number().nonnegative().optional(),
+    total_produced: z.number().int().nonnegative().optional(),
+    actual_cycle_time_seconds: z.number().nonnegative().optional(),
+    actual_weight_grams: z.number().nonnegative().optional(),
+    remarks: z.string().optional(),
+});
+
+
 export class ProductionController {
     async submit(req: AuthRequest, res: Response) {
         console.log('Production Submit Request:', JSON.stringify(req.body, null, 2));
@@ -135,6 +150,33 @@ export class ProductionController {
         );
         res.json({ end_time: endTime });
     }
+
+    async submitInnerProduction(req: AuthRequest, res: Response) {
+        const validatedData = submitInnerProductionSchema.parse(req.body);
+
+        const log = await productionService.submitInnerProduction({
+            ...validatedData,
+            user_id: req.user!.id,
+        });
+
+        res.status(201).json(log);
+    }
+
+    async listInnerLogs(req: Request, res: Response) {
+        const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+
+        const filters = {
+            factory_id: sanitize(req.query.factory_id),
+            inner_id: sanitize(req.query.inner_id),
+            start_date: sanitize(req.query.start_date),
+            end_date: sanitize(req.query.end_date),
+            page: req.query.page ? parseInt(req.query.page as string) : 1,
+            size: req.query.size ? parseInt(req.query.size as string) : 20,
+        };
+        const result = await productionService.getInnerProductionLogs(filters);
+        res.json(result);
+    }
 }
+
 
 export const productionController = new ProductionController();

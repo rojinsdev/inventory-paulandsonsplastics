@@ -1,0 +1,801 @@
+/* Page Header & Metric Chips */
+.pageHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    gap: 2rem;
+}
+
+.metricChipsRow {
+    display: flex;
+    gap: 16px;
+    margin-top: 1rem;
+}
+
+.metricChip {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    min-width: 140px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.metricChip:hover {
+    border-color: var(--primary-light);
+    background: var(--surface-hover);
+}
+
+.metricChipActive {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.05);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.chipValue {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.chipLabel {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.chipTrend {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #10b981;
+    background: rgba(16, 185, 129, 0.1);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+
+.trendingIcon {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    color: #10b981;
+    opacity: 0.8;
+}
+
+/* Filter Bar */
+.filterBar {
+    background: var(--surface);
+    border-radius: 1rem;
+    border: 1px solid var(--border);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.filterRow {
+    display: flex;
+    align-items: center;
+}
+
+.searchBox {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.filterIcon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 10;
+    opacity: 0.5;
+}
+
+.filterInput {
+    width: 100%;
+    padding: 0.6rem 1rem 0.6rem 2.75rem;
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    /* Standard 8px radius as requested */
+    color: var(--text-main);
+    font-size: 0.875rem;
+    transition: all 0.2s;
+}
+
+.filterInput:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Loading & Error States */
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    color: var(--text-muted);
+    gap: 1rem;
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+.error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    color: var(--error-text);
+    gap: 1rem;
+    text-align: center;
+    background-color: var(--error-bg);
+    border-radius: 1rem;
+    border: 1px solid var(--error-border, #fecaca);
+}
+
+.modalContent {
+    background-color: var(--surface);
+    width: 95%;
+    max-width: 1100px;
+    border-radius: 1.25rem;
+    position: relative;
+    border: 1px solid var(--border);
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.table thead {
+    background-color: var(--slate-50);
+    border-bottom: 1px solid var(--border);
+}
+
+:root[class~="dark"] .table thead {
+    background-color: var(--surface-elevated);
+}
+
+.table th {
+    padding: 1rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-main);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table td {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-main);
+}
+
+.table tbody tr:hover {
+    background-color: var(--slate-50);
+}
+
+:root[class~="dark"] .table tbody tr:hover {
+    background-color: var(--surface-elevated);
+}
+
+.nameCell {
+    font-weight: 600;
+}
+
+.mappingInfo {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.badgeGray {
+    background-color: var(--slate-100);
+    color: var(--slate-700);
+}
+
+:root[class~="dark"] .badgeGray {
+    background-color: var(--surface-elevated);
+    color: var(--text-muted);
+}
+
+.actionButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4rem 0.8rem;
+    background-color: var(--slate-100);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+:root[class~="dark"] .actionButton {
+    background-color: var(--surface-elevated);
+}
+
+.actionButton:hover {
+    background-color: var(--slate-200);
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+
+/* Modal */
+.modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+    padding: 1rem;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.modal {
+    background-color: var(--surface);
+    border-radius: 1.25rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    max-width: 1100px;
+    max-height: 90vh;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease-out;
+    overflow: hidden;
+}
+
+:root[class~="dark"] .modal {
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    z-index: 10;
+}
+
+.modalTitle {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.closeBtn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.closeBtn:hover {
+    background-color: var(--slate-100);
+    color: var(--text-main);
+}
+
+:root[class~="dark"] .closeBtn:hover {
+    background-color: var(--surface-elevated);
+}
+
+.modalBody {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+    background-color: var(--surface);
+}
+
+.modalFooter {
+    padding: 1.25rem 2rem;
+    background-color: var(--slate-50);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    z-index: 10;
+}
+
+:root[class~="dark"] .modalFooter {
+    background-color: var(--surface-elevated);
+}
+
+/* Landscape Architecture */
+.landscapeLayout {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    min-height: auto;
+}
+
+.leftPane {
+    padding: 2rem;
+    border-right: 1px solid var(--border);
+}
+
+.rightPane {
+    padding: 2rem;
+    background-color: var(--slate-25);
+}
+
+:root[class~="dark"] .rightPane {
+    background-color: rgba(255, 255, 255, 0.01);
+}
+
+/* Form Section Styling */
+.formSection {
+    margin-bottom: 2rem;
+    padding: 1.25rem;
+    background: var(--surface);
+    border-radius: 0.875rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.sectionTitle {
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--primary);
+    margin: 0 0 1.25rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Tag-style Multi-select */
+.tagContainer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background-color: var(--slate-50);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    min-height: 3rem;
+    align-content: flex-start;
+}
+
+:root[class~="dark"] .tagContainer {
+    background-color: var(--surface-elevated);
+}
+
+.itemTag {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background-color: var(--primary);
+    color: white;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    animation: scaleIn 0.2s ease-out;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.removeTagBtn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.removeTagBtn:hover {
+    color: white;
+}
+
+.availableItems {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.searchBox {
+    margin-bottom: 0.75rem;
+}
+
+.itemChoiceBtn {
+    padding: 0.625rem 0.875rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-size: 0.875rem;
+    color: var(--text-main);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+}
+
+.itemChoiceBtn:hover:not(:disabled) {
+    border-color: var(--primary);
+    background: var(--slate-50);
+}
+
+.itemChoiceBtnSelected {
+    opacity: 0.5;
+    cursor: default;
+    background: var(--slate-100);
+}
+
+.itemSubtext {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Input Decorators */
+.inputWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.suffix {
+    position: absolute;
+    right: 0.875rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+/* Form */
+.formGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+    align-items: start;
+}
+
+@media (max-width: 768px) {
+    .formGrid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+}
+
+.formGroup {
+    margin-bottom: 1.5rem;
+}
+
+.formLabel {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.formInput {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    background-color: var(--slate-50);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    color: var(--text-main);
+    font-size: 0.875rem;
+}
+
+:root[class~="dark"] .formInput {
+    background-color: var(--surface-elevated);
+}
+
+.formInput:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Product Multi-select List */
+.productList {
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    max-height: 240px;
+    overflow-y: auto;
+    background-color: var(--slate-50);
+}
+
+:root[class~="dark"] .productList {
+    background-color: var(--surface-elevated);
+}
+
+.productItem {
+    display: flex;
+    align-items: center;
+    padding: 0.625rem 0.875rem;
+    gap: 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border-bottom: 1px solid var(--border);
+}
+
+.productItem:last-child {
+    border-bottom: none;
+}
+
+.productItem:hover {
+    background-color: var(--slate-100);
+}
+
+:root[class~="dark"] .productItem:hover {
+    background-color: var(--surface-hover);
+}
+
+.productItem.selected {
+    background-color: rgba(99, 102, 241, 0.08);
+}
+
+.checkbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.checkbox.checked {
+    background-color: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.productInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.productName {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.productFactory {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Buttons */
+.primaryButton {
+    display: inline-flex;
+    align-items: center;
+    background: linear-gradient(135deg, var(--primary), #818cf8);
+    color: white;
+    padding: 0.75rem 1.25rem;
+    border-radius: 1rem;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.25);
+}
+
+.submitButton {
+    padding: 0.625rem 1.25rem;
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.submitButton:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.secondaryButton {
+    padding: 0.625rem 1.25rem;
+    background-color: var(--slate-100);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+:root[class~="dark"] .secondaryButton {
+    background-color: var(--surface-elevated);
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinner {
+    animation: spin 1s linear infinite;
+}
+
+.emptyState {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    color: var(--text-muted);
+    gap: 1rem;
+    text-align: center;
+}
+
+/* Color Tags Integration */
+.colorsGrid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    padding: 0.875rem;
+    background-color: var(--slate-50);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    min-height: 3.5rem;
+    align-items: center;
+    transition: all var(--transition-fast);
+    margin-top: 0.5rem;
+}
+
+:root[class~="dark"] .colorsGrid {
+    background-color: var(--surface-elevated);
+}
+
+.colorsGrid:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.colorTag {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: linear-gradient(135deg, var(--primary), #818cf8);
+    color: white;
+    border-radius: 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+    animation: tagAppear 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes tagAppear {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.colorTag button {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    padding: 0;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.colorTag button:hover {
+    color: white;
+    transform: scale(1.1);
+}
+
+.colorInput {
+    border: none;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 0.875rem;
+    outline: none;
+    flex: 1;
+    min-width: 120px;
+    padding: 0.25rem 0;
+}
+
+.colorInput::placeholder {
+    color: var(--text-muted);
+    opacity: 0.6;
+}
+
+.filterInput {
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+}
+
+/* UI Refinements */
+.trendBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    border-radius: 999px;
+    font-size: 0.7rem;
+}

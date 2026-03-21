@@ -347,7 +347,28 @@ export const capsAPI = {
     getBalances: (params) => fetchAPI(`/caps/balances${params ? '?' + new URLSearchParams(params) : ''}`),
 };
 
+// ============ INNERS ============
+export const innersAPI = {
+    getAll: (params) => fetchAPI(`/inners${params ? '?' + new URLSearchParams(params) : ''}`),
+    getById: (id) => fetchAPI(`/inners/${id}`),
+    create: (data) => fetchAPI('/inners', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/inners/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => fetchAPI(`/inners/${id}`, { method: 'DELETE' }),
+
+    // Inner Production
+    getProductionLogs: (params) => fetchAPI(`/production/inners/logs${params ? '?' + new URLSearchParams(params) : ''}`),
+    submitProduction: (data) => fetchAPI('/production/inners/submit', { method: 'POST', body: JSON.stringify(data) }),
+
+    // Inner Templates
+    getTemplates: (params) => fetchAPI(`/inners/templates${params ? '?' + new URLSearchParams(params) : ''}`),
+    createTemplate: (data) => fetchAPI('/inners/templates', { method: 'POST', body: JSON.stringify(data) }),
+    updateTemplate: (id, data) => fetchAPI(`/inners/templates/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    deleteTemplate: (id) => fetchAPI(`/inners/templates/${id}`, { method: 'DELETE' }),
+    getBalances: (params) => fetchAPI(`/inners/balances${params ? '?' + new URLSearchParams(params) : ''}`),
+};
+
 // ============ CASH FLOW ============
+
 export const cashFlowAPI = {
     getDailySheet: (params) => fetchAPI(`/cash-flow/daily${params ? '?' + new URLSearchParams(params) : ''}`),
     getAnalytics: (params) => fetchAPI(`/cash-flow/analytics${params ? '?' + new URLSearchParams(params) : ''}`),

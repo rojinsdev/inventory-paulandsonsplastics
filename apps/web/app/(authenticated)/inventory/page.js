@@ -21,6 +21,7 @@ import { inventoryAPI, productsAPI, capsAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import InternalStockTable from '@/components/inventory/InternalStockTable';
 import CapStockTable from '@/components/inventory/CapStockTable';
+import InnerStockTable from '@/components/inventory/InnerStockTable';
 import styles from './page.module.css';
 
 export default function StockOverviewPage() {
@@ -55,6 +56,13 @@ export default function StockOverviewPage() {
         packed: 0,
         finished: 0,
         reserved: 0,
+    });
+
+    // Inner Stock State
+    const [innerStock, setInnerStock] = useState([]);
+    const [innerFilters, setInnerFilters] = useState({
+        search: '',
+        factory_id: '',
     });
 
     useEffect(() => {
@@ -98,7 +106,8 @@ export default function StockOverviewPage() {
             const [stockRes, productsRes, capsRes] = await Promise.all([
                 inventoryAPI.getStock(params),
                 productsAPI.getAll(params),
-                capsAPI.getBalances(params)
+                capsAPI.getBalances(params),
+                innersAPI.getBalances(params)
             ]);
 
             // Handle Product Stock
@@ -109,6 +118,10 @@ export default function StockOverviewPage() {
             // Handle Cap Stock
             const capDataArray = capsRes?.balances || capsRes?.data || (Array.isArray(capsRes) ? capsRes : []);
             setCapStock(capDataArray);
+
+            // Handle Inner Stock
+            const innerDataArray = innersRes?.balances || innersRes?.data || (Array.isArray(innersRes) ? innersRes : []);
+            setInnerStock(innerDataArray);
 
             if (stockDataArray.length > 0) {
                 const stats = {
@@ -242,6 +255,19 @@ export default function StockOverviewPage() {
                                     <div className={styles.tabIndicator} />
                                 )}
                             </button>
+                            <button
+                                onClick={() => setActiveTab('inners')}
+                                className={cn(
+                                    styles.tabButton,
+                                    activeTab === 'inners' && styles.tabActive
+                                )}
+                            >
+                                <Layers size={18} />
+                                <span>Inner Inventory</span>
+                                {activeTab === 'inners' && (
+                                    <div className={styles.tabIndicator} />
+                                )}
+                            </button>
                         </div>
                     </div>
 
@@ -256,7 +282,7 @@ export default function StockOverviewPage() {
                                 setFilters={setFilters}
                                 factories={factories}
                             />
-                        ) : (
+                        ) : activeTab === 'caps' ? (
                             <CapStockTable
                                 stock={capStock}
                                 loading={loading}
@@ -264,7 +290,15 @@ export default function StockOverviewPage() {
                                 setFilters={setCapFilters}
                                 factories={factories}
                             />
-                        )}
+                        ) : activeTab === 'inners' ? (
+                            <InnerStockTable
+                                stock={innerStock}
+                                loading={loading}
+                                filters={innerFilters}
+                                setFilters={setInnerFilters}
+                                factories={factories}
+                            />
+                        ) : null}
                     </div>
                 </>
             )}

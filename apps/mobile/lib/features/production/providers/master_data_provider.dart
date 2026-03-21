@@ -7,6 +7,9 @@ import '../data/models/product_template_model.dart';
 import '../data/models/cap_model.dart';
 import '../data/models/cap_template_model.dart';
 
+import '../data/models/inner_model.dart';
+import '../data/models/inner_template_model.dart';
+
 final masterDataRepositoryProvider = Provider<MasterDataRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   return MasterDataRepository(apiClient);
@@ -37,4 +40,15 @@ final capTemplatesProvider =
     FutureProvider.autoDispose<List<CapTemplate>>((ref) async {
   final repo = ref.watch(masterDataRepositoryProvider);
   return repo.getCapTemplates();
+});
+
+final innersProvider = FutureProvider.autoDispose<List<Inner>>((ref) async {
+  final repo = ref.watch(masterDataRepositoryProvider);
+  return repo.getInners();
+});
+
+final innerTemplatesProvider =
+    FutureProvider.autoDispose<List<InnerTemplate>>((ref) async {
+  final repo = ref.watch(masterDataRepositoryProvider);
+  return repo.getInnerTemplates();
 });

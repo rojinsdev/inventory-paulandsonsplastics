@@ -1,14 +1,13 @@
 class ApiConstants {
-  // Use 10.0.2.2 for Android Emulator to access localhost of the host machine
-  // Use local IP (e.g., 192.168.x.x) for physical device
-  // Currently using Ethernet 5 (likely USB Tethering): http://10.211.125.181:4000/api
-  static const String baseUrl = 'http://10.211.125.181:4000/api';
+  // Production AWS App Runner URL
+  static const String baseUrl = 'https://vkff4bakgt.ap-south-1.awsapprunner.com/api';
 
   static const String loginEndpoint = '/auth/login';
   static const String meEndpoint = '/auth/me';
 
   static const String productionSubmit = '/production/submit';
   static const String capProductionSubmit = '/production/caps/submit';
+  static const String innerProductionSubmit = '/production/inners/submit';
   static const String lastSession = '/production/last-session';
   static const String productionDaily = '/production/daily';
   static const String productionRequests = '/production/requests';
@@ -18,6 +17,8 @@ class ApiConstants {
   static const String productTemplates = '/products/templates';
   static const String caps = '/caps';
   static const String capTemplates = '/caps/templates';
+  static const String inners = '/inners';
+  static const String innerTemplates = '/inners/templates';
 
   static const String inventoryPack = '/inventory/pack';
   static const String inventoryBundle = '/inventory/bundle';

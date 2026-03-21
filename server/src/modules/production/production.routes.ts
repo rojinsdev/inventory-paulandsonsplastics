@@ -62,4 +62,19 @@ router.get('/caps/logs',
 );
 
 
+// Inner Production
+router.post('/inners/submit',
+    authenticate,
+    requireRole('production_manager'),
+    asyncHandler(productionController.submitInnerProduction)
+);
+
+router.get('/inners/logs',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    asyncHandler(productionController.listInnerLogs)
+);
+
+
 export default router;
+

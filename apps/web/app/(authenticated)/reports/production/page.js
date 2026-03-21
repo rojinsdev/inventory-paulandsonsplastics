@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Factory, TrendingUp, AlertTriangle, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
-import { productionAPI, machinesAPI, productsAPI } from '@/lib/api';
+import { productionAPI, machinesAPI, productsAPI, innersAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatNumber, formatDate, cn } from '@/lib/utils';
@@ -25,24 +25,45 @@ export default function ProductionReportsPage() {
     const { selectedFactory } = useFactory();
 
     const [datePreset, setDatePreset] = useState('this_month');
+    const [category, setCategory] = useState('products'); // 'products' or 'inners'
     const [filters, setFilters] = useState({
         date_from: '',
         date_to: '',
         machine_id: '',
         product_id: '',
+        inner_template_id: '',
     });
 
     // Queries
     const { data: logsData, isLoading: loading, error: queryError, refetch } = useQuery({
-        queryKey: ['production-logs', filters, selectedFactory],
-        queryFn: () => productionAPI.getLogs({
-            start_date: filters.date_from,
-            end_date: filters.date_to,
-            machine_id: filters.machine_id || undefined,
-            product_id: filters.product_id || undefined,
-            factory_id: selectedFactory || undefined,
-        }),
+        queryKey: ['production-logs', category, filters, selectedFactory],
+        queryFn: () => {
+            const params = {
+                start_date: filters.date_from,
+                end_date: filters.date_to,
+                machine_id: filters.machine_id || undefined,
+                factory_id: selectedFactory || undefined,
+            };
+
+            if (category === 'inners') {
+                return innersAPI.getProductionLogs({
+                    ...params,
+                    template_id: filters.inner_template_id || undefined,
+                });
+            }
+
+            return productionAPI.getLogs({
+                ...params,
+                product_id: filters.product_id || undefined,
+            });
+        },
         enabled: !!(filters.date_from || filters.date_to),
+    });
+
+    const { data: innerTemplatesData } = useQuery({
+        queryKey: ['inner-templates'],
+        queryFn: () => innersAPI.getTemplates(),
+        enabled: category === 'inners',
     });
 
     const { data: machinesData } = useQuery({
@@ -64,6 +85,7 @@ export default function ProductionReportsPage() {
     const logs = useMemo(() => logsData?.data || (Array.isArray(logsData) ? logsData : []), [logsData]);
     const machines = useMemo(() => machinesData?.data || (Array.isArray(machinesData) ? machinesData : []), [machinesData]);
     const products = useMemo(() => productsData?.data || (Array.isArray(productsData) ? productsData : []), [productsData]);
+    const innerTemplates = useMemo(() => innerTemplatesData?.data || (Array.isArray(innerTemplatesData) ? innerTemplatesData : []), [innerTemplatesData]);
 
     const error = queryError?.message;
 
@@ -159,6 +181,7 @@ export default function ProductionReportsPage() {
             date_to: '',
             machine_id: '',
             product_id: '',
+            inner_template_id: '',
         });
         setDatePreset('custom');
     };
@@ -196,6 +219,11 @@ export default function ProductionReportsPage() {
         return p ? `${p.product_name || p.name} (${p.size || ''})` : 'Unknown';
     };
 
+    const getInnerTemplateName = (id) => {
+        const t = innerTemplates.find((t) => t.id === id);
+        return t?.name || 'Unknown';
+    };
+
     // Stats
     const totalProduction = logs.reduce((sum, log) => sum + (log.actual_quantity || 0), 0);
     const avgEfficiency = logs.length > 0
@@ -213,12 +241,28 @@ export default function ProductionReportsPage() {
                         View production logs, efficiency metrics, and machine performance
                     </p>
                 </div>
-                {logs.length > 0 && (
-                    <button className={styles.exportButton} onClick={handleExport}>
-                        <Download size={18} />
-                        <span>Export CSV</span>
-                    </button>
-                )}
+                <div className="flex gap-2">
+                    <div className={styles.categoryToggle}>
+                        <button 
+                            className={cn(styles.toggleBtn, category === 'products' && styles.toggleActive)}
+                            onClick={() => setCategory('products')}
+                        >
+                            Products
+                        </button>
+                        <button 
+                            className={cn(styles.toggleBtn, category === 'inners' && styles.toggleActive)}
+                            onClick={() => setCategory('inners')}
+                        >
+                            Inners
+                        </button>
+                    </div>
+                    {logs.length > 0 && (
+                        <button className={styles.exportButton} onClick={handleExport}>
+                            <Download size={18} />
+                            <span>Export CSV</span>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Filter Bar */}
@@ -281,18 +325,33 @@ export default function ProductionReportsPage() {
                     </div>
 
                     <div className={styles.filterGroup}>
-                        <select
-                            className={styles.filterSelect}
-                            value={filters.product_id}
-                            onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}
-                        >
-                            <option value="">All Products</option>
-                            {products.map((p) => (
-                                <option key={p.product_id || p.id} value={p.product_id || p.id}>
-                                    {p.product_name || p.name} ({p.size || ''})
-                                </option>
-                            ))}
-                        </select>
+                        {category === 'products' ? (
+                            <select
+                                className={styles.filterSelect}
+                                value={filters.product_id}
+                                onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}
+                            >
+                                <option value="">All Products</option>
+                                {products.map((p) => (
+                                    <option key={p.product_id || p.id} value={p.product_id || p.id}>
+                                        {p.product_name || p.name} ({p.size || ''})
+                                    </option>
+                                ))}
+                            </select>
+                        ) : (
+                            <select
+                                className={styles.filterSelect}
+                                value={filters.inner_template_id}
+                                onChange={(e) => setFilters({ ...filters, inner_template_id: e.target.value })}
+                            >
+                                <option value="">All Inner Templates</option>
+                                {innerTemplates.map((t) => (
+                                    <option key={t.id} value={t.id}>
+                                        {t.name}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
                     </div>
 
                     <div className={styles.filterActions}>
@@ -376,9 +435,9 @@ export default function ProductionReportsPage() {
                                 <tr>
                                     <th>Date</th>
                                     <th>Machine</th>
-                                    <th>Product</th>
-                                    <th style={{ textAlign: 'right' }}>Actual</th>
-                                    <th style={{ textAlign: 'right' }}>Theoretical</th>
+                                    <th>{category === 'products' ? 'Product' : 'Inner Template'}</th>
+                                    <th style={{ textAlign: 'right' }}>{category === 'products' ? 'Actual' : 'Qty Produced'}</th>
+                                    <th style={{ textAlign: 'right' }}>{category === 'products' ? 'Theoretical' : 'Weight (kg)'}</th>
                                     <th style={{ textAlign: 'right' }}>Efficiency</th>
                                 </tr>
                             </thead>
@@ -386,16 +445,22 @@ export default function ProductionReportsPage() {
                                 {logs.map((log) => {
                                     const efficiency = log.efficiency_percentage || log.efficiency || 0;
                                     const isLow = efficiency < 70;
+                                    const actualQty = category === 'products' ? log.actual_quantity : log.calculated_quantity;
+                                    const secondaryLabel = category === 'products' ? log.theoretical_quantity : log.total_weight_produced_kg;
+                                    const displayName = category === 'products' 
+                                        ? getProductName(log.product_id) 
+                                        : (log.inners?.inner_templates?.name || getInnerTemplateName(log.inners?.template_id));
+                                    
                                     return (
                                         <tr key={log.production_log_id || log.id}>
                                             <td className={styles.dateCell}>{formatDate(log.date || log.created_at)}</td>
                                             <td className={styles.machineCell}>{getMachineName(log.machine_id)}</td>
-                                            <td>{getProductName(log.product_id)}</td>
+                                            <td>{displayName} {category === 'inners' && <span className="text-muted text-xs">({log.inners?.color})</span>}</td>
                                             <td style={{ textAlign: 'right' }} className={styles.numberCell}>
-                                                {formatNumber(log.actual_quantity)}
+                                                {formatNumber(actualQty)}
                                             </td>
                                             <td style={{ textAlign: 'right' }} className={styles.numberCellMuted}>
-                                                {formatNumber(log.theoretical_quantity)}
+                                                {category === 'products' ? formatNumber(secondaryLabel) : `${formatNumber(secondaryLabel, 2)} kg`}
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
                                                 <span className={cn(styles.efficiencyBadge, isLow && styles.efficiencyLow)}>

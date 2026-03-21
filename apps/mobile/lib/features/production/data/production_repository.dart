@@ -119,4 +119,45 @@ class ProductionRepository {
       rethrow;
     }
   }
+
+  Future<void> submitInnerProduction({
+    required String innerId,
+    required int shiftNumber,
+    required String startTime,
+    required String endTime,
+    double? totalWeightKg,
+    int? totalProduced,
+    required double actualCycleTimeSeconds,
+    required double actualWeightGrams,
+    String? remarks,
+    required DateTime date,
+  }) async {
+    try {
+      final payload = {
+        'inner_id': innerId,
+        'shift_number': shiftNumber,
+        'start_time': startTime,
+        'end_time': endTime,
+        'total_weight_produced_kg': totalWeightKg,
+        'total_produced': totalProduced,
+        'actual_cycle_time_seconds': actualCycleTimeSeconds,
+        'actual_weight_grams': actualWeightGrams,
+        'remarks': remarks,
+        'date': date.toIso8601String().split('T')[0],
+      };
+
+      payload.removeWhere((key, value) => value == null);
+
+      await _apiClient.client.post(
+        ApiConstants.innerProductionSubmit,
+        data: payload,
+      );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data['error'] ?? e.message;
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
 }

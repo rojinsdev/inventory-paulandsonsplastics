@@ -19,13 +19,11 @@ import analyticsRoutes from './modules/analytics/analytics.routes';
 import planningRoutes from './modules/planning/planning.routes';
 import reportRoutes from './modules/reports/reports.routes';
 import factoryRoutes from './modules/factories/factory.routes';
+import innerRoutes from './modules/inventory/inner.routes';
 import capRoutes from './modules/inventory/cap.routes';
 import cashFlowRoutes from './modules/cash-flow/cash-flow.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
 import logger from './utils/logger';
-
-
-
 
 
 
@@ -105,8 +103,10 @@ app.use('/api/planning', planningRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/factories', factoryRoutes);
 app.use('/api/caps', capRoutes);
+app.use('/api/inners', innerRoutes);
 app.use('/api/cash-flow', cashFlowRoutes);
 app.use('/api/notifications', notificationRoutes);
+
 
 
 

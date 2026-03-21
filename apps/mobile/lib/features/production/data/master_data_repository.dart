@@ -6,6 +6,9 @@ import 'models/product_template_model.dart';
 import 'models/cap_model.dart';
 import 'models/cap_template_model.dart';
 
+import 'models/inner_model.dart';
+import 'models/inner_template_model.dart';
+
 class MasterDataRepository {
   final ApiClient _apiClient;
 
@@ -146,6 +149,62 @@ class MasterDataRepository {
       }
 
       return items.map((e) => CapTemplate.fromJson(e)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<Inner>> getInners() async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.inners}?factory_id=$factoryId'
+          : ApiConstants.inners;
+
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
+
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load inners: Unexpected data format from server.');
+      }
+
+      return items.map((e) => Inner.fromJson(e)).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<List<InnerTemplate>> getInnerTemplates() async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.innerTemplates}?factory_id=$factoryId'
+          : ApiConstants.innerTemplates;
+
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
+
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load inner templates: Unexpected data format from server.');
+      }
+
+      return items.map((e) => InnerTemplate.fromJson(e)).toList();
     } catch (e) {
       return [];
     }
