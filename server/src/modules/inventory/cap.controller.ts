@@ -64,6 +64,9 @@ export class CapController {
     async createTemplate(req: Request, res: Response) {
         try {
             const { colors, ...templateData } = req.body;
+            if (templateData.inner_template_id === '') {
+                templateData.inner_template_id = null;
+            }
             const result = await capService.createTemplateWithVariants(templateData, colors);
             res.status(201).json(result);
         } catch (error: any) {
