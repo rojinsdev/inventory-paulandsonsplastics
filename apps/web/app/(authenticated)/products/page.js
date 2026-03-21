@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Package, Loader2, X, RefreshCw } from 'lucide-react';
-import { productsAPI, inventoryAPI, productTemplatesAPI, capsAPI } from '@/lib/api';
+import { productsAPI, inventoryAPI, productTemplatesAPI, capsAPI, innersAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -47,6 +47,7 @@ export default function ProductsPage() {
         factory_id: '',
         raw_material_id: '',
         cap_template_id: '',
+        inner_template_id: '',
         packets_per_bag: '',
         items_per_bag: '',
         packets_per_box: '',
@@ -76,6 +77,14 @@ export default function ProductsPage() {
         queryFn: () => {
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
             return capsAPI.getTemplates(params).then(res => Array.isArray(res) ? res : []);
+        },
+    });
+
+    const { data: innerTemplates = [] } = useQuery({
+        queryKey: ['inner-templates', selectedFactory],
+        queryFn: () => {
+            const params = selectedFactory ? { factory_id: selectedFactory } : {};
+            return innersAPI.getTemplates(params).then(res => Array.isArray(res) ? res : []);
         },
     });
 
@@ -193,6 +202,7 @@ export default function ProductsPage() {
             factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
             raw_material_id: '',
             cap_template_id: '',
+            inner_template_id: '',
             packets_per_bag: '',
             items_per_bag: '',
             packets_per_box: '',
@@ -229,6 +239,7 @@ export default function ProductsPage() {
                     factory_id: template.factory_id || '',
                     raw_material_id: template.raw_material_id || '',
                     cap_template_id: template.cap_template_id || '',
+                    inner_template_id: template.inner_template_id || '',
                     packets_per_bag: template.packets_per_bag || '',
                     items_per_bag: template.items_per_bag || '',
                     packets_per_box: template.packets_per_box || '',
@@ -261,6 +272,7 @@ export default function ProductsPage() {
             factory_id: product.factory_id || '',
             raw_material_id: product.raw_material_id || '',
             cap_template_id: product.cap_template_id || '',
+            inner_template_id: product.inner_template_id || '',
             packets_per_bag: product.packets_per_bag || '',
             items_per_bag: product.items_per_bag || '',
             packets_per_box: product.packets_per_box || '',
@@ -288,6 +300,7 @@ export default function ProductsPage() {
                 factory_id: formData.factory_id,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
+                inner_template_id: formData.inner_template_id || null,
                 packets_per_bag: formData.packets_per_bag ? Number(formData.packets_per_bag) : null,
                 items_per_bag: formData.items_per_bag ? Number(formData.items_per_bag) : null,
                 packets_per_box: formData.packets_per_box ? Number(formData.packets_per_box) : null,
@@ -316,6 +329,7 @@ export default function ProductsPage() {
                 items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
+                inner_template_id: formData.inner_template_id || null,
                 packets_per_bag: formData.packets_per_bag ? Number(formData.packets_per_bag) : null,
                 items_per_bag: formData.items_per_bag ? Number(formData.items_per_bag) : null,
                 packets_per_box: formData.packets_per_box ? Number(formData.packets_per_box) : null,
@@ -624,21 +638,39 @@ export default function ProductsPage() {
                                             </div>
 
                                             {isTemplateMode && (
-                                                <div className={styles.formGroup} style={{ marginTop: '1rem' }}>
-                                                    <label className={styles.formLabel}>Default Cap Template (Optional)</label>
-                                                    <CustomSelect
-                                                        options={[
-                                                            { value: '', label: 'No Cap Mapping' },
-                                                            ...capTemplates.map(ct => ({ value: ct.id, label: ct.name }))
-                                                        ]}
-                                                        value={formData.cap_template_id}
-                                                        onChange={(val) => setFormData({ ...formData, cap_template_id: val })}
-                                                        placeholder="Select cap template"
-                                                    />
-                                                    <p className={styles.inputHint}>
-                                                        Automatically deducts matching cap variants during production.
-                                                    </p>
-                                                </div>
+                                                <>
+                                                    <div className={styles.formGroup} style={{ marginTop: '1rem' }}>
+                                                        <label className={styles.formLabel}>Default Cap Template (Optional)</label>
+                                                        <CustomSelect
+                                                            options={[
+                                                                { value: '', label: 'No Cap Mapping' },
+                                                                ...capTemplates.map(ct => ({ value: ct.id, label: ct.name }))
+                                                            ]}
+                                                            value={formData.cap_template_id}
+                                                            onChange={(val) => setFormData({ ...formData, cap_template_id: val })}
+                                                            placeholder="Select cap template"
+                                                        />
+                                                        <p className={styles.inputHint}>
+                                                            Automatically deducts matching cap variants during production.
+                                                        </p>
+                                                    </div>
+
+                                                    <div className={styles.formGroup} style={{ marginTop: '1rem' }}>
+                                                        <label className={styles.formLabel}>Default Inner Template (Optional)</label>
+                                                        <CustomSelect
+                                                            options={[
+                                                                { value: '', label: 'No Inner Mapping' },
+                                                                ...innerTemplates.map(it => ({ value: it.id, label: it.name }))
+                                                            ]}
+                                                            value={formData.inner_template_id}
+                                                            onChange={(val) => setFormData({ ...formData, inner_template_id: val })}
+                                                            placeholder="Select inner template"
+                                                        />
+                                                        <p className={styles.inputHint}>
+                                                            Automatically deducts inners when products are packed.
+                                                        </p>
+                                                    </div>
+                                                </>
                                             )}
                                         </div>
 

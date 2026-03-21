@@ -9,7 +9,7 @@ import {
     Clock, Weight, Info, Settings,
     TrendingUp, ArrowUpRight, AlertTriangle, Layers
 } from 'lucide-react';
-import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI, machinesAPI, innersAPI } from '@/lib/api';
+import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI, machinesAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
@@ -39,7 +39,6 @@ export default function CapManagementPage() {
         factory_id: '',
         machine_id: '',
         raw_material_id: '',
-        inner_template_id: '',
         product_template_ids: [] // Mapping at template level
     });
 
@@ -68,14 +67,6 @@ export default function CapManagementPage() {
         enabled: !!formData.factory_id && isModalOpen,
     });
     const machines = useMemo(() => machinesRes?.data || (Array.isArray(machinesRes) ? machinesRes : []), [machinesRes]);
-
-    // Fetch Inner Templates for mapping
-    const { data: innerTemplatesRes, isLoading: loadingInners } = useQuery({
-        queryKey: ['inner-templates', formData.factory_id],
-        queryFn: () => innersAPI.getTemplates({ factory_id: formData.factory_id }),
-        enabled: !!formData.factory_id && isModalOpen,
-    });
-    const innerTemplates = useMemo(() => innerTemplatesRes?.data || (Array.isArray(innerTemplatesRes) ? innerTemplatesRes : []), [innerTemplatesRes]);
 
     const { data: capsRes, isLoading: loadingCaps, error: capsError } = useQuery({
         queryKey: ['cap-templates', selectedFactory],
@@ -200,7 +191,6 @@ export default function CapManagementPage() {
                 factory_id: cap.factory_id || '',
                 machine_id: cap.machine_id || '',
                 raw_material_id: cap.raw_material_id || '',
-                inner_template_id: cap.inner_template_id || '',
                 product_template_ids: cap.mapped_product_templates?.map(p => p.id) || []
             });
         } else {
@@ -213,7 +203,6 @@ export default function CapManagementPage() {
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
                 machine_id: '',
                 raw_material_id: '',
-                inner_template_id: '',
                 product_template_ids: []
             });
         }
@@ -613,35 +602,6 @@ export default function CapManagementPage() {
                                                         </option>
                                                     ))}
                                                 </select>
-                                            </div>
-
-                                            <div className={styles.formGroup}>
-                                                <label className={styles.formLabel}>Associated Inner (Optional)</label>
-                                                <select
-                                                    className={styles.formInput}
-                                                    value={formData.inner_template_id || ''}
-                                                    onChange={e => setFormData({ ...formData, inner_template_id: e.target.value })}
-                                                    disabled={loadingInners || !formData.factory_id}
-                                                >
-                                                    <option value="">
-                                                        {!formData.factory_id
-                                                            ? 'Select Factory First'
-                                                            : loadingInners
-                                                                ? 'Loading...'
-                                                                : innerTemplates.length === 0
-                                                                    ? 'No Inners Found'
-                                                                    : '-- Select Inner Template --'}
-                                                    </option>
-                                                    {innerTemplates.map(it => (
-                                                        <option key={it.id} value={it.id}>
-                                                            {it.name} ({it.ideal_weight_grams}g)
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <p className={styles.mappingInfo}>
-                                                    <Info size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-                                                    Stock will be deducted automatically when this cap is produced.
-                                                </p>
                                             </div>
                                         </div>
                                     </div>

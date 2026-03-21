@@ -151,7 +151,7 @@ export class InnerService {
 
     async createTemplateWithVariants(payload: any, colors: string[]) {
         const {
-            cap_template_ids,
+            product_template_ids,
             colors: _colors,
             ...templateData
         } = payload;
@@ -178,12 +178,12 @@ export class InnerService {
 
         if (vError) throw new Error(vError.message);
 
-        // 3. Handle Cap Template Mapping
-        if (cap_template_ids && cap_template_ids.length > 0) {
+        // 3. Handle Product Template Mapping
+        if (product_template_ids && product_template_ids.length > 0) {
             const { error: updateError } = await supabase
-                .from('cap_templates')
+                .from('product_templates')
                 .update({ inner_template_id: template.id })
-                .in('id', cap_template_ids);
+                .in('id', product_template_ids);
 
             if (updateError) throw new Error(updateError.message);
         }
@@ -200,7 +200,7 @@ export class InnerService {
                     *,
                     stock:inner_stock_balances(quantity)
                 ),
-                mapped_cap_templates:cap_templates(id, name)
+                mapped_product_templates:product_templates(id, name)
             `);
 
         if (factoryId) {
@@ -221,7 +221,7 @@ export class InnerService {
                     *,
                     stock:inner_stock_balances(quantity)
                 ),
-                mapped_cap_templates:cap_templates(id, name)
+                mapped_product_templates:product_templates(id, name)
             `)
             .eq('id', id)
             .single();
@@ -231,7 +231,7 @@ export class InnerService {
     }
 
     async updateTemplate(id: string, data: any) {
-        const { cap_template_ids, colors, machine_id, ...templateData } = data;
+        const { product_template_ids, colors, machine_id, ...templateData } = data;
 
         const { data: template, error } = await supabase
             .from('inner_templates')
@@ -242,20 +242,20 @@ export class InnerService {
 
         if (error) throw new Error(error.message);
 
-        // Handle Cap Template Mapping
-        if (cap_template_ids) {
+        // Handle Product Template Mapping
+        if (product_template_ids) {
             const { error: clearError } = await supabase
-                .from('cap_templates')
+                .from('product_templates')
                 .update({ inner_template_id: null })
                 .eq('inner_template_id', id);
 
             if (clearError) throw new Error(clearError.message);
 
-            if (cap_template_ids.length > 0) {
+            if (product_template_ids.length > 0) {
                 const { error: updateError } = await supabase
-                    .from('cap_templates')
+                    .from('product_templates')
                     .update({ inner_template_id: id })
-                    .in('id', cap_template_ids);
+                    .in('id', product_template_ids);
 
                 if (updateError) throw new Error(updateError.message);
             }
@@ -286,7 +286,7 @@ export class InnerService {
 
         // Clear mappings
         const { error: clearError } = await supabase
-            .from('cap_templates')
+            .from('product_templates')
             .update({ inner_template_id: null })
             .eq('inner_template_id', id);
 

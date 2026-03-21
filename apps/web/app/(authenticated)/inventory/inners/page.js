@@ -9,7 +9,7 @@ import {
     Clock, Weight, Info, Settings,
     TrendingUp, ArrowUpRight, AlertTriangle, Layers
 } from 'lucide-react';
-import { innersAPI, capsAPI, inventoryAPI, machinesAPI } from '@/lib/api';
+import { innersAPI, productTemplatesAPI, inventoryAPI, machinesAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
@@ -39,18 +39,18 @@ export default function InnerManagementPage() {
         factory_id: '',
         machine_id: '',
         raw_material_id: '',
-        cap_template_ids: []
+        product_template_ids: []
     });
 
-    const [capSearch, setCapSearch] = useState('');
+    const [productSearch, setProductSearch] = useState('');
 
-    // Fetch Cap Templates for mapping
-    const { data: capTemplatesRes, isLoading: loadingCaps } = useQuery({
-        queryKey: ['cap-templates', formData.factory_id],
-        queryFn: () => capsAPI.getTemplates(formData.factory_id ? { factory_id: formData.factory_id } : {}),
+    // Fetch Product Templates for mapping
+    const { data: productTemplatesRes, isLoading: loadingProducts } = useQuery({
+        queryKey: ['product-templates', formData.factory_id],
+        queryFn: () => productTemplatesAPI.getAll(formData.factory_id ? { factory_id: formData.factory_id } : {}),
         enabled: !!formData.factory_id && isModalOpen,
     });
-    const capTemplates = useMemo(() => capTemplatesRes?.data || (Array.isArray(capTemplatesRes) ? capTemplatesRes : []), [capTemplatesRes]);
+    const productTemplates = useMemo(() => productTemplatesRes?.data || (Array.isArray(productTemplatesRes) ? productTemplatesRes : []), [productTemplatesRes]);
 
     // Fetch Raw Materials for assignment (filtered by factory)
     const { data: rawMaterialsRes, isLoading: loadingRawMaterials } = useQuery({
@@ -115,16 +115,16 @@ export default function InnerManagementPage() {
             logic: [
                 {
                     title: 'Direct Production Mapping',
-                    explanation: 'Inners are produced as separate items. Mapping them to caps allows automatic stock deduction when a cap is produced or consumed.'
+                    explanation: 'Inners are produced as separate items. Mapping them to products allows automatic stock deduction when a product is packed.'
                 },
                 {
                     title: 'Weight-Based Inventory',
-                    explanation: 'Inners, like caps, are managed by total weight. The system translates weight to unit counts for easier inventory tracking.'
+                    explanation: 'Inners, like products, are managed by total weight. The system translates weight to unit counts for easier inventory tracking.'
                 }
             ],
             components: [
                 { name: 'Inner Templates', description: 'Master data for different types of inners.' },
-                { name: 'Mapping Tool', description: 'Associate inners with cap templates for synchronous stock movement.' }
+                { name: 'Mapping Tool', description: 'Associate inners with product templates for synchronous stock movement.' }
             ]
         });
     }, [registerGuide, setPageTitle]);
@@ -157,14 +157,14 @@ export default function InnerManagementPage() {
         }
 
         if (mappedOnly) {
-            results = results.filter(i => (i.mapped_cap_templates?.length || 0) > 0);
+            results = results.filter(i => (i.mapped_product_templates?.length || 0) > 0);
         }
 
         return results;
     }, [inners, searchTerm, colorFilter, weightFilter, mappedOnly]);
 
     const openModal = (inner = null) => {
-        setCapSearch('');
+        setProductSearch('');
         if (inner) {
             setSelectedInner(inner);
             setFormData({
@@ -175,7 +175,7 @@ export default function InnerManagementPage() {
                 factory_id: inner.factory_id || '',
                 machine_id: inner.machine_id || '',
                 raw_material_id: inner.raw_material_id || '',
-                cap_template_ids: inner.mapped_cap_templates?.map(c => c.id) || []
+                product_template_ids: inner.mapped_product_templates?.map(c => c.id) || []
             });
         } else {
             setSelectedInner(null);
@@ -187,7 +187,7 @@ export default function InnerManagementPage() {
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
                 machine_id: '',
                 raw_material_id: '',
-                cap_template_ids: []
+                product_template_ids: []
             });
         }
         setIsModalOpen(true);
@@ -216,13 +216,13 @@ export default function InnerManagementPage() {
         }
     };
 
-    const toggleCapMapping = (templateId) => {
+    const toggleProductMapping = (templateId) => {
         setFormData(prev => {
-            const isMapped = prev.cap_template_ids.includes(templateId);
+            const isMapped = prev.product_template_ids.includes(templateId);
             if (isMapped) {
-                return { ...prev, cap_template_ids: prev.cap_template_ids.filter(id => id !== templateId) };
+                return { ...prev, product_template_ids: prev.product_template_ids.filter(id => id !== templateId) };
             } else {
-                return { ...prev, cap_template_ids: [...prev.cap_template_ids, templateId] };
+                return { ...prev, product_template_ids: [...prev.product_template_ids, templateId] };
             }
         });
     };
@@ -239,7 +239,7 @@ export default function InnerManagementPage() {
     };
 
     const totalInners = inners.length;
-    const mappedCount = inners.reduce((acc, i) => acc + (i.mapped_cap_templates?.length || 0), 0);
+    const mappedCount = inners.reduce((acc, i) => acc + (i.mapped_product_templates?.length || 0), 0);
 
     const isFormValid = useMemo(() => {
         return (
@@ -270,7 +270,7 @@ export default function InnerManagementPage() {
                             onClick={() => setMappedOnly(true)}
                         >
                             <span className={styles.chipValue}>{mappedCount}</span>
-                            <span className={styles.chipLabel}>Mapped to Caps</span>
+                            <span className={styles.chipLabel}>Mapped to Products</span>
                         </div>
 
                         <div className={styles.metricChip}>
@@ -324,7 +324,7 @@ export default function InnerManagementPage() {
                                     <th>Inner Variant</th>
                                     <th>Specifications</th>
                                     <th>Consumption</th>
-                                    <th>Mapped Cap Templates</th>
+                                    <th>Mapped Product Templates</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
@@ -362,16 +362,16 @@ export default function InnerManagementPage() {
                                         </td>
                                         <td>
                                             <div className={styles.mappingTags}>
-                                                {inner.mapped_cap_templates?.length > 0 ? (
+                                                {inner.mapped_product_templates?.length > 0 ? (
                                                     <>
-                                                        {inner.mapped_cap_templates.slice(0, 3).map(c => (
+                                                        {inner.mapped_product_templates.slice(0, 3).map(c => (
                                                             <span key={c.id} className={styles.tagBadge}>
                                                                 {c.name}
                                                             </span>
                                                         ))}
-                                                        {inner.mapped_cap_templates.length > 3 && (
+                                                        {inner.mapped_product_templates.length > 3 && (
                                                             <span className={styles.moreBadge}>
-                                                                +{inner.mapped_cap_templates.length - 3} more
+                                                                +{inner.mapped_product_templates.length - 3} more
                                                             </span>
                                                         )}
                                                     </>
@@ -463,7 +463,7 @@ export default function InnerManagementPage() {
                                                 <label className={styles.formLabel}>Select Factory *</label>
                                                 <FactorySelect
                                                     value={formData.factory_id}
-                                                    onChange={val => setFormData({ ...formData, factory_id: val, machine_id: '', cap_template_ids: [] })}
+                                                    onChange={val => setFormData({ ...formData, factory_id: val, machine_id: '', product_template_ids: [] })}
                                                     disabled={!!selectedInner}
                                                 />
                                             </div>
@@ -562,23 +562,23 @@ export default function InnerManagementPage() {
 
                                     <div className={styles.rightPane}>
                                         <h3 className={styles.sectionTitle}>
-                                            <HardHat size={16} /> Mapped Cap Templates
+                                            <Package size={16} /> Mapped Product Templates
                                         </h3>
                                         <p className={styles.pageDescription} style={{ fontSize: '0.8rem', marginBottom: '1.25rem' }}>
-                                            Select all cap templates that use this inner.
+                                            Select all product templates that use this inner.
                                         </p>
 
                                         <div className={styles.tagContainer}>
-                                            {formData.cap_template_ids.length > 0 ? (
-                                                formData.cap_template_ids.map(templateId => {
-                                                    const template = capTemplates?.find(c => c.id === templateId);
+                                            {formData.product_template_ids.length > 0 ? (
+                                                formData.product_template_ids.map(templateId => {
+                                                    const template = productTemplates?.find(c => c.id === templateId);
                                                     return (
                                                         <div key={templateId} className={styles.itemTag}>
-                                                            {template ? template.name : 'Unknown Cap'}
+                                                            {template ? template.name : 'Unknown Product'}
                                                             <button
                                                                 type="button"
                                                                 className={styles.removeTagBtn}
-                                                                onClick={() => toggleCapMapping(templateId)}
+                                                                onClick={() => toggleProductMapping(templateId)}
                                                             >
                                                                 <X size={14} />
                                                             </button>
@@ -587,7 +587,7 @@ export default function InnerManagementPage() {
                                                 })
                                             ) : (
                                                 <span className={styles.textMuted} style={{ fontSize: '0.8rem', padding: '0.25rem' }}>
-                                                    No caps mapped yet.
+                                                    No products mapped yet.
                                                 </span>
                                             )}
                                         </div>
@@ -598,39 +598,39 @@ export default function InnerManagementPage() {
                                                 <input
                                                     type="text"
                                                     className={styles.filterInput}
-                                                    placeholder="Search cap templates..."
+                                                    placeholder="Search product templates..."
                                                     style={{ paddingLeft: '32px', fontSize: '0.8rem' }}
-                                                    value={capSearch}
-                                                    onChange={e => setCapSearch(e.target.value)}
+                                                    value={productSearch}
+                                                    onChange={e => setProductSearch(e.target.value)}
                                                 />
                                             </div>
 
                                             <div style={{ maxHeight: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                                {loadingCaps ? (
+                                                {loadingProducts ? (
                                                     <div style={{ padding: '1rem', textAlign: 'center' }}>
                                                         <Loader2 className={styles.spinner} size={16} />
                                                     </div>
                                                 ) : !formData.factory_id ? (
                                                     <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                                                         <Factory size={32} style={{ marginBottom: '1rem', opacity: 0.1 }} />
-                                                        <p style={{ fontSize: '0.8rem' }}>Please select a factory to see caps.</p>
+                                                        <p style={{ fontSize: '0.8rem' }}>Please select a factory to see products.</p>
                                                     </div>
-                                                ) : (capTemplates || []).length === 0 ? (
+                                                ) : (productTemplates || []).length === 0 ? (
                                                     <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                        No cap templates found for this factory.
+                                                        No product templates found for this factory.
                                                     </div>
                                                 ) : (
-                                                    capTemplates
-                                                        .filter(c => !capSearch || c.name.toLowerCase().includes(capSearch.toLowerCase()))
+                                                    productTemplates
+                                                        .filter(c => !productSearch || c.name.toLowerCase().includes(productSearch.toLowerCase()))
                                                         .map(template => {
-                                                            const isSelected = formData.cap_template_ids.includes(template.id);
+                                                            const isSelected = formData.product_template_ids.includes(template.id);
                                                             return (
                                                                 <button
                                                                     key={template.id}
                                                                     type="button"
                                                                     className={cn(styles.itemChoiceBtn, isSelected && styles.itemChoiceBtnSelected)}
                                                                     disabled={isSelected}
-                                                                    onClick={() => toggleCapMapping(template.id)}
+                                                                    onClick={() => toggleProductMapping(template.id)}
                                                                 >
                                                                     <div>
                                                                         <div style={{ fontWeight: 500 }}>{template.name}</div>

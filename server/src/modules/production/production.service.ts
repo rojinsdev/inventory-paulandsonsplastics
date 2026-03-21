@@ -454,30 +454,6 @@ export class ProductionService {
             userId,
             true // isDeduction
         );
-
-        // NEW: Handle Inner Consumption if mapped
-        if (cap.inner_id) {
-            await this.handleInnerConsumption(cap.inner_id, quantity, factoryId, referenceId, userId);
-        }
-    }
-
-    private async handleInnerConsumption(innerId: string, quantity: number, factoryId: string, referenceId: string, userId: string) {
-        // Deduct inner stock
-        await this.updateInnerStock(innerId, -quantity, factoryId);
-
-        // Log transaction
-        await inventoryService.logTransaction(
-            'inner_consumption',
-            innerId,
-            quantity,
-            'loose',
-            'inner',
-            null,
-            factoryId,
-            referenceId,
-            userId,
-            true // isDeduction
-        );
     }
 
     private async updateInnerStock(innerId: string, quantity: number, factoryId: string) {

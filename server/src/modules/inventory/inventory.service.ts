@@ -44,8 +44,20 @@ async function findCapVariantByTemplate(capTemplateId: string, productColor: str
     const exactMatch = caps.find(c => c.color?.toLowerCase() === productColor?.toLowerCase());
     if (exactMatch) return exactMatch.id;
 
-    // Fallback: return first variant
+// Fallback: return first variant
     return caps[0].id;
+}
+
+// Helper to find an inner variant matching an inner template
+async function findInnerVariantByTemplate(innerTemplateId: string, factoryId: string): Promise<string | null> {
+    const { data: inners, error } = await supabase
+        .from('inners')
+        .select('id')
+        .eq('template_id', innerTemplateId)
+        .eq('factory_id', factoryId);
+
+    if (error || !inners || inners.length === 0) return null;
+    return inners[0].id;
 }
 
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
@@ -53,7 +65,7 @@ const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
 export class InventoryService {
 
     // 1. Pack: Semi-Finished (Loose) -> Packed (Packets)
-    async packItems(productId: string, packetsCreated: number, selectedCapId?: string) {
+    async packItems(productId: string, packetsCreated: number, selectedCapId?: string, selectedInnerId?: string) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -65,6 +77,12 @@ export class InventoryService {
         const resolvedCapId = selectedCapId
             || (capTemplateId ? await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) : null);
 
+        // Resolve inner variant
+        const innerTemplateId = (productDetails as any).product_templates?.[0]?.inner_template_id
+            ?? (productDetails as any).product_templates?.inner_template_id;
+        const resolvedInnerId = selectedInnerId
+            || (innerTemplateId ? await findInnerVariantByTemplate(innerTemplateId, factory) : null);
+
         // Get items per packet from product
         const requiredLooseItems = packetsCreated * itemsPerPacket;
 
@@ -75,7 +93,8 @@ export class InventoryService {
             p_state: 'semi_finished',
             p_quantity_change: -requiredLooseItems,
             p_cap_id: null,
-            p_unit_type: ''
+            p_unit_type: '',
+            p_inner_id: null
         });
 
         if (deductError) throw new Error(`Failed to deduct semi-finished stock: ${deductError.message}`);
@@ -87,7 +106,8 @@ export class InventoryService {
             p_state: 'packed',
             p_quantity_change: packetsCreated,
             p_cap_id: resolvedCapId,
-            p_unit_type: 'packet'
+            p_unit_type: 'packet',
+            p_inner_id: resolvedInnerId
         });
 
         if (addError) {
@@ -98,7 +118,8 @@ export class InventoryService {
                 p_state: 'semi_finished',
                 p_quantity_change: requiredLooseItems,
                 p_cap_id: null,
-                p_unit_type: ''
+                p_unit_type: '',
+                p_inner_id: null
             });
             throw new Error(`Failed to add packed stock: ${addError.message}`);
         }
@@ -113,10 +134,15 @@ export class InventoryService {
         if (resolvedCapId) {
             await this.deductCapInventory(resolvedCapId, requiredLooseItems, factory, `Deduction for packing ${packetsCreated} packets of ${productId}`);
         }
+
+        // Deduct Inner Inventory
+        if (resolvedInnerId) {
+            await this.deductInnerInventory(resolvedInnerId, requiredLooseItems, factory, `Deduction for packing ${packetsCreated} packets of ${productId}`);
+        }
     }
 
     // 2. Bundle: Packed (Packets) OR Semi-Finished (Loose) -> Finished (Units: Bundles/Bags/Boxes)
-    async bundlePackets(productId: string, unitsCreated: number, unitType: 'bundle' | 'bag' | 'box', source: 'packed' | 'semi_finished' = 'packed', selectedCapId?: string) {
+    async bundlePackets(productId: string, unitsCreated: number, unitType: 'bundle' | 'bag' | 'box', source: 'packed' | 'semi_finished' = 'packed', selectedCapId?: string, selectedInnerId?: string) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -128,6 +154,12 @@ export class InventoryService {
             ?? (productDetails as any).product_templates?.cap_template_id;
         const resolvedCapId = selectedCapId
             || (capTemplateId ? await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) : null);
+
+        // Resolve inner variant
+        const innerTemplateId = (productDetails as any).product_templates?.[0]?.inner_template_id
+            ?? (productDetails as any).product_templates?.inner_template_id;
+        const resolvedInnerId = selectedInnerId
+            || (innerTemplateId ? await findInnerVariantByTemplate(innerTemplateId, factory) : null);
 
         let requiredQuantity: number;
         const sourceState = source;
@@ -154,6 +186,7 @@ export class InventoryService {
             p_state: sourceState,
             p_quantity_change: -requiredQuantity,
             p_cap_id: source === 'packed' ? resolvedCapId : null,
+            p_inner_id: source === 'packed' ? resolvedInnerId : null,
             p_unit_type: source === 'packed' ? 'packet' : ''
         });
 
@@ -166,6 +199,7 @@ export class InventoryService {
             p_state: 'finished',
             p_quantity_change: unitsCreated,
             p_cap_id: resolvedCapId,
+            p_inner_id: resolvedInnerId,
             p_unit_type: unitType
         });
 
@@ -177,6 +211,7 @@ export class InventoryService {
                 p_state: sourceState,
                 p_quantity_change: requiredQuantity,
                 p_cap_id: source === 'packed' ? resolvedCapId : null,
+                p_inner_id: source === 'packed' ? resolvedInnerId : null,
                 p_unit_type: source === 'packed' ? 'packet' : ''
             });
             throw new Error(`Failed to add finished stock: ${addError.message}`);
@@ -193,10 +228,13 @@ export class InventoryService {
             if (resolvedCapId) {
                 await this.deductCapInventory(resolvedCapId, requiredQuantity, factory, `Deduction for direct bundling ${unitsCreated} ${unitType}s of ${productId}`);
             }
+            if (resolvedInnerId) {
+                await this.deductInnerInventory(resolvedInnerId, requiredQuantity, factory, `Deduction for direct bundling ${unitsCreated} ${unitType}s of ${productId}`);
+            }
         }
     }
     // 3. Unpack: Reverse Logistics (Bundle/Packet -> Packets/Loose)
-    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished', unitType: string = 'bundle', capId?: string) {
+    async unpack(productId: string, quantityToUnpack: number, fromState: 'finished' | 'packed', toState: 'packed' | 'semi_finished', unitType: string = 'bundle', capId?: string, innerId?: string) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -257,6 +295,7 @@ export class InventoryService {
             p_state: fromState,
             p_quantity_change: -quantityToUnpack,
             p_cap_id: capId || null,
+            p_inner_id: innerId || null,
             p_unit_type: fromState === 'finished' ? unitType : 'packet'
         });
 
@@ -264,6 +303,7 @@ export class InventoryService {
 
         // 3. Add to Target atomically
         const targetCapId = toState === 'semi_finished' ? null : (capId || null);
+        const targetInnerId = toState === 'semi_finished' ? null : (innerId || null);
 
         const { error: addError } = await supabase.rpc('adjust_stock', {
             p_product_id: productId,
@@ -271,6 +311,7 @@ export class InventoryService {
             p_state: toState,
             p_quantity_change: yieldQuantity,
             p_cap_id: targetCapId,
+            p_inner_id: targetInnerId,
             p_unit_type: toState === 'packed' ? 'packet' : ''
         });
 
@@ -282,6 +323,7 @@ export class InventoryService {
                 p_state: fromState,
                 p_quantity_change: quantityToUnpack,
                 p_cap_id: capId || null,
+                p_inner_id: innerId || null,
                 p_unit_type: fromState === 'finished' ? unitType : 'packet'
             });
             throw new Error(`Failed to add ${toState} stock: ${addError.message}`);
@@ -298,6 +340,18 @@ export class InventoryService {
             if (returnCapId) {
                 await this.addCapInventory(
                     returnCapId,
+                    yieldQuantity,
+                    factory,
+                    `Return for unpacking ${quantityToUnpack} ${fromState === 'finished' ? unitType : 'packet'} of ${productId}`
+                );
+            }
+
+            const innerTemplateId = (productDetails as any).product_templates?.[0]?.inner_template_id
+                ?? (productDetails as any).product_templates?.inner_template_id;
+            const returnInnerId = innerId || (innerTemplateId ? await findInnerVariantByTemplate(innerTemplateId, factory) : null);
+            if (returnInnerId) {
+                await this.addInnerInventory(
+                    returnInnerId,
                     yieldQuantity,
                     factory,
                     `Return for unpacking ${quantityToUnpack} ${fromState === 'finished' ? unitType : 'packet'} of ${productId}`
@@ -350,12 +404,6 @@ export class InventoryService {
 
         if (error) throw new Error(`Cap stock deduction error: ${error.message}`);
         logger.info(`Deducted ${quantity} caps (ID: ${capId}) for ${note}`);
-
-        // Handle nested inner deduction
-        const { data: cap } = await supabase.from('caps').select('inner_id').eq('id', capId).single();
-        if (cap?.inner_id) {
-            await this.deductInnerInventory(cap.inner_id, quantity, factoryId, `Auto deduction via cap consumption: ${note}`);
-        }
     }
 
     private async deductInnerInventory(innerId: string, quantity: number, factoryId: string, note?: string) {
@@ -393,12 +441,6 @@ export class InventoryService {
         );
 
         logger.info(`Returned ${quantity} caps (ID: ${capId}) for ${note}`);
-
-        // Handle nested inner return
-        const { data: cap } = await supabase.from('caps').select('inner_id').eq('id', capId).single();
-        if (cap?.inner_id) {
-            await this.addInnerInventory(cap.inner_id, quantity, factoryId, `Auto return via cap return: ${note}`);
-        }
     }
 
     private async addInnerInventory(innerId: string, quantity: number, factoryId: string, note?: string) {
