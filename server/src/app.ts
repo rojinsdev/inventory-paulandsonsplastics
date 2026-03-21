@@ -22,6 +22,7 @@ import factoryRoutes from './modules/factories/factory.routes';
 import capRoutes from './modules/inventory/cap.routes';
 import cashFlowRoutes from './modules/cash-flow/cash-flow.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
+import logger from './utils/logger';
 
 
 
