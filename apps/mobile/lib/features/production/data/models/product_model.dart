@@ -5,6 +5,7 @@ class Product {
   final String color;
   final String sku;
   final String countingMethod; // 'unit_count' or 'weight_based'
+  final double weightGrams;
   final String? capId;
   final String? templateId;
   final int itemsPerPacket;
@@ -17,6 +18,7 @@ class Product {
   final bool bundleEnabled;
   final bool bagEnabled;
   final bool boxEnabled;
+  final String? capTemplateId;
 
   Product({
     required this.id,
@@ -25,6 +27,7 @@ class Product {
     required this.color,
     required this.sku,
     this.countingMethod = 'unit_count', // Default to unit_count
+    this.weightGrams = 0.0,
     this.capId,
     this.templateId,
     this.itemsPerPacket = 0,
@@ -37,6 +40,7 @@ class Product {
     this.bundleEnabled = true,
     this.bagEnabled = false,
     this.boxEnabled = false,
+    this.capTemplateId,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -47,6 +51,7 @@ class Product {
       color: json['color'] as String? ?? '',
       sku: json['sku'] as String? ?? '',
       countingMethod: json['counting_method'] as String? ?? 'unit_count',
+      weightGrams: (json['weight_grams'] as num? ?? 0.0).toDouble(),
       capId: json['cap_id'] as String?,
       templateId: json['template_id'] as String?,
       itemsPerPacket: json['items_per_packet'] as int? ?? 0,
@@ -59,6 +64,7 @@ class Product {
       bundleEnabled: json['bundle_enabled'] as bool? ?? true,
       bagEnabled: json['bag_enabled'] as bool? ?? false,
       boxEnabled: json['box_enabled'] as bool? ?? false,
+      capTemplateId: json['cap_template_id'] as String?,
     );
   }
 

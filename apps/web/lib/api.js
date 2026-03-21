@@ -190,6 +190,7 @@ export const productTemplatesAPI = {
 export const inventoryAPI = {
     getStock: (params) => fetchAPI(`/inventory/stock${params ? '?' + new URLSearchParams(params) : ''}`),
     getAvailable: (params) => fetchAPI(`/inventory/available${params ? '?' + new URLSearchParams(params) : ''}`),
+    getAvailableStock: (params) => fetchAPI(`/inventory/available${params ? '?' + new URLSearchParams(params) : ''}`),
     getRawMaterials: (params) => fetchAPI(`/inventory/raw-materials${params ? '?' + new URLSearchParams(params) : ''}`),
     createRawMaterial: (data) => fetchAPI('/inventory/raw-materials', { method: 'POST', body: JSON.stringify(data) }),
     updateRawMaterial: (id, data) => fetchAPI(`/inventory/raw-materials/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

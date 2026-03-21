@@ -154,6 +154,31 @@ class InventoryStock {
   });
 
   factory InventoryStock.fromJson(Map<String, dynamic> json) {
+    int totalPacked = 0;
+    int totalBundled = 0;
+    String? firstUnitType;
+    String? firstCapId;
+    String? firstCapColor;
+    
+    if (json['combinations'] != null && (json['combinations'] as List).isNotEmpty) {
+      for (var combo in (json['combinations'] as List)) {
+        totalPacked += ((combo['packed_qty'] ?? 0) as num).toInt();
+        totalBundled += ((combo['bundled_qty'] ?? 0) as num).toInt();
+        if (firstUnitType == null && combo['unit_type'] != null && combo['unit_type'] != '') {
+          firstUnitType = combo['unit_type'] as String?;
+        }
+        if (firstCapId == null && combo['cap_id'] != null) {
+          firstCapId = combo['cap_id'] as String?;
+        }
+        if (firstCapColor == null && combo['cap_color'] != null && combo['cap_color'] != 'N/A') {
+          firstCapColor = combo['cap_color'] as String?;
+        }
+      }
+    } else {
+      totalPacked = ((json['packed_qty'] ?? 0) as num).toInt();
+      totalBundled = ((json['bundled_qty'] ?? 0) as num).toInt();
+    }
+
     return InventoryStock(
       productId: (json['variant_id'] ?? json['product_id'] ?? json['id'] ?? '')
           as String?,
@@ -161,14 +186,14 @@ class InventoryStock {
           (json['product_name'] ?? json['name'] ?? 'Unknown') as String,
       color: json['color'] as String?,
       size: json['size'] as String?,
-      capId: json['cap_id'] as String?,
+      capId: firstCapId ?? json['cap_id'] as String?,
       capName: json['cap_name'] as String?,
-      capColor: json['cap_color'] as String?,
+      capColor: firstCapColor ?? json['cap_color'] as String?,
       semiFinishedQty:
           ((json['semi_finished_qty'] ?? json['semifinished_qty'] ?? 0) as num)
               .toInt(),
-      packedQty: ((json['packed_qty'] ?? 0) as num).toInt(),
-      bundledQty: ((json['bundled_qty'] ?? 0) as num).toInt(),
+      packedQty: totalPacked,
+      bundledQty: totalBundled,
       itemsPerPacket: json['items_per_packet'] as int?,
       packetsPerBundle: json['packets_per_bundle'] as int?,
       itemsPerBundle: json['items_per_bundle'] as int?,
@@ -176,7 +201,7 @@ class InventoryStock {
       itemsPerBag: json['items_per_bag'] as int?,
       packetsPerBox: json['packets_per_box'] as int?,
       itemsPerBox: json['items_per_box'] as int?,
-      unitType: (json['unit_type'] ?? json['unit']) as String?,
+      unitType: firstUnitType ?? (json['unit_type'] ?? json['unit']) as String?,
     );
   }
 

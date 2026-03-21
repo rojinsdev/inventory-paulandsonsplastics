@@ -50,6 +50,7 @@ export class StockAllocationService {
             .eq('product_id', request.product_id)
             .eq('state', fromState)
             .eq('factory_id', request.factory_id)
+            .eq('unit_type', unitType)
             .single();
 
         if (!stock || stock.quantity < request.quantity) {
@@ -57,7 +58,7 @@ export class StockAllocationService {
         }
 
         // 3. Move stock to reserved
-        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id);
+        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id, unitType);
 
         // 4. Update Sales Order Item
         // Note: This updates all items for this product in this order. 
@@ -97,7 +98,7 @@ export class StockAllocationService {
         return updatedRequest;
     }
 
-    private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string) {
+    private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, unitType: string) {
         // Deduct from source state
         const { data: sourceStock } = await supabase
             .from('stock_balances')
@@ -105,15 +106,17 @@ export class StockAllocationService {
             .eq('product_id', productId)
             .eq('state', fromState)
             .eq('factory_id', factoryId)
+            .eq('unit_type', unitType)
             .single();
 
         await supabase.from('stock_balances').upsert({
             product_id: productId,
             state: fromState,
             factory_id: factoryId,
+            unit_type: unitType,
             quantity: (sourceStock?.quantity || 0) - quantity,
             last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
 
         // Add to reserved
         const { data: reservedStock } = await supabase
@@ -122,15 +125,17 @@ export class StockAllocationService {
             .eq('product_id', productId)
             .eq('state', 'reserved')
             .eq('factory_id', factoryId)
+            .eq('unit_type', unitType)
             .single();
 
         await supabase.from('stock_balances').upsert({
             product_id: productId,
             state: 'reserved',
             factory_id: factoryId,
+            unit_type: unitType,
             quantity: (reservedStock?.quantity || 0) + quantity,
             last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
     }
 
     private async updateProductionRequest(orderId: string, productId: string, quantitySatisfied: number) {

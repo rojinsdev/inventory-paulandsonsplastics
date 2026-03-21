@@ -44,7 +44,6 @@ class ProductionRequestNotifier
         );
       });
     } catch (e) {
-      print('Failed to update status: $e');
       rethrow;
     }
   }

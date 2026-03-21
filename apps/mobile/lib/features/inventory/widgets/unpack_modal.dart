@@ -134,7 +134,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer.withOpacity(0.4),
+                  color: colorScheme.primaryContainer.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child:
@@ -221,10 +221,10 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _toState,
+            initialValue: _toState,
             decoration: InputDecoration(
               filled: true,
-              fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(20),
                 borderSide: BorderSide.none,
@@ -258,7 +258,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
             decoration: InputDecoration(
               hintText: 'Enter quantity...',
               filled: true,
-              fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              fillColor: colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
               errorText: _isQuantityInvalid ? 'Exceeds available stock' : null,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(20),
@@ -275,7 +275,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color:
-                    colorScheme.primaryContainer.withOpacity(0.2),
+                    colorScheme.primaryContainer.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -310,7 +310,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                 backgroundColor: colorScheme.primary,
                 foregroundColor: colorScheme.onPrimary,
                 disabledBackgroundColor:
-                    colorScheme.onSurface.withOpacity(0.12),
+                    colorScheme.onSurface.withValues(alpha: 0.1),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
@@ -355,11 +355,11 @@ class _SourceChip extends StatelessWidget {
           decoration: BoxDecoration(
             color: isSelected
                 ? colorScheme.primary
-                : colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
             border: isSelected
                 ? null
-                : Border.all(color: colorScheme.outline.withOpacity(0.2)),
+                : Border.all(color: colorScheme.outline.withValues(alpha: 0.1)),
           ),
           child: Center(
             child: Text(

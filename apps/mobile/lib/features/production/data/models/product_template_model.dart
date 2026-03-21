@@ -9,6 +9,9 @@ class ProductTemplate {
   final bool bundleEnabled;
   final bool bagEnabled;
   final bool boxEnabled;
+  final int? itemsPerBundle;
+  final String? rawMaterialId;
+  final double? sellingPrice;
 
   ProductTemplate({
     required this.id,
@@ -19,6 +22,9 @@ class ProductTemplate {
     this.bundleEnabled = true,
     this.bagEnabled = false,
     this.boxEnabled = false,
+    this.itemsPerBundle,
+    this.rawMaterialId,
+    this.sellingPrice,
   });
 
   factory ProductTemplate.fromJson(Map<String, dynamic> json) {
@@ -32,6 +38,9 @@ class ProductTemplate {
       bundleEnabled: json['bundle_enabled'] as bool? ?? true,
       bagEnabled: json['bag_enabled'] as bool? ?? false,
       boxEnabled: json['box_enabled'] as bool? ?? false,
+      itemsPerBundle: json['items_per_bundle'] as int?,
+      rawMaterialId: json['raw_material_id'] as String?,
+      sellingPrice: (json['selling_price'] as num?)?.toDouble(),
     );
   }
 

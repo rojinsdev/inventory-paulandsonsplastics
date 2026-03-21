@@ -39,6 +39,37 @@ class ProductionRequestsScreen extends ConsumerWidget {
       ),
       body: requestsAsync.when(
         data: (requests) {
+          final groupedRequests = <String, List<ProductionRequest>>{};
+          final standaloneRequests = <ProductionRequest>[];
+
+          for (final request in requests) {
+            if (request.salesOrderId != null) {
+              final groupId = request.orderNumber ?? request.salesOrderId!;
+              groupedRequests.putIfAbsent(groupId, () => []).add(request);
+            } else {
+              standaloneRequests.add(request);
+            }
+          }
+
+          if (requests.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.assignment_turned_in_outlined,
+                      size: 64, color: colorScheme.outline),
+                  const SizedBox(height: 16),
+                  Text('No pending requests',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('Factory is up to date!',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: colorScheme.outline)),
+                ],
+              ),
+            );
+          }
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -47,28 +78,16 @@ class ProductionRequestsScreen extends ConsumerWidget {
                   onDismiss: () =>
                       ref.read(_guideDismissedProvider.notifier).state = true,
                 ),
-              if (requests.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 100),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.assignment_turned_in_outlined,
-                            size: 64, color: colorScheme.outline),
-                        const SizedBox(height: 16),
-                        Text('No pending requests',
-                            style: theme.textTheme.titleMedium),
-                        const SizedBox(height: 8),
-                        Text('Factory is up to date!',
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: colorScheme.outline)),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                ...requests.map((request) => _RequestCard(request: request)),
+              for (final entry in groupedRequests.entries)
+                _OrderProductionCard(
+                  orderNumber: entry.key,
+                  requests: entry.value,
+                ),
+              if (standaloneRequests.isNotEmpty)
+                _OrderProductionCard(
+                  orderNumber: 'Individual Requests',
+                  requests: standaloneRequests,
+                ),
             ],
           );
         },
@@ -90,6 +109,291 @@ class ProductionRequestsScreen extends ConsumerWidget {
   }
 }
 
+class _OrderProductionCard extends StatelessWidget {
+  final String orderNumber;
+  final List<ProductionRequest> requests;
+
+  const _OrderProductionCard({
+    required this.orderNumber,
+    required this.requests,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 24),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Icon(Icons.assignment_outlined,
+                    size: 20, color: colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    orderNumber == 'Individual Requests'
+                        ? orderNumber
+                        : 'Order #${orderNumber.contains('-') ? orderNumber.split('-').last.toUpperCase() : orderNumber}',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: requests.length,
+            separatorBuilder: (context, index) =>
+                const Divider(height: 1, indent: 20, endIndent: 20),
+            itemBuilder: (context, index) =>
+                _RequestRow(request: requests[index]),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestRow extends ConsumerWidget {
+  final ProductionRequest request;
+
+  const _RequestRow({required this.request});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      request.productName,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    if (request.productSize != null ||
+                        request.productColor != null)
+                      Text(
+                        '${request.productSize ?? ''} ${request.productColor ?? ''}'
+                            .trim(),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              _StatusChip(status: request.status),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Target', style: theme.textTheme.labelSmall),
+                      Text(
+                        '${request.quantity} ${request.unitType.toUpperCase()}',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                VerticalDivider(color: colorScheme.outlineVariant),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('Stock', style: theme.textTheme.labelSmall),
+                      Text(
+                        '${request.availableStock} ${request.unitType.toUpperCase()}',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: request.isSatisfiable
+                              ? Colors.green.shade700
+                              : Colors.red.shade700,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!request.isSatisfiable && request.status != 'completed') ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 14, color: Colors.orange.shade900),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Produce items first to increase stock.',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => context.push('/production/submit'),
+                  style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                  child: const Text('Log Entry', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+            ),
+          ],
+          if (request.status == 'pending' || request.status == 'in_production') ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: request.status == 'pending'
+                  ? FilledButton.icon(
+                      onPressed: () async {
+                        try {
+                          await ref
+                              .read(productionRequestsProvider.notifier)
+                              .updateStatus(request.id, 'in_production');
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('Start Work'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    )
+                  : FilledButton.tonalIcon(
+                      onPressed: !request.isSatisfiable
+                          ? null
+                          : () async {
+                              try {
+                                await ref
+                                    .read(productionRequestsProvider.notifier)
+                                    .updateStatus(request.id, 'completed');
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text('Request completed')),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$e')),
+                                  );
+                                }
+                              }
+                            },
+                      icon: Icon(
+                          request.isSatisfiable
+                              ? Icons.check_circle_outline
+                              : Icons.lock_outline,
+                          size: 18),
+                      label: Text(
+                          request.isSatisfiable ? 'Complete' : 'Stock Locked'),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  final String status;
+  const _StatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _getStatusColor(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange.shade700;
+      case 'in_production':
+        return Colors.blue.shade700;
+      case 'completed':
+        return Colors.green.shade700;
+      case 'cancelled':
+        return Colors.red.shade700;
+      default:
+        return Colors.grey.shade700;
+    }
+  }
+}
+
 class _FlowGuide extends StatelessWidget {
   final VoidCallback onDismiss;
 
@@ -103,9 +407,9 @@ class _FlowGuide extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: colorScheme.primaryContainer.withValues(alpha: 0.2),
+        color: colorScheme.primaryContainer.withOpacity(0.1),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.primaryContainer),
+        border: Border.all(color: colorScheme.primaryContainer.withOpacity(0.5)),
       ),
       child: Stack(
         children: [
@@ -116,11 +420,11 @@ class _FlowGuide extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.auto_awesome, color: colorScheme.primary),
+                    Icon(Icons.auto_awesome, color: colorScheme.primary, size: 20),
                     const SizedBox(width: 12),
                     Text(
                       'Production Guide',
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,
                       ),
@@ -131,36 +435,32 @@ class _FlowGuide extends StatelessWidget {
                 const _GuideStep(
                   icon: Icons.shopping_cart_outlined,
                   title: 'New Orders',
-                  description:
-                      'Requests are automatically created from Sales Orders when stock is low.',
+                  description: 'Requests are created when stock is low.',
                 ),
                 const _GuideStep(
                   icon: Icons.play_circle_outline,
                   title: 'Start Work',
-                  description:
-                      'Tap "Start Work" to signal you have begun production on this request.',
+                  description: 'Signal you have begun production.',
                 ),
                 const _GuideStep(
                   icon: Icons.inventory_2_outlined,
-                  title: 'Produce Items',
-                  description:
-                      'Log your session in "Simple Production" to increase stock first.',
+                  title: 'Log Entry',
+                  description: 'Increase stock in "Simple Production".',
                 ),
                 const _GuideStep(
                   icon: Icons.check_circle_outline,
                   title: 'Complete',
-                  description:
-                      'Tap "Complete" to fulfill the backorder and notify the sales admin.',
+                  description: 'Fulfill backorder and notify admin.',
                   isLast: true,
                 ),
               ],
             ),
           ),
           Positioned(
-            top: 12,
-            right: 12,
+            top: 8,
+            right: 8,
             child: IconButton(
-              icon: const Icon(Icons.close, size: 20),
+              icon: const Icon(Icons.close, size: 18),
               onPressed: onDismiss,
               visualDensity: VisualDensity.compact,
             ),
@@ -195,30 +495,30 @@ class _GuideStep extends StatelessWidget {
         Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: colorScheme.surface,
                 shape: BoxShape.circle,
                 border: Border.all(color: colorScheme.primaryContainer),
               ),
-              child: Icon(icon, size: 16, color: colorScheme.primary),
+              child: Icon(icon, size: 14, color: colorScheme.primary),
             ),
             if (!isLast)
               Container(
-                width: 2,
-                height: 24,
-                color: colorScheme.primaryContainer,
+                width: 1.5,
+                height: 20,
+                color: colorScheme.primaryContainer.withOpacity(0.5),
               ),
           ],
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
-                style: theme.textTheme.labelLarge?.copyWith(
+                style: theme.textTheme.labelMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -226,289 +526,14 @@ class _GuideStep extends StatelessWidget {
                 description,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: colorScheme.onSurfaceVariant,
+                  fontSize: 10,
                 ),
               ),
-              if (!isLast) const SizedBox(height: 12),
+              if (!isLast) const SizedBox(height: 8),
             ],
           ),
         ),
       ],
     );
-  }
-}
-
-class _RequestCard extends ConsumerWidget {
-  final ProductionRequest request;
-
-  const _RequestCard({required this.request});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    request.productName,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ),
-                _StatusChip(status: request.status),
-              ],
-            ),
-            if (request.productSize != null ||
-                request.productColor != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                '${request.productSize ?? ''} ${request.productColor ?? ''}'
-                    .trim(),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color:
-                    colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: request.isSatisfiable
-                      ? Colors.transparent
-                      : Colors.orange.withValues(alpha: 0.5),
-                ),
-              ),
-              child: IntrinsicHeight(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Target Quantity',
-                              style: theme.textTheme.labelMedium),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${request.quantity} ${request.unitType.toUpperCase()}',
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              color: colorScheme.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    VerticalDivider(
-                      color: colorScheme.outlineVariant,
-                      thickness: 1,
-                      indent: 4,
-                      endIndent: 4,
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('Available Stock',
-                              style: theme.textTheme.labelMedium),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${request.availableStock} ${request.unitType.toUpperCase()}',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              color: request.isSatisfiable
-                                  ? Colors.green.shade700
-                                  : Colors.red.shade700,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          if (!request.isSatisfiable)
-                            Text(
-                              'Insufficient',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: Colors.red.shade700,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            if (!request.isSatisfiable && request.status != 'completed') ...[
-              const SizedBox(height: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline,
-                        size: 16, color: Colors.orange.shade900),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Produce items first to increase available stock.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.orange.shade900,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () => context.push('/production/submit'),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      child: const Text('Log Entry'),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (request.status == 'pending' ||
-                request.status == 'in_production') ...[
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  if (request.status == 'pending')
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          try {
-                            await ref
-                                .read(productionRequestsProvider.notifier)
-                                .updateStatus(request.id, 'in_production');
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error: $e')),
-                              );
-                            }
-                          }
-                        },
-                        icon: const Icon(Icons.play_arrow_rounded),
-                        label: const Text('Start Work'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: FilledButton.tonalIcon(
-                        onPressed: !request.isSatisfiable
-                            ? null
-                            : () async {
-                                try {
-                                  await ref
-                                      .read(productionRequestsProvider.notifier)
-                                      .updateStatus(request.id, 'completed');
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Request completed successfully')),
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('$e'),
-                                        backgroundColor:
-                                            theme.colorScheme.error,
-                                      ),
-                                    );
-                                  }
-                                }
-                              },
-                        icon: Icon(request.isSatisfiable
-                            ? Icons.check_circle_outline
-                            : Icons.lock_outline),
-                        label: Text(request.isSatisfiable
-                            ? 'Complete'
-                            : 'Stock Locked'),
-                        style: FilledButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final String status;
-  const _StatusChip({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _getStatusColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange.shade700;
-      case 'in_production':
-        return Colors.blue.shade700;
-      case 'completed':
-        return Colors.green.shade700;
-      case 'cancelled':
-        return Colors.red.shade700;
-      default:
-        return Colors.grey.shade700;
-    }
   }
 }

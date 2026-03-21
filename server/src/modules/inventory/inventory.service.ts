@@ -420,7 +420,7 @@ export class InventoryService {
                 *,
                 products(name, size, color, selling_price, factory_id)
             `)
-            .eq('state', 'finished')
+            .in('state', ['finished', 'packed', 'semi_finished'])
             .order('product_id');
 
         // Filter by factory if provided

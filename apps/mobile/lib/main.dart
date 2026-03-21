@@ -81,7 +81,7 @@ void main() async {
     );
 
     debugPrint('Initializing Notification Service (async)...');
-    container.read(notificationServiceProvider).initialize();
+    await container.read(notificationServiceProvider).initialize();
 
     debugPrint('Starting app...');
     runApp(

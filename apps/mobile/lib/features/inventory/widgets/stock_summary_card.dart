@@ -20,7 +20,6 @@ class StockSummaryCard extends StatefulWidget {
 }
 
 class _StockSummaryCardState extends State<StockSummaryCard> {
-  bool _showCaps = false;
 
   @override
   Widget build(BuildContext context) {
@@ -44,253 +43,65 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
       totalCaps += cap.quantity;
     }
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            colorScheme.primary,
-            colorScheme.primary.withValues(alpha: 0.8),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.primary.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(32),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: widget.onTap,
-            child: Stack(
-              children: [
-                // Subtle background pattern/glow
-                Positioned(
-                  right: -20,
-                  top: -20,
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      shape: BoxShape.circle,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: widget.onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Current Stock Summary',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onSurface,
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Total Inventory',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              color: colorScheme.onPrimary.withOpacity(0.9),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          // Tab Switcher
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: const EdgeInsets.all(4),
-                            child: Row(
-                              children: [
-                                _buildTab(context, 'Products', !_showCaps),
-                                _buildTab(context, 'Caps', _showCaps),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      if (!_showCaps) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: StockItem(
-                                label: 'Loose',
-                                value: totalSemiFinished,
-                                icon: Icons.grain_outlined,
-                                textColor: colorScheme.onPrimary,
-                              ),
-                            ),
-                            Container(
-                              width: 1,
-                              height: 40,
-                              color: colorScheme.onPrimary.withOpacity(0.2),
-                            ),
-                            Expanded(
-                              child: StockItem(
-                                label: 'Packets',
-                                value: totalPacked,
-                                icon: Icons.inventory_2_outlined,
-                                textColor: colorScheme.onPrimary,
-                              ),
-                            ),
-                            Container(
-                              width: 1,
-                              height: 40,
-                              color: colorScheme.onPrimary.withOpacity(0.2),
-                            ),
-                            Expanded(
-                              child: StockItem(
-                                label: 'Bundles',
-                                value: totalBundled,
-                                icon: Icons.layers_outlined,
-                                textColor: colorScheme.onPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (widget.stocks.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Container(
-                            height: 1,
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Top Product Variants',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.white.withOpacity(0.6),
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ...widget.stocks.take(3).map((stock) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        stock.displayName,
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '${stock.bundledQty}B / ${stock.packedQty}P',
-                                      style:
-                                          theme.textTheme.labelSmall?.copyWith(
-                                        color: Colors.white.withOpacity(0.8),
-                                        fontFamily: 'monospace',
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )),
-                        ],
-                      ] else ...[
-                        Center(
-                          child: StockItem(
-                            label: 'Total Loose Caps',
-                            value: totalCaps,
-                            icon: Icons.radio_button_checked,
-                            textColor: colorScheme.onPrimary,
-                          ),
-                        ),
-                        if (widget.capStocks.isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          Container(
-                            height: 1,
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Cap Breakdown',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.white.withOpacity(0.6),
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ...widget.capStocks.take(3).map((cap) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${cap.capName} (${cap.color ?? 'N/A'})',
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      cap.quantity.toString(),
-                                      style:
-                                          theme.textTheme.labelSmall?.copyWith(
-                                        color: Colors.white.withOpacity(0.8),
-                                        fontFamily: 'monospace',
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )),
-                        ],
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTab(BuildContext context, String label, bool isSelected) {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _showCaps = label == 'Caps';
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color:
-              isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color:
-                    isSelected ? Colors.white : Colors.white.withOpacity(0.6),
-                fontWeight: FontWeight.bold,
+                  Icon(Icons.inventory_2_outlined, 
+                       size: 20, 
+                       color: colorScheme.primary.withValues(alpha: 0.5)),
+                ],
               ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  StockItem(
+                    label: 'Loose',
+                    value: totalSemiFinished,
+                    icon: Icons.grain_outlined,
+                  ),
+                  StockItem(
+                    label: 'Packets',
+                    value: totalPacked,
+                    icon: Icons.inventory_2_outlined,
+                  ),
+                  StockItem(
+                    label: 'Bundles',
+                    value: totalBundled,
+                    icon: Icons.layers_outlined,
+                  ),
+                  StockItem(
+                    label: 'Caps',
+                    value: totalCaps,
+                    icon: Icons.radio_button_checked,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -301,35 +112,34 @@ class StockItem extends StatelessWidget {
   final String label;
   final int value;
   final IconData icon;
-  final Color textColor;
 
   const StockItem({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
-    required this.textColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     return Column(
       children: [
-        Icon(icon, size: 20, color: textColor.withOpacity(0.8)),
+        Icon(icon, size: 20, color: colorScheme.primary.withValues(alpha: 0.5)),
         const SizedBox(height: 8),
         Text(
           value.toString(),
           style: theme.textTheme.headlineSmall?.copyWith(
-            color: textColor,
+            color: colorScheme.onSurface,
             fontWeight: FontWeight.bold,
           ),
         ),
         Text(
           label,
           style: theme.textTheme.labelSmall?.copyWith(
-            color: textColor.withOpacity(0.7),
+            color: colorScheme.onSurfaceVariant,
             letterSpacing: 0.5,
           ),
         ),
@@ -348,9 +158,9 @@ class StockLoadingCard extends StatelessWidget {
     return Container(
       height: 160,
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.1)),
       ),
       child: const Center(
         child: CircularProgressIndicator(),
@@ -373,16 +183,16 @@ class StockErrorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: colorScheme.errorContainer.withOpacity(0.4),
+        color: colorScheme.errorContainer.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: colorScheme.error.withOpacity(0.2)),
+        border: Border.all(color: colorScheme.error.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: colorScheme.error.withOpacity(0.1),
+              color: colorScheme.error.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.error_outline, color: colorScheme.error),
@@ -416,7 +226,7 @@ class StockErrorCard extends StatelessWidget {
             onPressed: onRetry,
             icon: const Icon(Icons.refresh, size: 20),
             style: IconButton.styleFrom(
-              backgroundColor: colorScheme.error.withOpacity(0.1),
+              backgroundColor: colorScheme.error.withValues(alpha: 0.1),
               foregroundColor: colorScheme.error,
             ),
           ),
@@ -437,20 +247,20 @@ class StockEmptyCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.5)),
+        border: Border.all(color: colorScheme.outlineVariant.withValues(alpha: 0.1)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: colorScheme.primary.withOpacity(0.05),
+              color: colorScheme.primary.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(Icons.inventory_2_outlined,
-                color: colorScheme.primary.withOpacity(0.5)),
+                color: colorScheme.primary.withValues(alpha: 0.1)),
           ),
           const SizedBox(width: 16),
           Column(

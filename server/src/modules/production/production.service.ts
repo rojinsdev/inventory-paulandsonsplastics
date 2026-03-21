@@ -532,7 +532,8 @@ export class ProductionService {
             .from('production_requests')
             .select(`
                 *,
-                products (name, size, color, factory_id)
+                products (name, size, color, factory_id),
+                sales_orders!left(order_number)
             `)
             .order('created_at', { ascending: false });
 
@@ -566,16 +567,18 @@ export class ProductionService {
 
         return rawData.map(req => {
             const requiredState = stateMapping[req.unit_type];
-            const stock = stockData?.find(s =>
+            const matchingStock = stockData?.filter(s =>
                 s.product_id === req.product_id &&
                 s.state === requiredState &&
                 s.factory_id === req.factory_id
             );
+            
+            const totalStock = matchingStock?.reduce((sum, s) => sum + Number(s.quantity), 0) || 0;
 
             return {
                 ...req,
-                available_stock: stock?.quantity || 0,
-                is_satisfiable: (stock?.quantity || 0) >= req.quantity
+                available_stock: totalStock,
+                is_satisfiable: totalStock >= req.quantity
             };
         });
     }

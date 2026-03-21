@@ -12,124 +12,142 @@ class MasterDataRepository {
   MasterDataRepository(this._apiClient);
 
   Future<List<Machine>> getMachines() async {
-    final factoryId = await _apiClient.getFactoryId();
-    final endpoint = factoryId != null
-        ? '${ApiConstants.machines}?factory_id=$factoryId'
-        : ApiConstants.machines;
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.machines}?factory_id=$factoryId'
+          : ApiConstants.machines;
 
-    final response = await _apiClient.client.get(endpoint);
-    // Server returns array directly, not wrapped in {data: [...]}
-    final dynamic rawData = response.data;
-    List<dynamic> items = [];
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
 
-    if (rawData is List) {
-      items = rawData;
-    } else if (rawData is Map &&
-        rawData.containsKey('data') &&
-        rawData['data'] is List) {
-      items = rawData['data'];
-    } else {
-      throw Exception(
-          'Failed to load machines: Unexpected data format from server.');
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load machines: Unexpected data format from server.');
+      }
+
+      return items.map((e) => Machine.fromJson(e)).toList();
+    } catch (e) {
+      return []; // Return empty list rather than crashing
     }
-
-    return items.map((e) => Machine.fromJson(e)).toList();
   }
 
   Future<List<Product>> getProducts() async {
-    final factoryId = await _apiClient.getFactoryId();
-    final endpoint = factoryId != null
-        ? '${ApiConstants.products}?factory_id=$factoryId'
-        : ApiConstants.products;
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.products}?factory_id=$factoryId'
+          : ApiConstants.products;
 
-    final response = await _apiClient.client.get(endpoint);
-    // Server returns array directly, not wrapped in {data: [...]}
-    final dynamic rawData = response.data;
-    List<dynamic> items = [];
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
 
-    if (rawData is List) {
-      items = rawData;
-    } else if (rawData is Map &&
-        rawData.containsKey('data') &&
-        rawData['data'] is List) {
-      items = rawData['data'];
-    } else {
-      throw Exception(
-          'Failed to load products: Unexpected data format from server.');
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load products: Unexpected data format from server.');
+      }
+
+      return items.map((e) => Product.fromJson(e)).toList();
+    } catch (e) {
+      return [];
     }
-
-    return items.map((e) => Product.fromJson(e)).toList();
   }
 
   Future<List<ProductTemplate>> getProductTemplates() async {
-    final factoryId = await _apiClient.getFactoryId();
-    final endpoint = factoryId != null
-        ? '${ApiConstants.productTemplates}?factory_id=$factoryId'
-        : ApiConstants.productTemplates;
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.productTemplates}?factory_id=$factoryId'
+          : ApiConstants.productTemplates;
 
-    final response = await _apiClient.client.get(endpoint);
-    final dynamic rawData = response.data;
-    List<dynamic> items = [];
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
 
-    if (rawData is List) {
-      items = rawData;
-    } else if (rawData is Map &&
-        rawData.containsKey('data') &&
-        rawData['data'] is List) {
-      items = rawData['data'];
-    } else {
-      throw Exception(
-          'Failed to load product templates: Unexpected data format from server.');
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load product templates: Unexpected data format from server.');
+      }
+
+      return items.map((e) => ProductTemplate.fromJson(e)).toList();
+    } catch (e) {
+      return [];
     }
-
-    return items.map((e) => ProductTemplate.fromJson(e)).toList();
   }
 
   Future<List<Cap>> getCaps() async {
-    final factoryId = await _apiClient.getFactoryId();
-    final endpoint = factoryId != null
-        ? '${ApiConstants.caps}?factory_id=$factoryId'
-        : ApiConstants.caps;
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.caps}?factory_id=$factoryId'
+          : ApiConstants.caps;
 
-    final response = await _apiClient.client.get(endpoint);
-    final dynamic rawData = response.data;
-    List<dynamic> items = [];
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
 
-    if (rawData is List) {
-      items = rawData;
-    } else if (rawData is Map &&
-        rawData.containsKey('data') &&
-        rawData['data'] is List) {
-      items = rawData['data'];
-    } else {
-      throw Exception(
-          'Failed to load caps: Unexpected data format from server.');
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load caps: Unexpected data format from server.');
+      }
+
+      return items.map((e) => Cap.fromJson(e)).toList();
+    } catch (e) {
+      return [];
     }
-
-    return items.map((e) => Cap.fromJson(e)).toList();
   }
 
   Future<List<CapTemplate>> getCapTemplates() async {
-    final factoryId = await _apiClient.getFactoryId();
-    final endpoint = factoryId != null
-        ? '${ApiConstants.capTemplates}?factory_id=$factoryId'
-        : ApiConstants.capTemplates;
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.capTemplates}?factory_id=$factoryId'
+          : ApiConstants.capTemplates;
 
-    final response = await _apiClient.client.get(endpoint);
-    final dynamic rawData = response.data;
-    List<dynamic> items = [];
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
 
-    if (rawData is List) {
-      items = rawData;
-    } else if (rawData is Map &&
-        rawData.containsKey('data') &&
-        rawData['data'] is List) {
-      items = rawData['data'];
-    } else {
-      throw Exception(
-          'Failed to load cap templates: Unexpected data format from server.');
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load cap templates: Unexpected data format from server.');
+      }
+
+      return items.map((e) => CapTemplate.fromJson(e)).toList();
+    } catch (e) {
+      return [];
     }
-
-    return items.map((e) => CapTemplate.fromJson(e)).toList();
   }
 }

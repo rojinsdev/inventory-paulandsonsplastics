@@ -147,7 +147,7 @@ class AppTheme {
       // Navigation Bar - Material 3 Expressive
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: isDark ? deepZinc : colorScheme.surface,
-        indicatorColor: colorScheme.primary.withOpacity(0.1),
+        indicatorColor: colorScheme.primary.withValues(alpha: 0.1),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         height: 85,
         iconTheme: WidgetStateProperty.resolveWith((states) {

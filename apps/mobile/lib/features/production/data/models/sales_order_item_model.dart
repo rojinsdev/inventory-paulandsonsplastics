@@ -11,6 +11,7 @@ class SalesOrderItem {
   final bool isBackordered;
   final DateTime? preparedAt;
   final DateTime? deliveryDate;
+  final String? orderNumber;
   final String? notes;
 
   SalesOrderItem({
@@ -26,6 +27,7 @@ class SalesOrderItem {
     required this.isBackordered,
     this.preparedAt,
     this.deliveryDate,
+    this.orderNumber,
     this.notes,
   });
 
@@ -41,7 +43,10 @@ class SalesOrderItem {
   factory SalesOrderItem.fromOrderJson(
       Map<String, dynamic> orderJson, Map<String, dynamic> itemJson) {
     final product = _unwrapJoin(itemJson['products']);
-    final customer = _unwrapJoin(orderJson['customers']);
+    final customer = _unwrapJoin(orderJson['customer'] ?? 
+                             orderJson['customers'] ?? 
+                             itemJson['sales_orders']?['customer'] ?? 
+                             itemJson['sales_orders']?['customers']);
 
     return SalesOrderItem(
       id: (itemJson['id'] ?? '') as String,
@@ -60,6 +65,7 @@ class SalesOrderItem {
       deliveryDate: orderJson['delivery_date'] != null
           ? DateTime.parse(orderJson['delivery_date'] as String)
           : null,
+      orderNumber: (orderJson['order_number'] ?? '') as String?,
       notes: orderJson['notes'] as String?,
     );
   }

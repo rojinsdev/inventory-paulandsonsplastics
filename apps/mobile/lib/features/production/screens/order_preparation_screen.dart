@@ -49,9 +49,14 @@ class _OrderPreparationScreenState
       ),
       body: itemsAsync.when(
         data: (items) {
-          final pendingItems = items.where((item) => !item.isPrepared).toList();
+          final groupedItems = <String, List<SalesOrderItem>>{};
+          for (final item in items) {
+            if (!item.isPrepared) {
+              groupedItems.putIfAbsent(item.orderId, () => []).add(item);
+            }
+          }
 
-          if (pendingItems.isEmpty) {
+          if (groupedItems.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -70,13 +75,18 @@ class _OrderPreparationScreenState
             );
           }
 
-          return ListView.builder(
+          return ListView(
             padding: const EdgeInsets.all(16),
-            itemCount: pendingItems.length,
-            itemBuilder: (context, index) {
-              final item = pendingItems[index];
-              return _PreparationCard(item: item);
-            },
+            children: [
+              for (final entry in groupedItems.entries)
+                _OrderPreparedCard(
+                  orderId: entry.key,
+                  orderNumber: entry.value.first.orderNumber,
+                  customerName: entry.value.first.customerName,
+                  deliveryDate: entry.value.first.deliveryDate,
+                  items: entry.value,
+                ),
+            ],
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -98,52 +108,60 @@ class _OrderPreparationScreenState
   }
 }
 
-class _PreparationCard extends ConsumerWidget {
-  final SalesOrderItem item;
+class _OrderPreparedCard extends ConsumerWidget {
+  final String orderId;
+  final String? orderNumber;
+  final String customerName;
+  final DateTime? deliveryDate;
+  final List<SalesOrderItem> items;
 
-  const _PreparationCard({required this.item});
+  const _OrderPreparedCard({
+    required this.orderId,
+    this.orderNumber,
+    required this.customerName,
+    this.deliveryDate,
+    required this.items,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final user = ref.watch(authStateProvider).value;
 
     String deliveryStr = 'ASAP';
-    if (item.deliveryDate != null) {
-      deliveryStr = DateFormat('MMM dd').format(item.deliveryDate!);
+    if (deliveryDate != null) {
+      deliveryStr = DateFormat('MMM dd').format(deliveryDate!);
     }
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 20),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
         side: BorderSide(color: colorScheme.outlineVariant),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        item.customerName,
+                        'Order #${orderNumber ?? orderId.split('-').last.toUpperCase()}',
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: colorScheme.primary,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
-                        item.productName,
+                        customerName,
                         style: theme.textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
-                          letterSpacing: -0.5,
                         ),
                       ),
                     ],
@@ -152,122 +170,152 @@ class _PreparationCard extends ConsumerWidget {
                 _DeliveryIndicator(dateStr: deliveryStr),
               ],
             ),
-            if (item.isBackordered) ...[
-              const SizedBox(height: 8),
+          ),
+          const Divider(height: 1),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            separatorBuilder: (context, index) =>
+                const Divider(height: 1, indent: 20, endIndent: 20),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _ItemRow(item: item);
+            },
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _ItemRow extends ConsumerWidget {
+  final SalesOrderItem item;
+
+  const _ItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final user = ref.watch(authStateProvider).value;
+
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.productName,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (item.productSize != null || item.productColor != null)
+                      Text(
+                        '${item.productSize ?? ''} ${item.productColor ?? ''}'
+                            .trim(),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: colorScheme.secondaryContainer.withOpacity(0.3),
                   borderRadius: BorderRadius.circular(8),
-                  border:
-                      Border.all(color: Colors.orange.withValues(alpha: 0.5)),
                 ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.warning_amber_rounded,
-                        size: 14, color: Colors.orange),
-                    SizedBox(width: 4),
-                    Text(
-                      'Backordered - Awaiting Production',
-                      style: TextStyle(
-                        color: Colors.orange,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  '${item.quantity} ${item.unitType}',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
+          ),
+          if (item.isBackordered) ...[
             const SizedBox(height: 8),
-            Text(
-              '${item.productSize ?? ''} ${item.productColor ?? ''}'.trim(),
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: colorScheme.secondaryContainer.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.shopping_bag_outlined, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Quantity: ${item.quantity} ${item.unitType}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
+            Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded,
+                    size: 14, color: Colors.orange),
+                const SizedBox(width: 4),
+                Text(
+                  'Awaiting Production',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
                   ),
-                  const Spacer(),
-                ],
-              ),
-            ),
-            if (item.notes != null && item.notes!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.notes, size: 16, color: colorScheme.outline),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      item.notes!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: item.isBackordered
-                    ? null
-                    : () async {
-                        try {
-                          await ref
-                              .read(pendingOrdersProvider.notifier)
-                              .prepareItem(
-                                item.id,
-                                factoryId: user?.factoryId,
-                              );
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                  content: Text('Item marked as prepared')),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
-                        }
-                      },
-                icon: Icon(item.isBackordered
-                    ? Icons.hourglass_empty
-                    : Icons.check_circle_outline),
-                label: Text(
-                    item.isBackordered ? 'Awaiting Stock' : 'Mark as Prepared'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
                 ),
+              ],
+            ),
+          ],
+          if (item.notes != null && item.notes!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Notes: ${item.notes}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontStyle: FontStyle.italic,
               ),
             ),
           ],
-        ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: item.isBackordered
+                  ? null
+                  : () async {
+                      try {
+                        await ref
+                            .read(pendingOrdersProvider.notifier)
+                            .prepareItem(
+                              item.id,
+                              factoryId: user?.factoryId,
+                            );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Item marked as prepared')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
+                        }
+                      }
+                    },
+              icon: Icon(
+                item.isBackordered
+                    ? Icons.hourglass_empty
+                    : Icons.check_circle_outline,
+                size: 18,
+              ),
+              label: Text(
+                  item.isBackordered ? 'Awaiting Stock' : 'Mark as Prepared'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

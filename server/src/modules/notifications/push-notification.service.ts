@@ -108,9 +108,12 @@ export class PushNotificationService {
                 return;
             }
 
+            logger.info('Found profiles for role', { count: profiles?.length, role, factoryId });
+
             if (!profiles || profiles.length === 0) return;
 
             const userIds = profiles.map(p => p.id);
+            logger.info('Extracted userIds for role', { userIds, role });
             await this.sendToUsers(userIds, payload);
         } catch (error) {
             logger.error('Error in sendToRole', { error, role, factoryId });

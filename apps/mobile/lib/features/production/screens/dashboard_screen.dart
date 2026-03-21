@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../inventory/providers/inventory_provider.dart';
-import '../../inventory/widgets/stock_summary_card.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -14,12 +13,11 @@ class DashboardScreen extends ConsumerWidget {
     final user = authState.value;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final stockAsync = ref.watch(inventoryStockProvider);
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(inventoryStockProvider);
+          // Add refresh logic if needed for other providers
         },
         child: CustomScrollView(
           slivers: [
@@ -59,39 +57,10 @@ class DashboardScreen extends ConsumerWidget {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
 
-                    // Monitoring Section
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            'Monitoring',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        stockAsync.when(
-                          data: (stocks) => stocks.isEmpty
-                              ? const StockEmptyCard()
-                              : StockSummaryCard(
-                                  stocks: stocks,
-                                  onTap: () => context.push('/stock-details'),
-                                ),
-                          loading: () => const StockLoadingCard(),
-                          error: (err, stack) => StockErrorCard(
-                            error: err.toString(),
-                            onRetry: () =>
-                                ref.invalidate(inventoryStockProvider),
-                          ),
-                        ),
-                      ],
-                    ),
+                    // Date, Time and Shift Info
+                    const _ShiftStatusCard(),
 
                     const SizedBox(height: 32),
 
@@ -223,6 +192,110 @@ class _ExpressiveCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ShiftStatusCard extends StatelessWidget {
+  const _ShiftStatusCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return StreamBuilder<DateTime>(
+      stream: Stream.periodic(const Duration(seconds: 1), (_) => DateTime.now()),
+      initialData: DateTime.now(),
+      builder: (context, snapshot) {
+        final now = snapshot.data!;
+        final dateStr = DateFormat('EEEE, d MMMM yyyy').format(now);
+        final timeStr = DateFormat('HH:mm:ss').format(now);
+        
+        final hour = now.hour;
+        int shiftNumber;
+        String shiftTimeRange;
+        
+        // Shift 1: 08:00 to 19:59 (8 AM to 7:59 PM)
+        // Shift 2: 20:00 to 07:59 (8 PM to 7:59 AM)
+        if (hour >= 8 && hour < 20) {
+          shiftNumber = 1;
+          shiftTimeRange = '08:00 - 20:00';
+        } else {
+          shiftNumber = 2;
+          shiftTimeRange = '20:00 - 08:00';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: colorScheme.outlineVariant.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        dateStr,
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        timeStr,
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
+                          letterSpacing: -1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'SHIFT $shiftNumber',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          shiftTimeRange,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colorScheme.primary.withValues(alpha: 0.6),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

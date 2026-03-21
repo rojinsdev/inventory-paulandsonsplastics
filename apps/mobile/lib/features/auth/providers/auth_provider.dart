@@ -104,9 +104,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> with WidgetsBindingO
     try {
       final user = await _repository.login(email, password);
       state = AsyncValue.data(user);
-      if (user != null) {
-        _startRefreshTimer();
-      }
+      _startRefreshTimer();
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }

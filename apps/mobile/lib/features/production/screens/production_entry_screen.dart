@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../production/providers/master_data_provider.dart';
 import '../../production/providers/production_provider.dart';
+import '../data/models/machine_model.dart';
+import '../data/models/product_template_model.dart';
 
 class ProductionEntryScreen extends ConsumerStatefulWidget {
   const ProductionEntryScreen({super.key});
@@ -75,38 +77,44 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
         shiftNumber: _shiftNumber,
       );
 
-      if (lastEndTime != null && mounted) {
+      if (lastEndTime != null && mounted && lastEndTime.contains(':')) {
         final parts = lastEndTime.split(':');
-        setState(() {
-          _startTime = TimeOfDay(
-            hour: int.parse(parts[0]),
-            minute: int.parse(parts[1]),
-          );
+        try {
+          final hour = int.tryParse(parts[0]);
+          final minute = int.tryParse(parts[1]);
+          
+          if (hour != null && minute != null) {
+            setState(() {
+              _startTime = TimeOfDay(hour: hour, minute: minute);
 
-          // Auto-adjust end time if it's now before or same as start time
-          final startMinutes = _startTime.hour * 60 + _startTime.minute;
-          var endMinutes = _endTime.hour * 60 + _endTime.minute;
+              // Auto-adjust end time if it's now before or same as start time
+              final startMinutes = _startTime.hour * 60 + _startTime.minute;
+              var endMinutes = _endTime.hour * 60 + _endTime.minute;
 
-          if (_shiftNumber == 2 && endMinutes < 480) {
-            endMinutes += 24 * 60; // Handle overnight for comparison
+              if (_shiftNumber == 2 && endMinutes < 480) {
+                endMinutes += 24 * 60; // Handle overnight for comparison
+              }
+
+              final effectiveStartMinutes =
+                  (_shiftNumber == 2 && startMinutes < 480)
+                      ? startMinutes + 24 * 60
+                      : startMinutes;
+
+              if (effectiveStartMinutes >= endMinutes) {
+                // Move end time to 1 hour after start, or shift end
+                int newEndHour = (_startTime.hour + 1) % 24;
+                if (_shiftNumber == 1 && newEndHour > 20) newEndHour = 20;
+                if (_shiftNumber == 2 && newEndHour > 8 && newEndHour < 20) {
+                  newEndHour = 8;
+                }
+
+                _endTime = TimeOfDay(hour: newEndHour, minute: _startTime.minute);
+              }
+            });
           }
-
-          final effectiveStartMinutes =
-              (_shiftNumber == 2 && startMinutes < 480)
-                  ? startMinutes + 24 * 60
-                  : startMinutes;
-
-          if (effectiveStartMinutes >= endMinutes) {
-            // Move end time to 1 hour after start, or shift end
-            int newEndHour = (_startTime.hour + 1) % 24;
-            if (_shiftNumber == 1 && newEndHour > 20) newEndHour = 20;
-            if (_shiftNumber == 2 && newEndHour > 8 && newEndHour < 20) {
-              newEndHour = 8;
-            }
-
-            _endTime = TimeOfDay(hour: newEndHour, minute: _startTime.minute);
-          }
-        });
+        } catch (e) {
+          debugPrint('Error parsing last session time: $e');
+        }
       }
     } catch (e) {
       // Ignore background fetch errors
@@ -124,6 +132,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
       setState(() {
         _selectedDate = picked;
       });
+      _fetchLastSession();
     }
   }
 
@@ -199,11 +208,11 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
         return;
       }
 
-      final actualCycleTime = double.parse(_actualCycleTimeController.text);
+      final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0.0;
       final totalProduced =
-          _isWeightBased ? null : int.parse(_totalProducedController.text);
+          _isWeightBased ? null : (int.tryParse(_totalProducedController.text) ?? 0);
       final damagedCount =
-          _isWeightBased ? 0 : int.tryParse(_damagedCountController.text) ?? 0;
+          _isWeightBased ? 0 : (int.tryParse(_damagedCountController.text) ?? 0);
       final actualQuantity =
           totalProduced != null ? totalProduced - damagedCount : 0;
 
@@ -224,16 +233,16 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 '${_endTime.hour.toString().padLeft(2, '0')}:${_endTime.minute.toString().padLeft(2, '0')}',
             totalProduced: _isWeightBased
                 ? null
-                : int.parse(_totalProducedController.text),
+                : (int.tryParse(_totalProducedController.text) ?? 0),
             damagedCount: _isWeightBased
                 ? null
                 : (int.tryParse(_damagedCountController.text) ?? 0),
             totalWeightKg: _isWeightBased
-                ? double.parse(_totalWeightController.text)
+                ? (double.tryParse(_totalWeightController.text) ?? 0.0)
                 : null,
             actualCycleTimeSeconds:
-                double.parse(_actualCycleTimeController.text),
-            actualWeightGrams: double.parse(_actualWeightController.text),
+                double.tryParse(_actualCycleTimeController.text) ?? 0.0,
+            actualWeightGrams: (double.tryParse(_actualWeightController.text) ?? 0.0),
             downtimeMinutes: downtimeMinutes,
             downtimeReason:
                 downtimeMinutes > 30 ? _downtimeReasonController.text : null,
@@ -580,23 +589,40 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
 
               // Machine Dropdown
               machinesAsync.when(
-                data: (machines) => DropdownButtonFormField<String>(
-                  initialValue: _selectedMachineId,
-                  decoration: const InputDecoration(
-                    labelText: 'Machine',
-                    prefixIcon: Icon(Icons.precision_manufacturing_outlined),
-                  ),
-                  items: machines
-                      .where((m) => m.status == 'active')
-                      .map((m) =>
-                          DropdownMenuItem(value: m.id, child: Text(m.name)))
-                      .toList(),
-                  onChanged: (value) {
-                    setState(() => _selectedMachineId = value);
-                    _fetchLastSession();
-                  },
-                  validator: (value) => value == null ? 'Required' : null,
-                ),
+                data: (machines) {
+                  final activeMachines = machines.where((m) => m.status == 'active').toList();
+                  // Ensure _selectedMachineId is valid for the current list
+                  final safeMachineId = activeMachines.any((m) => m.id == _selectedMachineId) 
+                      ? _selectedMachineId 
+                      : null;
+
+                  return DropdownButtonFormField<String>(
+                    initialValue: safeMachineId,
+                    decoration: const InputDecoration(
+                      labelText: 'Machine',
+                      prefixIcon: Icon(Icons.precision_manufacturing_outlined),
+                    ),
+                    items: activeMachines
+                        .map((m) =>
+                            DropdownMenuItem(value: m.id, child: Text(m.name)))
+                        .toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedMachineId = value;
+                        _selectedTemplateId = null;
+                        _selectedProductId = null;
+                        _actualCycleTimeController.clear();
+                        _actualWeightController.clear();
+                        _totalProducedController.clear();
+                        _damagedCountController.clear();
+                        _totalWeightController.clear();
+                        _downtimeReasonController.clear();
+                      });
+                      _fetchLastSession();
+                    },
+                    validator: (value) => value == null ? 'Required' : null,
+                  );
+                },
                 loading: () => const LinearProgressIndicator(),
                 error: (error, _) => Text('Error: $error',
                     style: const TextStyle(color: Colors.red)),
@@ -605,43 +631,131 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
 
               // Template Dropdown
               ref.watch(productTemplatesProvider).when(
-                    data: (templates) => DropdownButtonFormField<String>(
-                      initialValue: _selectedTemplateId,
-                      decoration: const InputDecoration(
-                        labelText: 'Product Template',
-                        prefixIcon: Icon(Icons.category_outlined),
+                data: (templates) {
+                  // Filter templates based on selected machine
+                  List<ProductTemplate> filteredTemplates = templates;
+                  if (_selectedMachineId != null) {
+                    final machines = machinesAsync.value ?? [];
+                    final selectedMachine = machines.firstWhere(
+                      (m) => m.id == _selectedMachineId,
+                      orElse: () => Machine(
+                        id: '',
+                        name: '',
+                        type: 'extruder',
+                        status: 'inactive',
                       ),
-                      items: templates
-                          .map((t) => DropdownMenuItem(
-                                value: t.id,
-                                child: Text(t.displayName),
-                              ))
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedTemplateId = value;
-                          _selectedProductId =
-                              null; // Clear variant on template change
-                        });
-                      },
-                      validator: (value) => value == null ? 'Required' : null,
-                    ),
-                    loading: () => const LinearProgressIndicator(),
-                    error: (error, _) => Text('Error: $error',
-                        style: const TextStyle(color: Colors.red)),
-                  ),
+                    );
+                    if (selectedMachine.id.isNotEmpty) {
+                      filteredTemplates = templates
+                          .where((t) => selectedMachine.allowedTemplateIds
+                              .contains(t.id))
+                          .toList();
+                    }
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: filteredTemplates.any((t) => t.id == _selectedTemplateId) 
+                            ? _selectedTemplateId 
+                            : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Product Template',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                        items: filteredTemplates
+                            .map((t) => DropdownMenuItem(
+                                  value: t.id,
+                                  child: Text(t.displayName),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedTemplateId = value;
+                            _selectedProductId = null;
+                            
+                            if (value != null) {
+                              final template = filteredTemplates.firstWhere(
+                                (t) => t.id == value,
+                                orElse: () => filteredTemplates.isNotEmpty 
+                                    ? filteredTemplates.first 
+                                    : templates.first, // templates is from .when data
+                              );
+                              _actualWeightController.text = template.weightGrams.toString();
+                              
+                              final machines = machinesAsync.value ?? [];
+                              final activeMachines = machines.where((m) => m.status == 'active').toList();
+                              
+                              if (machines.isEmpty) return; // Cannot find machine if list is empty
+
+                              final selectedMachine = machines.firstWhere(
+                                (m) => m.id == _selectedMachineId,
+                                orElse: () => activeMachines.isNotEmpty 
+                                    ? activeMachines.first 
+                                    : machines.first,
+                              );
+                              final cycleTime = selectedMachine.templateCycleTimes[value];
+                              if (cycleTime != null) {
+                                _actualCycleTimeController.text = cycleTime.toString();
+                              }
+                            }
+                          });
+                        },
+                        validator: (value) => value == null ? 'Required' : null,
+                      ),
+                      if (_selectedMachineId != null &&
+                          filteredTemplates.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0, left: 12.0),
+                          child: Text(
+                            'Note: No templates configured for this machine.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      if (_selectedMachineId != null &&
+                          filteredTemplates.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0, left: 12.0),
+                          child: Text(
+                            'Showing templates linked to this machine.',
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+                loading: () => const LinearProgressIndicator(),
+                error: (error, _) => Text('Error: $error',
+                    style: const TextStyle(color: Colors.red)),
+              ),
               const SizedBox(height: 24),
 
               // Color Variant Dropdown (Visible only if Template is selected)
               if (_selectedTemplateId != null) ...[
                 ref.watch(productTemplatesProvider).when(
                       data: (templates) {
-                        final selectedTemplate = templates
-                            .firstWhere((t) => t.id == _selectedTemplateId);
+                        final selectedTemplate = templates.any((t) => t.id == _selectedTemplateId)
+                            ? templates.firstWhere((t) => t.id == _selectedTemplateId)
+                            : null;
+                        
+                        // If for some reason the selected template is not in the list, hide the variant dropdown
+                        if (selectedTemplate == null) return const SizedBox.shrink();
+
                         final variants = selectedTemplate.variants;
 
+                        final safeProductId = variants.any((v) => v.id == _selectedProductId)
+                            ? _selectedProductId
+                            : null;
+
                         return DropdownButtonFormField<String>(
-                          initialValue: _selectedProductId,
+                          initialValue: safeProductId,
                           decoration: const InputDecoration(
                             labelText: 'Color Variant',
                             prefixIcon: Icon(Icons.palette_outlined),
@@ -655,10 +769,17 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                           onChanged: (value) {
                             setState(() {
                               _selectedProductId = value;
-                              final product =
-                                  variants.firstWhere((v) => v.id == value);
+                              final variant = variants.firstWhere(
+                                (v) => v.id == value,
+                                orElse: () => variants.isNotEmpty ? variants.first : selectedTemplate.variants.first,
+                              );
                               _isWeightBased =
-                                  product.countingMethod == 'weight_based';
+                                  variant.countingMethod == 'weight_based';
+                              
+                              // Use variant weight if it differs or to be sure
+                              if (variant.weightGrams > 0) {
+                                _actualWeightController.text = variant.weightGrams.toString();
+                              }
                             });
                           },
                           validator: (value) =>
@@ -744,14 +865,40 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
               const SizedBox(height: 24),
 
               // Downtime Reason (conditional)
-              TextFormField(
-                controller: _downtimeReasonController,
-                decoration: const InputDecoration(
-                  labelText: 'Downtime Reason (if > 30 mins)',
-                  prefixIcon: Icon(Icons.report_problem_outlined),
-                  hintText: 'Die Change, Power Cut, Maintenance, Other',
-                ),
-                maxLines: 2,
+              Builder(
+                builder: (context) {
+                  // Calculate downtime for local UI state
+                  final shiftHours = _calculateShiftDuration();
+                  final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
+                  final totalProduced = int.tryParse(_totalProducedController.text) ?? 0;
+                  final damagedCount = int.tryParse(_damagedCountController.text) ?? 0;
+                  final actualQuantity = totalProduced - damagedCount;
+                  
+                  final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+                  final shiftDurationSeconds = shiftHours * 3600;
+                  final downtimeMinutes = ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440);
+                  
+                  final isRequired = downtimeMinutes > 30;
+
+                  return TextFormField(
+                    controller: _downtimeReasonController,
+                    enabled: isRequired || _downtimeReasonController.text.isNotEmpty,
+                    decoration: InputDecoration(
+                      labelText: isRequired ? 'Downtime Reason (Required: ${downtimeMinutes}m)' : 'Downtime Reason (Optional: ${downtimeMinutes}m)',
+                      prefixIcon: const Icon(Icons.report_problem_outlined),
+                      hintText: 'Die Change, Power Cut, Maintenance, Other',
+                      helperText: isRequired ? 'Submission requires a reason for downtime > 30 mins' : null,
+                      helperStyle: TextStyle(color: isRequired ? Theme.of(context).colorScheme.error : null),
+                    ),
+                    maxLines: 2,
+                    validator: (value) {
+                      if (isRequired && (value == null || value.trim().isEmpty)) {
+                        return 'Downtime is ${downtimeMinutes}m. Reason is required.';
+                      }
+                      return null;
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 48),
 

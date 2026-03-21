@@ -98,11 +98,9 @@ export class SalesOrderService {
         // 3. Notify Product Managers of all factories involved in this order
         const factoryIds = new Set<string>();
         for (const item of data.items) {
-            const { data: p, error: productFactoryError } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
-            if (productFactoryError) {
-                logger.warn('Could not fetch factory_id for product during notification setup', { productId: item.product_id, error: productFactoryError.message });
-            }
-            if (p?.factory_id) factoryIds.add(p.factory_id);
+            const { data: p } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
+            const fid = p?.factory_id || MAIN_FACTORY_ID;
+            factoryIds.add(fid);
         }
 
         for (const factoryId of factoryIds) {
@@ -171,19 +169,34 @@ export class SalesOrderService {
             'bundle': 'finished'
         };
 
+        const targetState = stateMapping[unitType] || 'finished';
+
         const { data: stock, error } = await supabase
             .from('stock_balances')
-            .select('quantity')
+            .select('quantity, unit_type, factory_id')
             .eq('product_id', productId)
-            .eq('state', stateMapping[unitType] || 'finished')
-            .eq('factory_id', factoryId)
-            .single();
+            .eq('state', targetState)
+            .or(`factory_id.eq.${factoryId},factory_id.is.null`);
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is valid for 0 stock
+        if (error) {
             logger.error('Stock fetch error in getAvailableStock', { error: error.message, productId, unitType, factoryId });
             throw new Error(`Stock fetch error: ${error.message}`);
         }
-        return stock?.quantity || 0;
+        
+        const total = stock?.reduce((sum, item) => {
+            // If we're looking for a specific unit type, skip others
+            if (item.unit_type && item.unit_type !== unitType) {
+                return sum;
+            }
+            return sum + Number(item.quantity);
+        }, 0) || 0;
+
+        logger.info(`[Stock Check] Product: ${productId}, Unit: ${unitType}, State: ${targetState}, Factory: ${factoryId}, Total: ${total}`, {
+            rowCount: stock?.length,
+            rows: stock?.map(s => `Qty: ${s.quantity}, Unit: ${s.unit_type}, Fact: ${s.factory_id}`)
+        });
+
+        return total;
     }
 
     private async reserveStock(productId: string, quantity: number, unitType: string, factoryId: string) {
@@ -316,10 +329,11 @@ export class SalesOrderService {
             .eq('product_id', productId)
             .eq('state', 'reserved')
             .eq('factory_id', factoryId)
+            .eq('unit_type', unitType)
             .single();
 
         if (fetchReservedError && fetchReservedError.code !== 'PGRST116') {
-            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchReservedError.message, productId, factoryId });
+            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchReservedError.message, productId, factoryId, unitType });
             throw new Error(`Failed to fetch reserved stock: ${fetchReservedError.message}`);
         }
 
@@ -327,12 +341,13 @@ export class SalesOrderService {
             product_id: productId,
             state: 'reserved',
             factory_id: factoryId,
+            unit_type: unitType,
             quantity: (reservedStock?.quantity || 0) - quantity,
             last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
 
         if (unreserveError) {
-            logger.error('Failed to deduct from reserved stock during unreservation', { error: unreserveError.message, productId, quantity, factoryId });
+            logger.error('Failed to deduct from reserved stock during unreservation', { error: unreserveError.message, productId, quantity, factoryId, unitType });
             throw new Error(`Failed to update reserved stock: ${unreserveError.message}`);
         }
 
@@ -343,10 +358,11 @@ export class SalesOrderService {
             .eq('product_id', productId)
             .eq('state', targetState)
             .eq('factory_id', factoryId)
+            .eq('unit_type', unitType)
             .single();
 
         if (fetchSourceError && fetchSourceError.code !== 'PGRST116') {
-            logger.error('Failed to fetch source stock for unreservation', { error: fetchSourceError.message, productId, factoryId, targetState });
+            logger.error('Failed to fetch source stock for unreservation', { error: fetchSourceError.message, productId, factoryId, targetState, unitType });
             throw new Error(`Failed to fetch source stock: ${fetchSourceError.message}`);
         }
 
@@ -354,12 +370,13 @@ export class SalesOrderService {
             product_id: productId,
             state: targetState,
             factory_id: factoryId,
+            unit_type: unitType,
             quantity: (sourceStock?.quantity || 0) + quantity,
             last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
 
         if (addBackError) {
-            logger.error('Failed to add back to source stock during unreservation', { error: addBackError.message, productId, quantity, factoryId, targetState });
+            logger.error('Failed to add back to source stock during unreservation', { error: addBackError.message, productId, quantity, factoryId, targetState, unitType });
             throw new Error(`Failed to update source stock: ${addBackError.message}`);
         }
 
@@ -372,7 +389,7 @@ export class SalesOrderService {
         logger.info('Stock unreserved successfully', { productId, quantity, unitType, factoryId });
     }
 
-    private async deliverStock(productId: string, quantity: number, factoryId: string) {
+    private async deliverStock(productId: string, quantity: number, unitType: string, factoryId: string) {
         // Permanently remove from reserved (stock is sold)
         const { data: reservedStock, error: fetchReservedError } = await supabase
             .from('stock_balances')
@@ -380,10 +397,11 @@ export class SalesOrderService {
             .eq('product_id', productId)
             .eq('state', 'reserved')
             .eq('factory_id', factoryId)
+            .eq('unit_type', unitType)
             .single();
 
         if (fetchReservedError && fetchReservedError.code !== 'PGRST116') {
-            logger.error('Failed to fetch reserved stock for delivery', { error: fetchReservedError.message, productId, factoryId });
+            logger.error('Failed to fetch reserved stock for delivery', { error: fetchReservedError.message, productId, factoryId, unitType });
             throw new Error(`Failed to fetch reserved stock: ${fetchReservedError.message}`);
         }
 
@@ -391,12 +409,13 @@ export class SalesOrderService {
             product_id: productId,
             state: 'reserved',
             factory_id: factoryId,
+            unit_type: unitType,
             quantity: (reservedStock?.quantity || 0) - quantity,
             last_updated: new Date().toISOString()
-        }, { onConflict: 'product_id,state,factory_id' });
+        }, { onConflict: 'product_id,state,factory_id,unit_type,cap_id' });
 
         if (deliverError) {
-            logger.error('Failed to deduct from reserved stock during delivery', { error: deliverError.message, productId, quantity, factoryId });
+            logger.error('Failed to deduct from reserved stock during delivery', { error: deliverError.message, productId, quantity, factoryId, unitType });
             throw new Error(`Failed to update reserved stock for delivery: ${deliverError.message}`);
         }
 
@@ -647,7 +666,7 @@ export class SalesOrderService {
             for (const item of order.sales_order_items) {
                 if (!item.is_backordered) {
                     const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-                    await this.deliverStock(item.product_id, item.quantity, factoryId);
+                    await this.deliverStock(item.product_id, item.quantity, item.unit_type, factoryId);
                 }
             }
             logger.info('Order delivered, stock deducted', { orderId: id, userId });
@@ -934,7 +953,7 @@ export class SalesOrderService {
         // 6. Deliver stock (move from reserved to delivered)
         for (const item of order.sales_order_items) {
             const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-            await this.deliverStock(item.product_id, item.quantity, factoryId);
+            await this.deliverStock(item.product_id, item.quantity, item.unit_type, factoryId);
         }
 
         // 7. Audit logging

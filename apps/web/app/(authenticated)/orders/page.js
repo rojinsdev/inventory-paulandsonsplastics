@@ -289,9 +289,31 @@ export default function OrdersPage() {
         };
     }), [products, factories]);
 
-    const getStockForProduct = (productId) => {
+    const getStockForProduct = (productId, unitType) => {
         const stockItems = availableStock.filter(s => s.product_id === productId);
-        return stockItems.reduce((sum, s) => sum + s.quantity, 0);
+        
+        // Map unit types to inventory states
+        const stateMapping = {
+            'loose': 'semi_finished',
+            'packet': 'packed',
+            'bundle': 'finished'
+        };
+
+        const targetState = stateMapping[unitType] || 'finished';
+
+        const filtered = stockItems.filter(s => {
+            // Check matching state
+            if (s.state !== targetState) return false;
+            
+            // For finished goods, if unit_type is specified in stock, it must match
+            // If stock has no unit_type, we assume it's the requested type if requested type is the default (bundle)
+            if (targetState === 'finished' && s.unit_type && s.unit_type !== unitType) {
+                return false;
+            }
+            return true;
+        });
+
+        return filtered.reduce((sum, s) => sum + Number(s.quantity || 0), 0);
     };
 
     const orderSummary = useMemo(() => {
@@ -595,7 +617,7 @@ export default function OrdersPage() {
                                     ) : (
                                         formData.items.map((item, index) => {
                                             const filteredProducts = productOptions.filter(p => !item.factory_id || p.factory_id === item.factory_id);
-                                            const currentStock = getStockForProduct(item.product_id);
+                                            const currentStock = getStockForProduct(item.product_id, item.unit_type);
 
                                             return (
                                                 <div key={index} className={styles.itemCard}>
