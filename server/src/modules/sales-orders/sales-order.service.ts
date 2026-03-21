@@ -450,6 +450,7 @@ export class SalesOrderService {
                     product_id,
                     quantity,
                     unit_type,
+                    unit_price,
                     is_backordered,
                     is_prepared,
                     prepared_at,
@@ -494,6 +495,7 @@ export class SalesOrderService {
                     product_id,
                     quantity,
                     unit_type,
+                    unit_price,
                     is_backordered,
                     is_prepared,
                     products(name, size, color, selling_price, factory_id)
