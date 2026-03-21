@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { inventoryService } from './inventory.service';
 import { z } from 'zod';
+import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 
 const packSchema = z.object({
     product_id: z.string().uuid(),
@@ -51,9 +53,10 @@ export class InventoryController {
         res.json(stock);
     }
 
-    async listAll(req: Request, res: Response) {
+    async listAll(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
         const filters = {
-            factoryId: req.query.factory_id as string,
+            factoryId: resolvedFactoryId || req.query.factory_id as string,
             page: req.query.page ? parseInt(req.query.page as string) : 1,
             size: req.query.size ? parseInt(req.query.size as string) : 10,
         };
@@ -61,22 +64,23 @@ export class InventoryController {
         res.json(result);
     }
 
-    async getStockOverview(req: Request, res: Response) {
-        const factoryId = req.query.factory_id as string;
-        const stock = await inventoryService.getStockOverview(factoryId);
+    async getStockOverview(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+        const stock = await inventoryService.getStockOverview(resolvedFactoryId || req.query.factory_id as string);
         res.json(stock);
     }
 
-    async getAvailable(req: Request, res: Response) {
-        const factoryId = req.query.factory_id as string;
-        const stock = await inventoryService.getAvailableStock(factoryId);
+    async getAvailable(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+        const stock = await inventoryService.getAvailableStock(resolvedFactoryId || req.query.factory_id as string);
         res.json(stock);
     }
 
     // Raw Materials
-    async getRawMaterials(req: Request, res: Response) {
+    async getRawMaterials(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
         const filters = {
-            factoryId: req.query.factory_id as string,
+            factoryId: resolvedFactoryId || req.query.factory_id as string,
             page: req.query.page ? parseInt(req.query.page as string) : 1,
             size: req.query.size ? parseInt(req.query.size as string) : 10,
         };

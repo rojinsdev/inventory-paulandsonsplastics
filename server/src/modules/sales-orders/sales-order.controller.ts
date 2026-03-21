@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { salesOrderService } from './sales-order.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 
 import { AppError } from '../../utils/AppError';
 
@@ -41,10 +42,11 @@ export class SalesOrderController {
         res.json(order);
     }
 
-    async list(req: Request, res: Response) {
+    async list(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
         const filters = {
             status: req.query.status as string,
-            factoryId: req.query.factory_id as string,
+            factoryId: resolvedFactoryId || req.query.factory_id as string,
             page: req.query.page ? parseInt(req.query.page as string) : 1,
             size: req.query.size ? parseInt(req.query.size as string) : 10,
         };

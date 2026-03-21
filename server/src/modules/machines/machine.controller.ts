@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { machineService } from './machine.service';
 import { z } from 'zod';
+import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 
 const createMachineSchema = z.object({
     name: z.string().min(1),
@@ -27,9 +29,10 @@ export class MachineController {
         }
     }
 
-    async list(req: Request, res: Response) {
+    async list(req: AuthRequest, res: Response) {
         try {
-            const factoryId = req.query.factory_id as string | undefined;
+            const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+            const factoryId = resolvedFactoryId || req.query.factory_id as string | undefined;
             const machines = await machineService.getAllMachines(factoryId);
             res.json(machines);
         } catch (error: any) {

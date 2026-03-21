@@ -81,7 +81,7 @@ class ApiClient {
               ));
 
               final response = await refreshDio.post(
-                '/api/auth/refresh',
+                '/auth/refresh',
                 data: {'refresh_token': refreshToken},
               );
 

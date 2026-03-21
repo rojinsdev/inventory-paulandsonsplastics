@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { productionService } from './production.service';
 import { z } from 'zod';
 import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 import { AppError } from '../../utils/AppError';
 
 // Updated schema for session-based production
@@ -71,15 +72,16 @@ export class ProductionController {
         res.status(201).json(log);
     }
 
-    async list(req: Request, res: Response) {
+    async list(req: AuthRequest, res: Response) {
         const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
 
         const filters = {
             machine_id: sanitize(req.query.machine_id),
             product_id: sanitize(req.query.product_id),
             start_date: sanitize(req.query.start_date),
             end_date: sanitize(req.query.end_date),
-            factory_id: sanitize(req.query.factory_id),
+            factory_id: resolvedFactoryId || sanitize(req.query.factory_id),
             page: req.query.page ? parseInt(req.query.page as string) : 1,
             size: req.query.size ? parseInt(req.query.size as string) : 20,
         };
@@ -93,10 +95,14 @@ export class ProductionController {
         res.json(logs);
     }
 
-    async listRequests(req: Request, res: Response) {
-        const factoryId = req.query.factory_id as string;
-        const requests = await productionService.getProductionRequests(factoryId);
-        res.json(requests);
+    async listRequests(req: AuthRequest, res: Response) {
+        try {
+            const factoryId = resolveAuthorizedFactoryId(req);
+            const requests = await productionService.getProductionRequests(factoryId);
+            res.json(requests);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
     }
 
     async updateRequestStatus(req: AuthRequest, res: Response) {
@@ -122,11 +128,12 @@ export class ProductionController {
         res.status(201).json(log);
     }
 
-    async listCapLogs(req: Request, res: Response) {
+    async listCapLogs(req: AuthRequest, res: Response) {
         const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
 
         const filters = {
-            factory_id: sanitize(req.query.factory_id),
+            factory_id: resolvedFactoryId || sanitize(req.query.factory_id),
             cap_id: sanitize(req.query.cap_id),
             start_date: sanitize(req.query.start_date),
             end_date: sanitize(req.query.end_date),
@@ -162,11 +169,12 @@ export class ProductionController {
         res.status(201).json(log);
     }
 
-    async listInnerLogs(req: Request, res: Response) {
+    async listInnerLogs(req: AuthRequest, res: Response) {
         const sanitize = (val: any) => (val === 'undefined' || val === 'null' ? undefined : val);
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
 
         const filters = {
-            factory_id: sanitize(req.query.factory_id),
+            factory_id: resolvedFactoryId || sanitize(req.query.factory_id),
             inner_id: sanitize(req.query.inner_id),
             start_date: sanitize(req.query.start_date),
             end_date: sanitize(req.query.end_date),

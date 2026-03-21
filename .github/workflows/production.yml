@@ -44,13 +44,25 @@ jobs:
         run: npm run build
         working-directory: apps/web
 
-  build-docker-server:
+  deploy-server:
     needs: test-server
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v4
-      - name: Build Server Image
-        run: docker build -t inventory-server:${{ github.sha }} ./server
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/paulandsonsplastics/server
+            git fetch origin
+            git reset --hard origin/main
+            npm ci
+            npm run build
+            pm2 restart inventory-server
+            pm2 save
 
   build-docker-web:
     needs: test-web

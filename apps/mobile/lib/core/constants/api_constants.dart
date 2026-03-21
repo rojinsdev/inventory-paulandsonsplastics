@@ -1,6 +1,6 @@
 class ApiConstants {
-  // Production AWS App Runner URL
-  static const String baseUrl = 'https://vkff4bakgt.ap-south-1.awsapprunner.com/api';
+  // Production AWS EC2 Instance (Verified Domain with SSL)
+  static const String baseUrl = 'https://api.paulandsonsplastics.com/api';
 
   static const String loginEndpoint = '/auth/login';
   static const String meEndpoint = '/auth/me';

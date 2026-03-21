@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { productService } from './product.service';
 import { z } from 'zod';
+import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 
 const createTemplateSchema = z.object({
     name: z.string().min(1),
@@ -59,9 +61,10 @@ export class ProductController {
         }
     }
 
-    async list(req: Request, res: Response) {
+    async list(req: AuthRequest, res: Response) {
         try {
-            const factoryId = req.query.factory_id as string | undefined;
+            const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+            const factoryId = resolvedFactoryId || req.query.factory_id as string | undefined;
             const products = await productService.getAllProducts(factoryId);
             res.json(products);
         } catch (error: any) {
@@ -136,9 +139,10 @@ export class ProductController {
         }
     }
 
-    async listTemplates(req: Request, res: Response) {
+    async listTemplates(req: AuthRequest, res: Response) {
         try {
-            const factoryId = req.query.factory_id as string | undefined;
+            const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+            const factoryId = resolvedFactoryId || req.query.factory_id as string | undefined;
             const templates = await productService.getTemplates(factoryId);
             res.json(templates);
         } catch (error: any) {
