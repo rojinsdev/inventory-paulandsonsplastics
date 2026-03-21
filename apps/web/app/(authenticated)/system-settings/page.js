@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { Save, Loader2, Settings as SettingsIcon, Info, CheckCircle, XCircle, Search } from 'lucide-react';
 import { settingsAPI } from '@/lib/api';
@@ -23,6 +23,26 @@ export default function SystemSettingsPage() {
     const [settingsChanges, setSettingsChanges] = useState({});
 
     // Load settings
+    const loadSettings = useCallback(async () => {
+        try {
+            setLoading(true);
+            const data = await settingsAPI.get();
+            if (data && typeof data === 'object') {
+                setSettingsData(data);
+                // Set first category as active if available
+                const categories = Object.keys(data);
+                if (categories.length > 0 && !activeCategory) {
+                    setActiveCategory(categories[0]);
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load settings:', err);
+            setError('Failed to load settings. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    }, [activeCategory]);
+
     useEffect(() => {
         setPageTitle('System Settings');
         registerGuide({
@@ -50,27 +70,7 @@ export default function SystemSettingsPage() {
             ]
         });
         loadSettings();
-    }, [registerGuide, setPageTitle]);
-
-    const loadSettings = async () => {
-        try {
-            setLoading(true);
-            const data = await settingsAPI.get();
-            if (data && typeof data === 'object') {
-                setSettingsData(data);
-                // Set first category as active if available
-                const categories = Object.keys(data);
-                if (categories.length > 0 && !activeCategory) {
-                    setActiveCategory(categories[0]);
-                }
-            }
-        } catch (err) {
-            console.error('Failed to load settings:', err);
-            setError('Failed to load settings. Please try again.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, [registerGuide, setPageTitle, loadSettings]);
 
     const handleSettingChange = (key, value) => {
         setSettingsChanges(prev => ({

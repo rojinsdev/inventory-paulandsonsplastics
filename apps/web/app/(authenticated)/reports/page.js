@@ -16,7 +16,7 @@ const reportTypes = [
         href: '/reports/production',
         color: 'purple',
         stats: [
-            { label: 'Today\'s Production', value: '—' },
+            { label: 'Today&apos;s Production', value: '—' },
             { label: 'Avg Efficiency', value: '—' },
         ],
     },
@@ -76,7 +76,7 @@ export default function ReportsPage() {
                 }
             ]
         });
-    }, [registerGuide]);
+    }, [registerGuide, setPageTitle]);
     return (
         <>
             <div className={styles.pageHeader}>

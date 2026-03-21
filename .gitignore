@@ -48,6 +48,7 @@ yarn-error.log*
 
 # Large Dumps
 database/migrations/master_production_schema.sql
+database/master_production_schema.sql
 apps/mobile/full_analyze_output.txt
 apps/mobile/final_analyze_output.txt
 

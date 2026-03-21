@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, ShoppingCart, Users, DollarSign, TrendingUp, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
@@ -56,38 +56,11 @@ export default function SalesReportsPage() {
     const products = Array.isArray(productsData) ? productsData : [];
 
 
-    useEffect(() => {
-        setPageTitle('Sales Reports');
-        registerGuide({
-            title: "Sales & Revenue Analysis",
-            description: "Financial performance tracking and customer behavior analytics.",
-            logic: [
-                {
-                    title: "Pareto Analysis (The 80/20 Rule)",
-                    explanation: "This identifies the top 20% of your customers who drive 80% of your revenue. The system highlights these 'VIP' accounts so you can prioritize their orders when stock is limited."
-                },
-                {
-                    title: "Revenue Recognition",
-                    explanation: "Revenue is officially counted only when an order is 'Delivered'. 'Pending' or 'Processing' orders show your pipeline but do not affect your actual financial balance yet."
-                }
-            ],
-            components: [
-                {
-                    name: "Financial Summary",
-                    description: "Snapshot of total revenue, order count, and unique active customers."
-                },
-                {
-                    name: "Leadership Boards",
-                    description: "Rankings of top-performing products and high-value customers by quantity and frequency."
-                }
-            ]
-        });
-        applyDatePreset(datePreset);
-    }, [registerGuide, setPageTitle, datePreset]);
 
 
 
-    const getDateRange = (preset) => {
+
+    const getDateRange = useCallback((preset) => {
         const today = new Date();
         const start = new Date();
         const end = new Date();
@@ -121,9 +94,9 @@ export default function SalesReportsPage() {
             from: start.toISOString().split('T')[0],
             to: end.toISOString().split('T')[0],
         };
-    };
+    }, []);
 
-    const applyDatePreset = (preset) => {
+    const applyDatePreset = useCallback((preset) => {
         if (preset === 'custom') {
             return;
         }
@@ -133,7 +106,36 @@ export default function SalesReportsPage() {
             date_from: range.from,
             date_to: range.to,
         }));
-    };
+    }, [getDateRange]);
+
+    useEffect(() => {
+        setPageTitle('Sales Reports');
+        registerGuide({
+            title: "Sales & Revenue Analysis",
+            description: "Financial performance tracking and customer behavior analytics.",
+            logic: [
+                {
+                    title: "Pareto Analysis (The 80/20 Rule)",
+                    explanation: "This identifies the top 20% of your customers who drive 80% of your revenue. The system highlights these 'VIP' accounts so you can prioritize their orders when stock is limited."
+                },
+                {
+                    title: "Revenue Recognition",
+                    explanation: "Revenue is officially counted only when an order is 'Delivered'. 'Pending' or 'Processing' orders show your pipeline but do not affect your actual financial balance yet."
+                }
+            ],
+            components: [
+                {
+                    name: "Financial Summary",
+                    description: "Snapshot of total revenue, order count, and unique active customers."
+                },
+                {
+                    name: "Leadership Boards",
+                    description: "Rankings of top-performing products and high-value customers by quantity and frequency."
+                }
+            ]
+        });
+        applyDatePreset(datePreset);
+    }, [registerGuide, setPageTitle, datePreset, applyDatePreset]);
 
     const loadData = () => {
         refetch();

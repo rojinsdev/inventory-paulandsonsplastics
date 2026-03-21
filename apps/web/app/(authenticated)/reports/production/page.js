@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Factory, TrendingUp, AlertTriangle, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
@@ -68,34 +68,11 @@ export default function ProductionReportsPage() {
     const error = queryError?.message;
 
 
-    useEffect(() => {
-        setPageTitle('Production Reports');
-        registerGuide({
-            title: "Production Reports",
-            description: "Deep analytics on factory output, efficiency trends, and verification compliance.",
-            logic: [
-                {
-                    title: "Efficiency Calculus (%)",
-                    explanation: "Efficiency is (Actual Output / Theoretical Capacity). 'Theoretical Capacity' is the maximum bundles a machine can produce in 23 hours. Anything above 70% is considered a healthy production run."
-                }
-            ],
-            components: [
-                {
-                    name: "Performance Scorecard",
-                    description: "High-level KPIs showing total output vs. target efficiency for the selected period."
-                },
-                {
-                    name: "Audit Trail Grid",
-                    description: "Chronological log of manufacturing events with deep-linking to specific machine/product performance."
-                }
-            ]
-        });
-        applyDatePreset(datePreset);
-    }, [registerGuide, setPageTitle, datePreset]);
 
 
 
-    const getDateRange = (preset) => {
+
+    const getDateRange = useCallback((preset) => {
         const today = new Date();
         const start = new Date();
         const end = new Date();
@@ -129,9 +106,9 @@ export default function ProductionReportsPage() {
             from: start.toISOString().split('T')[0],
             to: end.toISOString().split('T')[0],
         };
-    };
+    }, []);
 
-    const applyDatePreset = (preset) => {
+    const applyDatePreset = useCallback((preset) => {
         if (preset === 'custom') {
             return;
         }
@@ -141,7 +118,32 @@ export default function ProductionReportsPage() {
             date_from: range.from,
             date_to: range.to,
         }));
-    };
+    }, [getDateRange]);
+
+    useEffect(() => {
+        setPageTitle('Production Reports');
+        registerGuide({
+            title: "Production Reports",
+            description: "Deep analytics on factory output, efficiency trends, and verification compliance.",
+            logic: [
+                {
+                    title: "Efficiency Calculus (%)",
+                    explanation: "Efficiency is (Actual Output / Theoretical Capacity). 'Theoretical Capacity' is the maximum bundles a machine can produce in 23 hours. Anything above 70% is considered a healthy production run."
+                }
+            ],
+            components: [
+                {
+                    name: "Performance Scorecard",
+                    description: "High-level KPIs showing total output vs. target efficiency for the selected period."
+                },
+                {
+                    name: "Audit Trail Grid",
+                    description: "Chronological log of manufacturing events with deep-linking to specific machine/product performance."
+                }
+            ]
+        });
+        applyDatePreset(datePreset);
+    }, [registerGuide, setPageTitle, datePreset, applyDatePreset]);
 
     const loadData = () => {
         refetch();

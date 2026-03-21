@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { Loader2, Search, Filter, Package } from 'lucide-react';
@@ -50,11 +50,7 @@ export default function LiveStockPage() {
         });
     }, [registerGuide, setPageTitle]);
 
-    useEffect(() => {
-        loadData();
-    }, [selectedFactory]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
@@ -69,7 +65,11 @@ export default function LiveStockPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedFactory]);
+
+    useEffect(() => {
+        loadData();
+    }, [loadData]);
 
     // Get product details
     const getProductName = (id) => {

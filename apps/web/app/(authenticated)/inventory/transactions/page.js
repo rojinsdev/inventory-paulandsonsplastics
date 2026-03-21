@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Search, Filter, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
 import { inventoryAPI, productsAPI } from '@/lib/api';
@@ -36,11 +36,7 @@ export default function TransactionsPage() {
         setPageTitle('Inventory Transactions');
     }, [setPageTitle]);
 
-    useEffect(() => {
-        loadData();
-    }, [selectedFactory]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
@@ -55,7 +51,11 @@ export default function TransactionsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedFactory]);
+
+    useEffect(() => {
+        loadData();
+    }, [selectedFactory, loadData]);
 
     // Get product name
     const getProductName = (id) => {

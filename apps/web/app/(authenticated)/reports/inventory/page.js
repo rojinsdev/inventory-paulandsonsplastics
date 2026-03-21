@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Loader2, Package, Boxes, ArrowRight, TrendingUp, Download, Calendar, Filter, X, RefreshCw, Search } from 'lucide-react';
@@ -52,38 +52,11 @@ export default function InventoryReportsPage() {
     const products = Array.isArray(productsData) ? productsData : [];
 
 
-    useEffect(() => {
-        setPageTitle('Inventory Reports');
-        registerGuide({
-            title: "Inventory Reports",
-            description: "Comprehensive stock metrics across the entire production lifecycle.",
-            logic: [
-                {
-                    title: "Stock Flow Dynamics (WIP to Finished)",
-                    explanation: "This tracks items as they move from 'Semi-Finished' (loose pieces) to 'Packed' (packets) and finally 'Finished' (sellable bundles). Bottlenecks here often indicate packing station delays."
-                },
-                {
-                    title: "Safety Thresholds (Sellable Stock)",
-                    explanation: "The system compares 'Finished minus Reserved' (available now) against your safety limits. If available stock drops below the threshold, it triggers a 'Low Stock' warning for re-production."
-                }
-            ],
-            components: [
-                {
-                    name: "Stock Status Heatmap",
-                    description: "Quick-look cards showing total capital tied up in items vs. ready bundles."
-                },
-                {
-                    name: "Inventory Matrix",
-                    description: "Multi-dimensional view of stock levels at every stage: Semi-Finished, Packed, Finished, and Committed (Reserved)."
-                }
-            ]
-        });
-        applyDatePreset(datePreset);
-    }, [registerGuide, setPageTitle, datePreset]);
 
 
 
-    const getDateRange = (preset) => {
+
+    const getDateRange = useCallback((preset) => {
         const today = new Date();
         const start = new Date();
         const end = new Date();
@@ -117,9 +90,9 @@ export default function InventoryReportsPage() {
             from: start.toISOString().split('T')[0],
             to: end.toISOString().split('T')[0],
         };
-    };
+    }, []);
 
-    const applyDatePreset = (preset) => {
+    const applyDatePreset = useCallback((preset) => {
         if (preset === 'custom') {
             return;
         }
@@ -129,7 +102,36 @@ export default function InventoryReportsPage() {
             date_from: range.from,
             date_to: range.to,
         }));
-    };
+    }, [getDateRange]);
+
+    useEffect(() => {
+        setPageTitle('Inventory Reports');
+        registerGuide({
+            title: "Inventory Reports",
+            description: "Comprehensive stock metrics across the entire production lifecycle.",
+            logic: [
+                {
+                    title: "Stock Flow Dynamics (WIP to Finished)",
+                    explanation: "This tracks items as they move from 'Semi-Finished' (loose pieces) to 'Packed' (packets) and finally 'Finished' (sellable bundles). Bottlenecks here often indicate packing station delays."
+                },
+                {
+                    title: "Safety Thresholds (Sellable Stock)",
+                    explanation: "The system compares 'Finished minus Reserved' (available now) against your safety limits. If available stock drops below the threshold, it triggers a 'Low Stock' warning for re-production."
+                }
+            ],
+            components: [
+                {
+                    name: "Stock Status Heatmap",
+                    description: "Quick-look cards showing total capital tied up in items vs. ready bundles."
+                },
+                {
+                    name: "Inventory Matrix",
+                    description: "Multi-dimensional view of stock levels at every stage: Semi-Finished, Packed, Finished, and Committed (Reserved)."
+                }
+            ]
+        });
+        applyDatePreset(datePreset);
+    }, [registerGuide, setPageTitle, datePreset, applyDatePreset]);
 
     const loadData = () => {
         refetch();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
 import { useGuide } from '@/contexts/GuideContext';
 import { useSearchParams } from 'next/navigation';
@@ -73,7 +73,7 @@ export default function StockOverviewPage() {
                 },
                 {
                     title: "Unified Hub",
-                    explanation: "The table below shows every product's status across all stages in a single row."
+                    explanation: "The table below shows every product&apos;s status across all stages in a single row."
                 }
             ],
             components: [
@@ -89,11 +89,7 @@ export default function StockOverviewPage() {
         });
     }, [registerGuide, setPageTitle]);
 
-    useEffect(() => {
-        loadData();
-    }, [selectedFactory]);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
@@ -135,7 +131,11 @@ export default function StockOverviewPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedFactory]);
+
+    useEffect(() => {
+        loadData();
+    }, [selectedFactory, loadData]);
 
     const stockCards = [
         {

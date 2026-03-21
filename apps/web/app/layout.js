@@ -1,3 +1,4 @@
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { ThemeProvider } from '../contexts/ThemeContext';
@@ -11,6 +12,11 @@ import RealtimeHandler from '../components/providers/RealtimeHandler';
 import { Toaster } from 'react-hot-toast';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 export const metadata = {
   title: 'Paul & Sons Plastics - Admin Portal',
@@ -19,15 +25,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="en" className={inter.variable}>
       <body suppressHydrationWarning>
         <NextTopLoader
           color="#3b82f6"
