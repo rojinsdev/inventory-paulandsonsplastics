@@ -44,8 +44,11 @@ app.use(cors({
 
         // Allow localhost in dev, and specific allowed origins or Vercel previews in prod
         const isAllowed = allowedOrigins.includes(origin) || 
+                         origin.includes('localhost') ||
+                         origin.includes('127.0.0.1') ||
                          origin.endsWith('.vercel.app') || 
-                         process.env.NODE_ENV === 'development';
+                         process.env.NODE_ENV === 'development' ||
+                         !process.env.NODE_ENV; // Default to dev if not set
 
         if (isAllowed) {
             callback(null, true);
