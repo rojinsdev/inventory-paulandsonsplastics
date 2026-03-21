@@ -3,7 +3,7 @@ import { innerService } from './inner.service';
 import { AuthRequest } from '../../middleware/auth';
 
 export class InnerController {
-    async create(req: AuthRequest, res: Response) {
+    create = async (req: AuthRequest, res: Response) => {
         try {
             const inner = await innerService.createInner(req.body);
             res.status(201).json(inner);
@@ -12,7 +12,7 @@ export class InnerController {
         }
     }
 
-    async list(req: Request, res: Response) {
+    list = async (req: Request, res: Response) => {
         try {
             const factoryId = req.query.factory_id as string;
             const inners = await innerService.getAllInners(factoryId);
@@ -22,7 +22,7 @@ export class InnerController {
         }
     }
 
-    async getOne(req: Request, res: Response) {
+    getOne = async (req: Request, res: Response) => {
         try {
             const inner = await innerService.getInnerById(req.params.id);
             res.json(inner);
@@ -31,7 +31,7 @@ export class InnerController {
         }
     }
 
-    async update(req: AuthRequest, res: Response) {
+    update = async (req: AuthRequest, res: Response) => {
         try {
             const inner = await innerService.updateInner(req.params.id, req.body);
             res.json(inner);
@@ -40,7 +40,7 @@ export class InnerController {
         }
     }
 
-    async delete(req: AuthRequest, res: Response) {
+    delete = async (req: AuthRequest, res: Response) => {
         try {
             await innerService.deleteInner(req.params.id);
             res.json({ success: true });
@@ -49,7 +49,7 @@ export class InnerController {
         }
     }
 
-    async getBalances(req: Request, res: Response) {
+    getBalances = async (req: Request, res: Response) => {
         try {
             const factoryId = req.query.factory_id as string;
             const balances = await innerService.getInnerStockBalances(factoryId);
@@ -59,9 +59,7 @@ export class InnerController {
         }
     }
 
-    // --- Template Handlers ---
-
-    async createTemplate(req: Request, res: Response) {
+    createTemplate = async (req: Request, res: Response) => {
         try {
             const { colors, ...templateData } = req.body;
             const result = await innerService.createTemplateWithVariants(templateData, colors);
@@ -71,7 +69,7 @@ export class InnerController {
         }
     }
 
-    async listTemplates(req: Request, res: Response) {
+    listTemplates = async (req: Request, res: Response) => {
         try {
             const factoryId = req.query.factory_id as string | undefined;
             const templates = await innerService.getTemplates(factoryId);
@@ -81,7 +79,7 @@ export class InnerController {
         }
     }
 
-    async getTemplate(req: Request, res: Response) {
+    getTemplate = async (req: Request, res: Response) => {
         try {
             const { id } = req.params;
             const template = await innerService.getTemplateById(id);
@@ -91,7 +89,7 @@ export class InnerController {
         }
     }
 
-    async updateTemplate(req: AuthRequest, res: Response) {
+    updateTemplate = async (req: AuthRequest, res: Response) => {
         try {
             const { id } = req.params;
             const template = await innerService.updateTemplate(id, req.body);
@@ -101,7 +99,7 @@ export class InnerController {
         }
     }
 
-    async deleteTemplate(req: AuthRequest, res: Response) {
+    deleteTemplate = async (req: AuthRequest, res: Response) => {
         try {
             const { id } = req.params;
             await innerService.deleteTemplate(id);
