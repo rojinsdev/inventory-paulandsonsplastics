@@ -4,7 +4,8 @@ import { supabase } from '../../../config/supabase';
 // Mock Supabase
 jest.mock('../../../config/supabase', () => ({
     supabase: {
-        from: jest.fn()
+        from: jest.fn(),
+        rpc: jest.fn().mockResolvedValue({ data: null, error: null })
     }
 }));
 

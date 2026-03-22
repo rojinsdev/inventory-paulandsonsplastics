@@ -6,7 +6,7 @@ import { cashFlowService } from '../../cash-flow/cash-flow.service';
 jest.mock('../../../config/supabase', () => ({
     supabase: {
         from: jest.fn(),
-        rpc: jest.fn()
+        rpc: jest.fn().mockResolvedValue({ data: null, error: null })
     }
 }));
 jest.mock('../../inventory/inventory.service');

@@ -8,7 +8,7 @@ import { inventoryService } from '../../inventory/inventory.service';
 jest.mock('../../../config/supabase', () => ({
     supabase: {
         from: jest.fn(),
-        rpc: jest.fn()
+        rpc: jest.fn().mockResolvedValue({ data: null, error: null })
     }
 }));
 jest.mock('../../settings/settings.service');
