@@ -45,6 +45,7 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
         service = new SalesOrderService();
         jest.clearAllMocks();
         mockFrom = supabase.from;
+        (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: null });
     });
 
     it('should handle the full partial payment cycle correctly', async () => {

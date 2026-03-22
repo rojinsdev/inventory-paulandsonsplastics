@@ -46,6 +46,7 @@ describe('SalesOrderService', () => {
         service = new SalesOrderService();
         jest.clearAllMocks();
         mockFrom = supabase.from;
+        (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: null });
     });
 
     it('should calculate totals and discounts correctly during delivery', async () => {

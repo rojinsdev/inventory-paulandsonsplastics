@@ -46,6 +46,7 @@ describe('ProductionService', () => {
         service = new ProductionService();
         jest.clearAllMocks();
         mockFrom = supabase.from;
+        (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: null });
         (SettingsService.getValue as jest.Mock).mockResolvedValue(100); // Default threshold
     });
 

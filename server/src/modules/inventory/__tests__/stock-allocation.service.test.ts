@@ -31,6 +31,7 @@ describe('StockAllocationService', () => {
         service = new StockAllocationService();
         jest.clearAllMocks();
         mockFrom = supabase.from;
+        (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: null });
     });
 
     it('should fulfill request manually and move stock to reserved', async () => {
