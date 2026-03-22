@@ -39,18 +39,18 @@ export default function CapManagementPage() {
         factory_id: '',
         machine_id: '',
         raw_material_id: '',
-        product_template_ids: [] // Mapping at template level
+        tub_template_ids: [] // Mapping at template level
     });
 
-    const [productSearch, setProductSearch] = useState('');
+    const [tubSearch, setTubSearch] = useState('');
 
-    // Fetch Product Templates for mapping
-    const { data: formProductTemplatesRes, isLoading: loadingTemplates } = useQuery({
-        queryKey: ['product-templates', formData.factory_id],
+    // Fetch Tub Templates for mapping
+    const { data: tubTemplatesRes, isLoading: loadingTemplates } = useQuery({
+        queryKey: ['tub-templates', formData.factory_id],
         queryFn: () => productTemplatesAPI.getAll({ factory_id: formData.factory_id }),
         enabled: !!formData.factory_id && isModalOpen,
     });
-    const formProductTemplates = useMemo(() => formProductTemplatesRes?.data || (Array.isArray(formProductTemplatesRes) ? formProductTemplatesRes : []), [formProductTemplatesRes]);
+    const tubTemplates = useMemo(() => tubTemplatesRes?.data || (Array.isArray(tubTemplatesRes) ? tubTemplatesRes : []), [tubTemplatesRes]);
 
     // Fetch Raw Materials for assignment (filtered by factory)
     const { data: rawMaterialsRes, isLoading: loadingRawMaterials, error: rmError } = useQuery({
@@ -72,7 +72,13 @@ export default function CapManagementPage() {
         queryKey: ['cap-templates', selectedFactory],
         queryFn: () => capsAPI.getTemplates(selectedFactory ? { factory_id: selectedFactory } : {}),
     });
-    const caps = useMemo(() => capsRes?.data || (Array.isArray(capsRes) ? capsRes : []), [capsRes]);
+    const caps = useMemo(() => {
+        const rawData = capsRes?.data || (Array.isArray(capsRes) ? capsRes : []);
+        return rawData.map(cap => ({
+            ...cap,
+            mapped_tub_templates: cap.mapped_product_templates || []
+        }));
+    }, [capsRes]);
 
     // Mutations
     const createMutation = useMutation({
@@ -117,8 +123,8 @@ export default function CapManagementPage() {
                     explanation: 'Cap production is logged by total weight. The system automatically calculates unit counts using the Ideal Weight.'
                 },
                 {
-                    title: 'Product Mapping',
-                    explanation: 'Map a cap to multiple products. When these products are packed or bundled, the corresponding cap stock is automatically deducted.'
+                    title: 'Tub Mapping',
+                    explanation: 'Map a cap to multiple tubs. When these tubs are packed in tubs, the corresponding cap stock is automatically deducted.'
                 },
                 {
                     title: 'Ideal Cycle Time',
@@ -126,8 +132,8 @@ export default function CapManagementPage() {
                 }
             ],
             components: [
-                { name: 'Cap Inventory', description: 'List of all caps and their mapped products.' },
-                { name: 'Mapping Tool', description: 'Associate caps with finished products for automatic deduction.' }
+                { name: 'Cap Inventory', description: 'List of all caps and their mapped tubs.' },
+                { name: 'Mapping Tool', description: 'Associate caps with finished tubs for automatic deduction.' }
             ]
         });
     }, [registerGuide, setPageTitle]);
@@ -164,7 +170,7 @@ export default function CapManagementPage() {
 
         // 4. Mapped Only Filter
         if (mappedOnly) {
-            results = results.filter(c => (c.mapped_product_templates?.length || 0) > 0);
+            results = results.filter(c => (c.mapped_tub_templates?.length || 0) > 0);
         }
 
         return results;
@@ -180,7 +186,7 @@ export default function CapManagementPage() {
     }, [caps]);
 
     const openModal = (cap = null) => {
-        setProductSearch('');
+        setTubSearch('');
         if (cap) {
             setSelectedCap(cap);
             setFormData({
@@ -191,7 +197,7 @@ export default function CapManagementPage() {
                 factory_id: cap.factory_id || '',
                 machine_id: cap.machine_id || '',
                 raw_material_id: cap.raw_material_id || '',
-                product_template_ids: cap.mapped_product_templates?.map(p => p.id) || []
+                tub_template_ids: cap.mapped_tub_templates?.map(p => p.id) || []
             });
         } else {
             setSelectedCap(null);
@@ -203,7 +209,7 @@ export default function CapManagementPage() {
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
                 machine_id: '',
                 raw_material_id: '',
-                product_template_ids: []
+                tub_template_ids: []
             });
         }
         setIsModalOpen(true);
@@ -219,6 +225,7 @@ export default function CapManagementPage() {
 
         const payload = {
             ...formData,
+            product_template_ids: formData.tub_template_ids, // Map back for API
             ideal_weight_grams: parseFloat(formData.ideal_weight_grams),
             ideal_cycle_time_seconds: parseFloat(formData.ideal_cycle_time_seconds),
             machine_id: formData.machine_id || null,
@@ -232,13 +239,13 @@ export default function CapManagementPage() {
         }
     };
 
-    const toggleProductMapping = (templateId) => {
+    const toggleTubMapping = (templateId) => {
         setFormData(prev => {
-            const isMapped = prev.product_template_ids.includes(templateId);
+            const isMapped = prev.tub_template_ids.includes(templateId);
             if (isMapped) {
-                return { ...prev, product_template_ids: prev.product_template_ids.filter(id => id !== templateId) };
+                return { ...prev, tub_template_ids: prev.tub_template_ids.filter(id => id !== templateId) };
             } else {
-                return { ...prev, product_template_ids: [...prev.product_template_ids, templateId] };
+                return { ...prev, tub_template_ids: [...prev.tub_template_ids, templateId] };
             }
         });
     };
@@ -256,7 +263,7 @@ export default function CapManagementPage() {
 
     // Stats
     const totalCaps = caps.length;
-    const mappedCount = caps.reduce((acc, c) => acc + (c.mapped_product_templates?.length || 0), 0);
+    const mappedCount = caps.reduce((acc, c) => acc + (c.mapped_tub_templates?.length || 0), 0);
 
     const trends = useMemo(() => {
         const oneWeekAgo = new Date();
@@ -287,7 +294,7 @@ export default function CapManagementPage() {
             <div className={styles.pageHeader}>
                 <div>
                     <h1 className={styles.pageTitle}>Cap Templates</h1>
-                    <p className={styles.pageDescription}>Manage physical specifications and product mappings.</p>
+                    <p className={styles.pageDescription}>Manage physical specifications and tub mappings.</p>
 
                     <div className={styles.metricChipsRow}>
                         <div
@@ -358,7 +365,7 @@ export default function CapManagementPage() {
                                     <th>Cap Variant</th>
                                     <th>Specifications</th>
                                     <th>Consumption</th>
-                                    <th>Mapped Product Templates</th>
+                                    <th>Mapped Tub Templates</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             </thead>
@@ -401,16 +408,16 @@ export default function CapManagementPage() {
                                         </td>
                                         <td>
                                             <div className={styles.mappingTags}>
-                                                {cap.mapped_product_templates?.length > 0 ? (
+                                                {cap.mapped_tub_templates?.length > 0 ? (
                                                     <>
-                                                        {cap.mapped_product_templates.slice(0, 3).map(p => (
+                                                        {cap.mapped_tub_templates.slice(0, 3).map(p => (
                                                             <span key={p.id} className={styles.tagBadge}>
                                                                 {p.name} {p.size}
                                                             </span>
                                                         ))}
-                                                        {cap.mapped_product_templates.length > 3 && (
-                                                            <span className={styles.moreBadge} title={cap.mapped_product_templates.slice(3).map(p => `${p.name} ${p.size}`).join(', ')}>
-                                                                +{cap.mapped_product_templates.length - 3} more
+                                                        {cap.mapped_tub_templates.length > 3 && (
+                                                            <span className={styles.moreBadge} title={cap.mapped_tub_templates.slice(3).map(p => `${p.name} ${p.size}`).join(', ')}>
+                                                                +{cap.mapped_tub_templates.length - 3} more
                                                             </span>
                                                         )}
                                                     </>
@@ -504,7 +511,7 @@ export default function CapManagementPage() {
                                                 <label className={styles.formLabel}>Select Factory *</label>
                                                 <FactorySelect
                                                     value={formData.factory_id}
-                                                    onChange={val => setFormData({ ...formData, factory_id: val, machine_id: '', product_template_ids: [] })}
+                                                    onChange={val => setFormData({ ...formData, factory_id: val, machine_id: '', tub_template_ids: [] })}
                                                     disabled={!!selectedCap} // Lock factory on edit
                                                 />
                                             </div>
@@ -609,23 +616,23 @@ export default function CapManagementPage() {
                                     {/* Right Pane: Product Mapping */}
                                     <div className={styles.rightPane}>
                                         <h3 className={styles.sectionTitle}>
-                                            <Package size={16} /> Mapped Product Templates
+                                            <Package size={16} /> Mapped Tub Templates
                                         </h3>
                                         <p className={styles.pageDescription} style={{ fontSize: '0.8rem', marginBottom: '1.25rem' }}>
-                                            Select all product templates that use this cap template.
+                                            Select all tub templates that use this cap template.
                                         </p>
 
                                         <div className={styles.tagContainer}>
-                                            {formData.product_template_ids.length > 0 ? (
-                                                formData.product_template_ids.map(templateId => {
-                                                    const template = formProductTemplates?.find(p => p.id === templateId);
+                                            {formData.tub_template_ids.length > 0 ? (
+                                                formData.tub_template_ids.map(templateId => {
+                                                    const template = tubTemplates?.find(p => p.id === templateId);
                                                     return (
                                                         <div key={templateId} className={styles.itemTag}>
                                                             {template ? template.name : 'Unknown Template'}
                                                             <button
                                                                 type="button"
                                                                 className={styles.removeTagBtn}
-                                                                onClick={() => toggleProductMapping(templateId)}
+                                                                onClick={() => toggleTubMapping(templateId)}
                                                             >
                                                                 <X size={14} />
                                                             </button>
@@ -634,7 +641,7 @@ export default function CapManagementPage() {
                                                 })
                                             ) : (
                                                 <span className={styles.textMuted} style={{ fontSize: '0.8rem', padding: '0.25rem' }}>
-                                                    No products mapped yet.
+                                                    No tubs mapped yet.
                                                 </span>
                                             )}
                                         </div>
@@ -647,8 +654,8 @@ export default function CapManagementPage() {
                                                     className={styles.filterInput}
                                                     placeholder="Search templates..."
                                                     style={{ paddingLeft: '32px', fontSize: '0.8rem' }}
-                                                    value={productSearch}
-                                                    onChange={e => setProductSearch(e.target.value)}
+                                                    value={tubSearch}
+                                                    onChange={e => setTubSearch(e.target.value)}
                                                 />
                                             </div>
 
@@ -660,24 +667,24 @@ export default function CapManagementPage() {
                                                 ) : !formData.factory_id ? (
                                                     <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                                                         <Factory size={32} style={{ marginBottom: '1rem', opacity: 0.1 }} />
-                                                        <p style={{ fontSize: '0.8rem' }}>Please select a factory to see templates.</p>
+                                                        <p style={{ fontSize: '0.8rem' }}>Please select a factory to see tub templates.</p>
                                                     </div>
-                                                ) : (formProductTemplates || []).length === 0 ? (
+                                                ) : (tubTemplates || []).length === 0 ? (
                                                     <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                                                        No product templates found for this factory.
+                                                        No tub templates found for this factory.
                                                     </div>
                                                 ) : (
-                                                    formProductTemplates
-                                                        .filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                                    tubTemplates
+                                                        .filter(p => !tubSearch || p.name.toLowerCase().includes(tubSearch.toLowerCase()))
                                                         .map(template => {
-                                                            const isSelected = formData.product_template_ids.includes(template.id);
+                                                            const isSelected = formData.tub_template_ids.includes(template.id);
                                                             return (
                                                                 <button
                                                                     key={template.id}
                                                                     type="button"
                                                                     className={cn(styles.itemChoiceBtn, isSelected && styles.itemChoiceBtnSelected)}
                                                                     disabled={isSelected}
-                                                                    onClick={() => toggleProductMapping(template.id)}
+                                                                    onClick={() => toggleTubMapping(template.id)}
                                                                 >
                                                                     <div>
                                                                         <div style={{ fontWeight: 500 }}>{template.name}</div>

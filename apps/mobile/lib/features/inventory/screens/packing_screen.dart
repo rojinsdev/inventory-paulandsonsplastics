@@ -118,7 +118,7 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
                 data: (templates) => DropdownButtonFormField<String>(
                   initialValue: _selectedProductTemplateId,
                   decoration: const InputDecoration(
-                    labelText: 'Product Type',
+                    labelText: 'Tub Type',
                     prefixIcon: Icon(Icons.inventory_2_outlined),
                   ),
                   items: templates
@@ -137,7 +137,7 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
                     });
                   },
                   validator: (value) =>
-                      value == null ? 'Please select a product type' : null,
+                      value == null ? 'Please select a tub type' : null,
                 ),
                 loading: () => const LinearProgressIndicator(),
                 error: (error, _) => Text('Error: $error'),

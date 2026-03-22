@@ -1,6 +1,9 @@
 class ApiConstants {
   // Production AWS EC2 Instance (Verified Domain with SSL)
-  static const String baseUrl = 'https://api.paulandsonsplastics.com/api';
+  static const String baseUrl = String.fromEnvironment(
+    'API_URL',
+    defaultValue: 'https://api.paulandsonsplastics.com/api',
+  );
 
   static const String loginEndpoint = '/auth/login';
   static const String meEndpoint = '/auth/me';

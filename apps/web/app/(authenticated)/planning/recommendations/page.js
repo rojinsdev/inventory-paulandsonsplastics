@@ -109,7 +109,7 @@ export default function RecommendationsPage() {
         if (recommendations.length === 0) return;
 
         const csvRows = [
-            ['Product', 'Size', 'Color', 'Recommended Qty', 'Current Stock', 'Avg Monthly Sales', 'Trend %', 'Seasonal %', 'Confidence', 'Reasoning', 'Status'],
+            ['Tub', 'Size', 'Color', 'Recommended Qty', 'Current Stock', 'Avg Monthly Sales', 'Trend %', 'Seasonal %', 'Confidence', 'Reasoning', 'Status'],
             ...recommendations.map(r => [
                 r.product_name,
                 r.product_size,
@@ -265,7 +265,7 @@ export default function RecommendationsPage() {
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Product</th>
+                                    <th>Tub</th>
                                     <th style={{ textAlign: 'right' }}>Recommended Qty</th>
                                     <th style={{ textAlign: 'right' }}>Current Stock</th>
                                     <th style={{ textAlign: 'right' }}>Avg Monthly Sales</th>

@@ -59,11 +59,11 @@ const menuSections = [
                 ],
             },
             {
-                label: 'Production Config',
+                label: 'Tub Config',
                 icon: Factory,
                 submenu: [
                     { label: 'Machines', href: '/machines' },
-                    { label: 'Products', href: '/products' },
+                    { label: 'Tubs', href: '/products' },
                     { label: 'Caps', href: '/inventory/caps' },
                     { label: 'Inners', href: '/inventory/inners' },
                     { label: 'Packing Rules', href: '/packing-rules' },
@@ -79,7 +79,7 @@ const menuSections = [
                 label: 'Reports',
                 icon: BarChart3,
                 submenu: [
-                    { label: 'Production Reports', href: '/reports/production' },
+                    { label: 'Tub Production Reports', href: '/reports/production' },
                     { label: 'Inventory Reports', href: '/reports/inventory' },
                     { label: 'Sales Reports', href: '/reports/sales' },
                     { label: 'Cash Flow & Expenses', href: '/reports/cash-flow' },

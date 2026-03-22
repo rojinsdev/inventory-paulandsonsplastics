@@ -561,6 +561,7 @@ export class ProductionService {
             .select(`
                 *,
                 products (name, size, color, factory_id),
+                inners (color, inner_templates(name)),
                 sales_order:sales_orders!left(order_number:id)
             `)
             .order('created_at', { ascending: false });
@@ -581,11 +582,18 @@ export class ProductionService {
         }
 
         // Fetch current stock for all products in these requests to confirm availability
-        const productIds = [...new Set(rawData.map(r => r.product_id))];
+        const productIds = [...new Set(rawData.map(r => r.product_id).filter(Boolean))];
+        const innerIds = [...new Set(rawData.map(r => r.inner_id).filter(Boolean))];
+        
         const { data: stockData } = await supabase
             .from('stock_balances')
             .select('product_id, quantity, state, factory_id, unit_type')
             .in('product_id', productIds);
+
+        const { data: innerStockData } = await supabase
+            .from('inner_stock_balances')
+            .select('inner_id, quantity, factory_id')
+            .in('inner_id', innerIds);
 
         const stateMapping: Record<string, string> = {
             'loose': 'semi_finished',
@@ -594,6 +602,33 @@ export class ProductionService {
         };
 
         return rawData.map(req => {
+            const isInnerReq = !!req.inner_id;
+
+            if (isInnerReq) {
+                const innerStock = innerStockData?.filter(s => s.inner_id === req.inner_id) || [];
+                const matchingStock = innerStock.filter(s => s.factory_id === req.factory_id || !s.factory_id);
+                const availableStock = matchingStock.reduce((sum, s) => sum + Number(s.quantity), 0);
+                
+                // Override products field so the mobile app gets basic data correctly
+                const innerData = Array.isArray(req.inners) ? req.inners[0] : req.inners;
+                const templateData = innerData?.inner_templates;
+                const template = Array.isArray(templateData) ? templateData[0] : templateData;
+                
+                req.products = {
+                    name: `${template?.name || 'Inner'}`,
+                    color: innerData?.color || 'N/A',
+                    size: null
+                };
+
+                return {
+                    ...req,
+                    is_inner: true,
+                    available_stock: availableStock,
+                    is_satisfiable: availableStock >= req.quantity,
+                    stock_summary: null
+                };
+            }
+
             const requiredState = stateMapping[req.unit_type];
             const productStock = stockData?.filter(s => s.product_id === req.product_id) || [];
             
@@ -620,6 +655,7 @@ export class ProductionService {
 
             return {
                 ...req,
+                is_inner: false,
                 available_stock: availableStock,
                 is_satisfiable: availableStock >= req.quantity,
                 stock_summary: stockSummary
@@ -638,7 +674,9 @@ export class ProductionService {
             .update({ status, updated_at: new Date().toISOString() })
             .eq('id', requestId)
             .select(`
-                products (name, size, color, factory_id)
+                *,
+                products (name, size, color, factory_id),
+                sales_order:sales_orders!left(order_number:id)
             `)
             .single();
 

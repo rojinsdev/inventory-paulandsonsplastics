@@ -28,7 +28,7 @@ router.put('/:id/cancel', requireRole('admin'), asyncHandler(salesOrderControlle
 router.delete('/:id', requireRole('admin'), asyncHandler(salesOrderController.delete));
 
 // Item Preparation (Admin or Production Manager)
-router.put('/items/:itemId/prepare', requireRole('admin', 'production_manager'), asyncHandler(salesOrderController.prepareItem));
+router.put('/:id/prepare-items', requireRole('admin', 'production_manager'), asyncHandler(salesOrderController.prepareItems));
 
 // Payment Processing (Admin Only)
 router.post('/:id/process-delivery', requireRole('admin'), asyncHandler(salesOrderController.processDelivery));

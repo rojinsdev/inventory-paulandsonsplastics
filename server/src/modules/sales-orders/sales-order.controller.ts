@@ -82,9 +82,16 @@ export class SalesOrderController {
         res.json(order);
     }
 
-    async prepareItem(req: AuthRequest, res: Response) {
-        const { itemId } = req.params;
-        const result = await salesOrderService.prepareOrderItem(itemId, req.user!.id);
+    async prepareItems(req: AuthRequest, res: Response) {
+        const { id } = req.params;
+        const prepareSchema = z.object({
+            items: z.array(z.object({
+                itemId: z.string().uuid(),
+                quantity: z.number().int().positive()
+            })).min(1)
+        });
+        const { items } = prepareSchema.parse(req.body);
+        const result = await salesOrderService.prepareOrderItems(id, items, req.user!.id);
         res.json(result);
     }
 
@@ -93,6 +100,7 @@ export class SalesOrderController {
         const deliverySchema = z.object({
             items: z.array(z.object({
                 item_id: z.string().uuid(),
+                quantity: z.number().int().positive(),
                 unit_price: z.number().positive()
             })).min(1),
             discount_type: z.enum(['percentage', 'fixed']).optional(),

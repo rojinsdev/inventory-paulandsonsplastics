@@ -108,10 +108,10 @@ class InventoryHubScreen extends ConsumerWidget {
                         );
 
                         return _InventoryActionCard(
-                          title: 'Production Requests',
+                          title: 'Tub Production Requests',
                           subtitle: pendingCount != null
                               ? '$pendingCount requests pending'
-                              : 'Manage factory requests',
+                              : 'Manage tub requests',
                           icon: Icons.assignment_outlined,
                           containerColor: colorScheme.secondaryContainer,
                           onTap: () => context.push('/production/requests'),

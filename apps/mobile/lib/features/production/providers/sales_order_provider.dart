@@ -30,14 +30,14 @@ class PendingOrdersNotifier
     }
   }
 
-  Future<void> prepareItem(String itemId, {String? factoryId}) async {
+  Future<void> prepareOrderItems(
+      String orderId, List<Map<String, dynamic>> items,
+      {String? factoryId}) async {
     try {
-      await _repository.prepareItem(itemId);
+      await _repository.prepareOrderItems(orderId, items);
       // Refresh the list after preparation
       await fetchPending(factoryId: factoryId);
     } catch (e) {
-      // We don't want to set the whole state to error if just one operation fails
-      // In a real app, we might use a separate state for operations
       rethrow;
     }
   }

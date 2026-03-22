@@ -15,11 +15,11 @@ export default function LiveStockPage() {
     const { selectedFactory } = useFactory();
     const [loading, setLoading] = useState(true);
     const [stock, setStock] = useState([]);
-    const [products, setProducts] = useState([]);
+    const [tubs, setTubs] = useState([]);
     const [error, setError] = useState(null);
     const [filters, setFilters] = useState({
         search: '',
-        product_id: ''
+        tub_id: ''
     });
 
     useEffect(() => {
@@ -54,12 +54,12 @@ export default function LiveStockPage() {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
-            const [stockData, productsData] = await Promise.all([
+            const [stockData, tubsData] = await Promise.all([
                 inventoryAPI.getAvailable(params).catch(() => []),
                 productsAPI.getAll(params).catch(() => []),
             ]);
             setStock(Array.isArray(stockData) ? stockData : []);
-            setProducts(Array.isArray(productsData) ? productsData : []);
+            setTubs(Array.isArray(tubsData) ? tubsData : []);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -71,22 +71,22 @@ export default function LiveStockPage() {
         loadData();
     }, [loadData]);
 
-    // Get product details
-    const getProductName = (id) => {
-        const p = products.find((p) => p.id === id);
+    // Get tub details
+    const getTubName = (id) => {
+        const p = tubs.find((p) => p.id === id);
         return p ? `${p.name} (${p.size}, ${p.color})` : 'Unknown';
     };
 
     // Filter stock
     const filteredStock = stock.filter((item) => {
-        const productName = getProductName(item.product_id).toLowerCase();
-        const searchMatch = productName.includes(filters.search.toLowerCase());
-        const productMatch = !filters.product_id || item.product_id === filters.product_id;
-        return searchMatch && productMatch;
+        const tubName = getTubName(item.product_id).toLowerCase();
+        const searchMatch = tubName.includes(filters.search.toLowerCase());
+        const tubMatch = !filters.tub_id || item.product_id === filters.tub_id;
+        return searchMatch && tubMatch;
     });
 
     // Calculate totals
-    const totalBundles = filteredStock.reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const totalTubsAvailable = filteredStock.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
     return (
         <>
@@ -106,8 +106,8 @@ export default function LiveStockPage() {
                         <Package size={28} />
                     </div>
                     <div className={styles.statContent}>
-                        <div className={styles.statValue}>{formatNumber(totalBundles)}</div>
-                        <div className={styles.statLabel}>Total Bundles Available</div>
+                        <div className={styles.statValue}>{formatNumber(totalTubsAvailable)}</div>
+                        <div className={styles.statLabel}>Total Tubs Available</div>
                         <div className={styles.statSublabel}>Ready to sell</div>
                     </div>
                 </div>
@@ -117,8 +117,8 @@ export default function LiveStockPage() {
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{filteredStock.length}</div>
-                        <div className={styles.statLabel}>Product Variants</div>
-                        <div className={styles.statSublabel}>Unique products</div>
+                        <div className={styles.statLabel}>Tub Variants</div>
+                        <div className={styles.statSublabel}>Unique tubs</div>
                     </div>
                 </div>
             </div>
@@ -132,7 +132,7 @@ export default function LiveStockPage() {
                             <input
                                 type="text"
                                 className={styles.filterInput}
-                                placeholder="Search products..."
+                                placeholder="Search tubs..."
                                 value={filters.search}
                                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                             />
@@ -142,11 +142,11 @@ export default function LiveStockPage() {
                         <Filter size={16} className={styles.filterIcon} />
                         <select
                             className={styles.filterSelect}
-                            value={filters.product_id}
-                            onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}
+                            value={filters.tub_id}
+                            onChange={(e) => setFilters({ ...filters, tub_id: e.target.value })}
                         >
-                            <option value="">All Products</option>
-                            {products.map((p) => (
+                            <option value="">All Tubs</option>
+                            {tubs.map((p) => (
                                 <option key={p.id} value={p.id}>
                                     {p.name} ({p.size})
                                 </option>
@@ -174,28 +174,28 @@ export default function LiveStockPage() {
                     <div className="empty-state">
                         <Package size={48} />
                         <p>No sellable stock available</p>
-                        <p className="text-muted">Stock will appear here once bundles are created</p>
+                        <p className="text-muted">Stock will appear here once tubs are created</p>
                     </div>
                 ) : (
                     <table className="table">
                         <thead>
                             <tr>
-                                <th>Product</th>
+                                <th>Tub</th>
                                 <th>Size</th>
                                 <th>Color</th>
-                                <th style={{ textAlign: 'right' }}>Available (Bundles)</th>
+                                <th style={{ textAlign: 'right' }}>Available (Tubs)</th>
                                 <th style={{ textAlign: 'right' }}>Last Updated</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredStock.map((item, idx) => {
-                                const product = products.find((p) => p.id === item.product_id);
+                                const tub = tubs.find((p) => p.id === item.product_id);
                                 return (
                                     <tr key={item.id || idx}>
-                                        <td className="font-medium">{product?.name || 'Unknown'}</td>
-                                        <td>{product?.size || '—'}</td>
+                                        <td className="font-medium">{tub?.name || 'Unknown'}</td>
+                                        <td>{tub?.size || '—'}</td>
                                         <td>
-                                            <span className="badge badge-gray">{product?.color || '—'}</span>
+                                            <span className="badge badge-gray">{tub?.color || '—'}</span>
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <span className={styles.quantity}>{formatNumber(item.quantity)}</span>

@@ -103,7 +103,7 @@ export default function MachinesPage() {
                 },
                 {
                     title: "Cost Center (Daily Running Cost)",
-                    explanation: "The 'Daily Running Cost' represents fixed overhead (electricity, labor) per day. The system uses this to calculate the cost-per-bundle in your financial reports."
+                    explanation: "The 'Daily Running Cost' represents fixed overhead (electricity, labor) per day. The system uses this to calculate the cost-per-tub in your financial reports."
                 },
                 {
                     title: "Mechanical Limits (Max Die Weight)",

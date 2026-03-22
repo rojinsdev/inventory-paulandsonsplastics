@@ -80,7 +80,7 @@ export default function PackingRulesPage() {
         setPageTitle('Packing Rules');
         registerGuide({
             title: "Advanced Packing Recipes",
-            description: "Define product-specific packaging recipes (Bags, Boxes, Packets).",
+            description: "Define tub-specific packaging recipes (Bags, Boxes, Packets).",
             logic: [
                 {
                     title: "Packaging Recipes",
@@ -155,7 +155,7 @@ export default function PackingRulesPage() {
                 <div>
                     <h1 className={styles.pageTitle}>Packing Rules & Recipes</h1>
                     <p className={styles.pageDescription}>
-                        Configure global defaults and product-specific packaging workflows
+                        Configure global defaults and tub-specific packaging workflows
                     </p>
                 </div>
             </div>
@@ -165,7 +165,7 @@ export default function PackingRulesPage() {
             <div className={styles.recipeSection}>
                 <div className={styles.sectionHeader}>
                     <div>
-                        <h2 className={styles.pageTitle} style={{ fontSize: '1.25rem' }}>Product Specific Recipes</h2>
+                        <h2 className={styles.pageTitle} style={{ fontSize: '1.25rem' }}>Tub Specific Recipes</h2>
                         <p className={styles.pageDescription}>Advanced packaging flows for specific factories</p>
                     </div>
                     {selectedProduct && (
@@ -192,7 +192,7 @@ export default function PackingRulesPage() {
                         />
                     </div>
                     <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Select Product</label>
+                        <label className={styles.formLabel}>Select Tub</label>
                         <CustomSelect
                             options={products
                                 .filter(p => !selectedFactory || p.factory_id === selectedFactory)
@@ -204,7 +204,7 @@ export default function PackingRulesPage() {
                                 const prod = products.find(p => p.id === val);
                                 if (prod && !selectedFactory) setSelectedFactory(prod.factory_id);
                             }}
-                            placeholder="Search product..."
+                            placeholder="Search tub..."
                         />
                     </div>
                 </div>
@@ -212,14 +212,14 @@ export default function PackingRulesPage() {
                 {!selectedProduct ? (
                     <div className={styles.emptyState} style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--surface)', borderRadius: '1rem', border: '1px solid var(--border)' }}>
                         <Package size={48} color="var(--text-muted)" style={{ margin: '0 auto 1rem' }} />
-                        <p style={{ color: 'var(--text-muted)' }}>Select a product above to view or define specific packaging recipes.</p>
+                        <p style={{ color: 'var(--text-muted)' }}>Select a tub above to view or define specific packaging recipes.</p>
                     </div>
                 ) : loadingRecipes ? (
                     <div className={styles.loading}><Loader2 size={32} className={styles.spinner} /></div>
                 ) : recipes.length === 0 ? (
                     <div className={styles.emptyState} style={{ textAlign: 'center', padding: '4rem', backgroundColor: 'var(--surface)', borderRadius: '1rem', border: '1px solid var(--border)' }}>
                         <Info size={48} color="var(--text-muted)" style={{ margin: '0 auto 1rem' }} />
-                        <p style={{ color: 'var(--text-muted)' }}>No specific recipes found for this product. It will use system defaults.</p>
+                        <p style={{ color: 'var(--text-muted)' }}>No specific recipes found for this tub. It will use system defaults.</p>
                         <button className={styles.primaryButton} style={{ margin: '1.5rem auto 0' }} onClick={handleAddRecipeLoad}>
                             <Plus size={18} /> Define First Recipe
                         </button>
@@ -294,7 +294,7 @@ export default function PackingRulesPage() {
                                         </div>
                                     </div>
                                     <div className={styles.formGroup}>
-                                        <label className={styles.formLabel}>Unit Name (e.g. Bag, Box, Bundle)</label>
+                                        <label className={styles.formLabel}>Unit Name (e.g. Bag, Box, Tub)</label>
                                         <input
                                             type="text"
                                             className={styles.formInput}
@@ -315,7 +315,7 @@ export default function PackingRulesPage() {
                                             onChange={e => setRecipeFormData({ ...recipeFormData, has_packets: e.target.checked })}
                                         />
                                         <div>
-                                            <span className={styles.formLabel} style={{ fontSize: '0.95rem' }}>Intermediate Packaging (Packets/Bundles)</span>
+                                            <span className={styles.formLabel} style={{ fontSize: '0.95rem' }}>Intermediate Packaging (Packets/Tubs)</span>
                                             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
                                                 Enable if items are first sorted into packets before being packed into the {recipeFormData.unit_name}.
                                             </p>
@@ -386,7 +386,7 @@ export default function PackingRulesPage() {
                                             onChange={e => setRecipeFormData({ ...recipeFormData, is_default: e.target.checked })}
                                         />
                                         <div>
-                                            <span className={styles.formLabel}>Set as default for this product</span>
+                                            <span className={styles.formLabel}>Set as default for this tub</span>
                                             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
                                                 Mobile app will automatically suggest this {recipeFormData.unit_name} during packing.
                                             </p>

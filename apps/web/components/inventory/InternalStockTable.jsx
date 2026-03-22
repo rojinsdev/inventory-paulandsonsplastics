@@ -34,7 +34,7 @@ export default function InternalStockTable({ stock, products, loading, filters, 
 
             // Group finished stock by unit_type
             const finishedStock = productStock.filter(s => s.state === 'finished');
-            const unitTypes = [...new Set(finishedStock.map(s => s.unit_type || 'bundle'))];
+            const unitTypes = [...new Set(finishedStock.map(s => s.unit_type || 'tub'))];
 
             if (unitTypes.length === 0) {
                 // No finished stock, just one row with 0
@@ -47,16 +47,16 @@ export default function InternalStockTable({ stock, products, loading, filters, 
                     finished: 0,
                     reserved: 0,
                     available: 0,
-                    unit_type: 'bundle'
+                    unit_type: 'tub'
                 });
             } else {
                 unitTypes.forEach(ut => {
                     const utFinished = finishedStock
-                        .filter(s => (s.unit_type || 'bundle') === ut)
+                        .filter(s => (s.unit_type || 'tub') === ut)
                         .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
                     
                     const utReserved = productStock
-                        .filter(s => s.state === 'reserved' && (s.unit_type || 'bundle') === ut)
+                        .filter(s => s.state === 'reserved' && (s.unit_type || 'tub') === ut)
                         .reduce((sum, s) => sum + (Number(s.quantity) || 0), 0);
 
                     // We distribute semi_finished and packed to the first row of the product or keep them separate?
@@ -170,7 +170,7 @@ export default function InternalStockTable({ stock, products, loading, filters, 
                     <thead>
                         <tr>
                             <th style={{ width: '40px' }}></th>
-                            <th>Product Template / Color</th>
+                            <th>Tub Template / Color</th>
                             <th style={{ textAlign: 'right' }}>Loose</th>
                             <th style={{ textAlign: 'right' }}>Packed</th>
                             <th style={{ textAlign: 'right' }}>Finished</th>
@@ -235,7 +235,7 @@ export default function InternalStockTable({ stock, products, loading, filters, 
                                                         {variant.color} | {variant.sku || 'No SKU'} 
                                                         {variant.unit_type && (
                                                             <span className={cn(styles.badge, styles.unitBadge)}>
-                                                                {variant.unit_type}
+                                                                {variant.unit_type === 'bundle' ? 'tub' : variant.unit_type}
                                                             </span>
                                                         )}
                                                     </div>

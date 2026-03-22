@@ -6,10 +6,10 @@ export default function FinishedGoodsPage() {
         <InventoryPageTemplate
             title="Finished Goods"
             type="finished"
-            description="Completely bundled goods ready for sale"
+            description="Completely packaged tubs ready for sale"
             guide={{
                 title: "Finished Goods",
-                description: "Final bundles ready for dispatch. This is the only sellable state.",
+                description: "Final tubs ready for dispatch. This is the only sellable state.",
                 logic: [
                     {
                         title: "Final QC Lock",
@@ -17,12 +17,12 @@ export default function FinishedGoodsPage() {
                     },
                     {
                         title: "FIFO Suggestions",
-                        explanation: "The system suggests oldest bundles for dispatch first to ensure inventory freshness and rotation."
+                        explanation: "The system suggests oldest tubs for dispatch first to ensure inventory freshness and rotation."
                     }
                 ],
                 components: [
                     {
-                        name: "Bundle Table",
+                        name: "Tub Table",
                         description: "Detailed view including Batch Number and 'Ready for Dispatch' status."
                     },
                     {

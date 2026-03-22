@@ -13,7 +13,7 @@ export default function ReservedPage() {
                 logic: [
                     {
                         title: "Hard Lock Mechanism",
-                        explanation: "Once a Sales Order is 'Confirmed', the system moves the quantity from 'Finished' to 'Reserved'. This prevents overselling the same physical bundle."
+                        explanation: "Once a Sales Order is 'Confirmed', the system moves the quantity from 'Finished' to 'Reserved'. This prevents overselling the same physical tub."
                     },
                     {
                         title: "Inventory Reversion",

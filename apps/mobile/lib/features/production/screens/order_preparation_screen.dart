@@ -108,7 +108,7 @@ class _OrderPreparationScreenState
   }
 }
 
-class _OrderPreparedCard extends ConsumerWidget {
+class _OrderPreparedCard extends StatefulWidget {
   final String orderId;
   final String? orderNumber;
   final String customerName;
@@ -124,82 +124,198 @@ class _OrderPreparedCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+  State<_OrderPreparedCard> createState() => _OrderPreparedCardState();
+}
 
-    String deliveryStr = 'ASAP';
-    if (deliveryDate != null) {
-      deliveryStr = DateFormat('MMM dd').format(deliveryDate!);
+class _OrderPreparedCardState extends State<_OrderPreparedCard> {
+  final Map<String, TextEditingController> _controllers = {};
+
+  @override
+  void initState() {
+    super.initState();
+    for (final item in widget.items) {
+      if (!item.isBackordered) {
+        final remaining = item.quantity - item.quantityPrepared;
+        _controllers[item.id] =
+            TextEditingController(text: remaining > 0 ? remaining.toString() : '0');
+      }
     }
+  }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 20),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: colorScheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Order #${orderNumber ?? orderId.split('-').last.toUpperCase()}',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.bold,
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(builder: (context, ref, child) {
+      final theme = Theme.of(context);
+      final colorScheme = theme.colorScheme;
+      final user = ref.watch(authStateProvider).value;
+
+      String deliveryStr = 'ASAP';
+      if (widget.deliveryDate != null) {
+        deliveryStr = DateFormat('MMM dd').format(widget.deliveryDate!);
+      }
+
+      // Check if any items are actually Forward-able (not backordered and have remaining qty)
+      final canForward = _controllers.isNotEmpty;
+
+      return Card(
+        margin: const EdgeInsets.only(bottom: 20),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Order #${widget.orderNumber ?? widget.orderId.split('-').last.toUpperCase()}',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      Text(
-                        customerName,
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
+                        Text(
+                          widget.customerName,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
+                      ],
+                    ),
+                  ),
+                  _DeliveryIndicator(dateStr: deliveryStr),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: widget.items.length,
+              separatorBuilder: (context, index) =>
+                  const Divider(height: 1, indent: 20, endIndent: 20),
+              itemBuilder: (context, index) {
+                final item = widget.items[index];
+                return _ItemRow(
+                  item: item,
+                  controller: _controllers[item.id],
+                );
+              },
+            ),
+            if (canForward) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final List<Map<String, dynamic>> itemsToPrepare = [];
+                      bool hasInvalidInput = false;
+
+                      for (final item in widget.items) {
+                        final controller = _controllers[item.id];
+                        if (controller == null) continue;
+
+                        final qty = int.tryParse(controller.text) ?? 0;
+                        if (qty > 0) {
+                          final remaining = item.quantity - item.quantityPrepared;
+                          if (qty > remaining) {
+                            hasInvalidInput = true;
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text(
+                                        'Quantity for ${item.productName} exceeds remaining order.')),
+                              );
+                            }
+                            break;
+                          }
+                          itemsToPrepare.add({
+                            'item_id': item.id,
+                            'quantity': qty,
+                          });
+                        }
+                      }
+
+                      if (hasInvalidInput) return;
+                      if (itemsToPrepare.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Please enter quantities to prepare.')),
+                        );
+                        return;
+                      }
+
+                      try {
+                        await ref
+                            .read(pendingOrdersProvider.notifier)
+                            .prepareOrderItems(
+                              widget.orderId,
+                              itemsToPrepare,
+                              factoryId: user?.factoryId,
+                            );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                                content: Text('Items forwarded for dispatch')),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.rocket_launch_outlined),
+                    label: const Text('Forward Selection to Dispatch'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-                _DeliveryIndicator(dateStr: deliveryStr),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: items.length,
-            separatorBuilder: (context, index) =>
-                const Divider(height: 1, indent: 20, endIndent: 20),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return _ItemRow(item: item);
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
+              ),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      );
+    });
   }
 }
 
-class _ItemRow extends ConsumerWidget {
+class _ItemRow extends StatelessWidget {
   final SalesOrderItem item;
+  final TextEditingController? controller;
 
-  const _ItemRow({required this.item});
+  const _ItemRow({required this.item, this.controller});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final user = ref.watch(authStateProvider).value;
+    final remaining = item.quantity - item.quantityPrepared;
 
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -207,6 +323,7 @@ class _ItemRow extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
@@ -229,19 +346,34 @@ class _ItemRow extends ConsumerWidget {
                   ],
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.secondaryContainer.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${item.quantity} ${item.unitType}',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: colorScheme.secondaryContainer.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Total: ${item.quantity} ${item.unitType}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ),
+                  if (item.quantityPrepared > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Prepared: ${item.quantityPrepared}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),
@@ -261,9 +393,55 @@ class _ItemRow extends ConsumerWidget {
                 ),
               ],
             ),
+          ] else ...[
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Qty to Prepare',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 48,
+                        child: TextField(
+                          controller: controller,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            hintText: '0',
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: Text(
+                    '/ $remaining Remaining',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.outline,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
           if (item.notes != null && item.notes!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
             Text(
               'Notes: ${item.notes}',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -271,50 +449,6 @@ class _ItemRow extends ConsumerWidget {
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: item.isBackordered
-                  ? null
-                  : () async {
-                      try {
-                        await ref
-                            .read(pendingOrdersProvider.notifier)
-                            .prepareItem(
-                              item.id,
-                              factoryId: user?.factoryId,
-                            );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content: Text('Item marked as prepared')),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error: $e')),
-                          );
-                        }
-                      }
-                    },
-              icon: Icon(
-                item.isBackordered
-                    ? Icons.hourglass_empty
-                    : Icons.check_circle_outline,
-                size: 18,
-              ),
-              label: Text(
-                  item.isBackordered ? 'Awaiting Stock' : 'Mark as Prepared'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );

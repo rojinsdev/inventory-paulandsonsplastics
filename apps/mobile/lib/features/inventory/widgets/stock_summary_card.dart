@@ -26,7 +26,7 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Aggregate totals for Products
+    // Aggregate totals for Tubs
     int totalSemiFinished = 0;
     int totalPacked = 0;
     int totalBundled = 0;
@@ -89,7 +89,7 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
                     icon: Icons.inventory_2_outlined,
                   ),
                   StockItem(
-                    label: 'Bundles',
+                    label: 'Tubs',
                     value: totalBundled,
                     icon: Icons.layers_outlined,
                   ),

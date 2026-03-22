@@ -31,8 +31,9 @@ export default function ProductsPage() {
     const { selectedFactory, factories } = useFactory();
 
     const [modalOpen, setModalOpen] = useState(false);
-    const [isTemplateMode, setIsTemplateMode] = useState(false);
+    const [isTemplateMode, setIsTemplateMode] = useState(true);
     const [editingProduct, setEditingProduct] = useState(null);
+    const [customColor, setCustomColor] = useState('');
 
     // Form state
     const [formData, setFormData] = useState({
@@ -42,8 +43,6 @@ export default function ProductsPage() {
         color: 'White',
         colors: ['White'], // For template mode
         weight_grams: '',
-        selling_price: '',
-        status: 'active',
         factory_id: '',
         raw_material_id: '',
         cap_template_id: '',
@@ -52,6 +51,7 @@ export default function ProductsPage() {
         items_per_bag: '',
         packets_per_box: '',
         items_per_box: '',
+        items_per_bundle: '600',
     });
 
     const [initialColors, setInitialColors] = useState([]);
@@ -118,7 +118,7 @@ export default function ProductsPage() {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             setModalOpen(false);
             const action = editingProduct ? 'updated' : 'created';
-            const type = isTemplateMode ? 'Template' : 'Product';
+            const type = isTemplateMode ? 'Template' : 'Tub';
             toast.success(`${type} ${action} successfully`);
         },
         onError: (err) => toast.error(err.message || 'Failed to save')
@@ -129,19 +129,9 @@ export default function ProductsPage() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-            toast.success('Product deleted successfully');
+            toast.success('Tub deleted successfully');
         },
-        onError: (err) => toast.error(err.message || 'Failed to delete product')
-    });
-
-    const statusMutation = useMutation({
-        mutationFn: ({ id, status }) => productsAPI.update(id, { status }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['products'] });
-            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-            toast.success('Status updated');
-        },
-        onError: (err) => toast.error(err.message || 'Failed to update status')
+        onError: (err) => toast.error(err.message || 'Failed to delete tub')
     });
 
     const saving = saveMutation.isPending;
@@ -149,22 +139,18 @@ export default function ProductsPage() {
 
     // Load products
     useEffect(() => {
-        setPageTitle('Products');
+        setPageTitle('Tubs');
         registerGuide({
-            title: "Product Management",
+            title: "Tub Management",
             description: "Central catalog for manufacturing specs, SKU tracking, and packing hierarchy.",
             logic: [
                 {
                     title: "Specs (Weight & SKU)",
-                    explanation: "The 'Weight (grams)' is critical for production math; it tells the system how much raw material to deduct per piece. 'SKU' is the unique code used to track this specific product version."
+                    explanation: "The 'Weight (grams)' is critical for production math; it tells the system how much raw material to deduct per piece. 'SKU' is the unique code used to track this specific tub version."
                 },
                 {
                     title: "Packing Hierarchy (Units)",
-                    explanation: "Defines the bundle math: [Items] go into a [Packet], and [Packets] go into a [Bundle]. One 'Bundle' is the standard unit you sell and ship to customers."
-                },
-                {
-                    title: "Price Management",
-                    explanation: "The 'Selling Price' is your default rate per unit (piece). This is used for production value and cost recovery calculations."
+                    explanation: "Defines the tub math: [Items] go into a [Packet], and [Packets] go into a [Tub]. One 'Tub' is the standard unit you sell and ship to customers."
                 }
             ],
             components: [
@@ -174,7 +160,7 @@ export default function ProductsPage() {
                 },
                 {
                     name: "Packing Rules Editor",
-                    description: "Fine-tune the items-per-bundle ratio for specific products to override system defaults."
+                    description: "Fine-tune the items-per-tub ratio for specific tubs to override system defaults."
                 }
             ]
         });
@@ -185,7 +171,7 @@ export default function ProductsPage() {
     // Open modal for create
     const handleCreate = () => {
         setEditingProduct(null);
-        setIsTemplateMode(false);
+        setIsTemplateMode(true);
         setInitialColors([]);
         setFormData({
             name: '',
@@ -194,11 +180,9 @@ export default function ProductsPage() {
             color: 'White',
             colors: ['White'],
             weight_grams: '',
-            selling_price: '',
             items_per_packet: '100',
             packets_per_bundle: '50',
             items_per_bundle: '600',
-            status: 'active',
             factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
             raw_material_id: '',
             cap_template_id: '',
@@ -231,11 +215,9 @@ export default function ProductsPage() {
                     color: '',
                     colors: currentColors,
                     weight_grams: template.weight_grams || '',
-                    selling_price: template.selling_price || '',
                     items_per_packet: template.items_per_packet || '100',
                     packets_per_bundle: template.packets_per_bundle || '50',
                     items_per_bundle: template.items_per_bundle || '',
-                    status: template.status || 'active',
                     factory_id: template.factory_id || '',
                     raw_material_id: template.raw_material_id || '',
                     cap_template_id: template.cap_template_id || '',
@@ -255,7 +237,7 @@ export default function ProductsPage() {
 
         // Single Product Edit
         setEditingProduct(product);
-        setIsTemplateMode(false);
+        setIsTemplateMode(true);
         setInitialColors([]);
         setFormData({
             name: product.name || '',
@@ -264,11 +246,9 @@ export default function ProductsPage() {
             color: product.color || 'White',
             colors: [product.color || 'White'],
             weight_grams: product.weight_grams || '',
-            selling_price: product.selling_price || '',
             items_per_packet: product.items_per_packet || '100',
             packets_per_bundle: product.packets_per_bundle || '50',
             items_per_bundle: product.items_per_bundle || '',
-            status: product.status || 'active',
             factory_id: product.factory_id || '',
             raw_material_id: product.raw_material_id || '',
             cap_template_id: product.cap_template_id || '',
@@ -296,7 +276,6 @@ export default function ProductsPage() {
                 items_per_packet: Number(formData.items_per_packet) || 0,
                 packets_per_bundle: Number(formData.packets_per_bundle) || 0,
                 items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
-                selling_price: formData.selling_price ? Number(formData.selling_price) : null,
                 factory_id: formData.factory_id,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
@@ -323,7 +302,6 @@ export default function ProductsPage() {
                 ...formData,
                 sku: formData.sku?.trim() || null,
                 weight_grams: Number(formData.weight_grams) || 0,
-                selling_price: formData.selling_price ? Number(formData.selling_price) : null,
                 items_per_packet: Number(formData.items_per_packet) || 0,
                 packets_per_bundle: Number(formData.packets_per_bundle) || 0,
                 items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
@@ -345,21 +323,13 @@ export default function ProductsPage() {
 
     // Handle delete
     const handleDelete = async (product) => {
-        if (!confirm(`Delete product "${product.name}"?`)) return;
+        if (!confirm(`Delete tub "${product.name}"?`)) return;
         deleteMutation.mutate(product.id);
     };
 
-    // Toggle status
-    const handleToggleStatus = async (product) => {
-        statusMutation.mutate({
-            id: product.id,
-            status: product.status === 'active' ? 'inactive' : 'active',
-        });
-    };
 
     // Calculate stats
-    const totalProducts = products.length;
-    const activeProducts = products.filter((p) => p.status === 'active').length;
+    const totalTubs = products.length;
 
     // Validation Logic
     const isFormValid = () => {
@@ -388,14 +358,14 @@ export default function ProductsPage() {
             {/* Page Header */}
             <div className={styles.pageHeader}>
                 <div>
-                    <h1 className={styles.pageTitle}>Products</h1>
+                    <h1 className={styles.pageTitle}>Tubs</h1>
                     <p className={styles.pageDescription}>
-                        Manage product catalog and specifications
+                        Manage tub catalog and specifications
                     </p>
                 </div>
                 <button className={styles.primaryButton} onClick={handleCreate}>
                     <Plus size={18} />
-                    <span>Add Product</span>
+                    <span>Add Tub</span>
                 </button>
             </div>
 
@@ -406,8 +376,8 @@ export default function ProductsPage() {
                         <Package size={28} />
                     </div>
                     <div className={styles.statContent}>
-                        <div className={styles.statValue}>{totalProducts}</div>
-                        <div className={styles.statLabel}>Total Products</div>
+                        <div className={styles.statValue}>{totalTubs}</div>
+                        <div className={styles.statLabel}>Total Tubs</div>
                         <div className={styles.statSublabel}>In catalog</div>
                     </div>
                 </div>
@@ -416,18 +386,8 @@ export default function ProductsPage() {
                         <Package size={28} />
                     </div>
                     <div className={styles.statContent}>
-                        <div className={styles.statValue}>{activeProducts}</div>
-                        <div className={styles.statLabel}>Active Products</div>
-                        <div className={styles.statSublabel}>Currently available</div>
-                    </div>
-                </div>
-                <div className={styles.statCard}>
-                    <div className={styles.statIcon}>
-                        <Package size={28} />
-                    </div>
-                    <div className={styles.statContent}>
                         <div className={styles.statValue}>{templates.length}</div>
-                        <div className={styles.statLabel}>Product Templates</div>
+                        <div className={styles.statLabel}>Tub Templates</div>
                         <div className={styles.statSublabel}>Master specs</div>
                     </div>
                 </div>
@@ -438,7 +398,7 @@ export default function ProductsPage() {
                 {loading ? (
                     <div className={styles.loading}>
                         <Loader2 size={32} className={styles.spinner} />
-                        <span>Loading products...</span>
+                        <span>Loading tubs...</span>
                     </div>
                 ) : error ? (
                     <div className={styles.error}>
@@ -452,13 +412,13 @@ export default function ProductsPage() {
                 ) : products.length === 0 ? (
                     <div className={styles.emptyState}>
                         <Package size={48} />
-                        <p>No products configured yet</p>
+                        <p>No tubs configured yet</p>
                         <p className={styles.emptyHint}>
-                            Add your first product to start managing inventory
+                            Add your first tub to start managing inventory
                         </p>
                         <button className={styles.primaryButton} onClick={handleCreate}>
                             <Plus size={18} />
-                            <span>Add First Product</span>
+                            <span>Add First Tub</span>
                         </button>
                     </div>
                 ) : (
@@ -473,9 +433,8 @@ export default function ProductsPage() {
                                     <th>Weight (g)</th>
                                     <th>Raw Material</th>
                                     <th>Items/Pkt</th>
-                                    <th>Pkts/Bndl</th>
-                                    <th>Items/Bndl</th>
-                                    <th>Status</th>
+                                    <th>Pkts/Tub</th>
+                                    <th>Items/Tub</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -495,13 +454,7 @@ export default function ProductsPage() {
                                         <td>{product.items_per_packet}</td>
                                         <td>{product.packets_per_bundle}</td>
                                         <td>{product.items_per_bundle || '—'}</td>
-                                        <td>
-                                            <button
-                                                className={cn(styles.toggle, product.status === 'active' && styles.toggleActive)}
-                                                onClick={() => handleToggleStatus(product)}
-                                                title={product.status === 'active' ? 'Deactivate' : 'Activate'}
-                                            />
-                                        </td>
+
                                         <td>
                                             <div className={styles.actions}>
                                                 <button
@@ -534,33 +487,14 @@ export default function ProductsPage() {
                     <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.modalHeader}>
                             <h2 className={styles.modalTitle}>
-                                {editingProduct ? 'Edit Product' : isTemplateMode ? 'Add Product Template' : 'Add Single Product'}
+                                {editingProduct ? 'Edit Tub' : isTemplateMode ? 'Add Tub Template' : 'Add Single Tub'}
                             </h2>
                             <button onClick={() => setModalOpen(false)} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
                         <form onSubmit={handleSubmit} className={styles.modalContent}>
-                            {!editingProduct && (
-                                <div className={styles.modeToggleWrapper}>
-                                    <div className={styles.modeToggle}>
-                                        <button
-                                            type="button"
-                                            className={cn(styles.modeBtn, !isTemplateMode && styles.modeBtnActive)}
-                                            onClick={() => setIsTemplateMode(false)}
-                                        >
-                                            Single SKU
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={cn(styles.modeBtn, isTemplateMode && styles.modeBtnActive)}
-                                            onClick={() => setIsTemplateMode(true)}
-                                        >
-                                            Template (Multiple Colors)
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
+
 
                             <div className={styles.modalBody}>
                                 <div className={styles.landscapeLayout}>
@@ -573,7 +507,7 @@ export default function ProductsPage() {
                                             </h3>
                                             <div className={styles.formRow}>
                                                 <div className={styles.formGroup}>
-                                                    <label className={styles.formLabel}>Product Name *</label>
+                                                    <label className={styles.formLabel}>Tub Name *</label>
                                                     <input
                                                         type="text"
                                                         className={styles.formInput}
@@ -611,34 +545,9 @@ export default function ProductsPage() {
                                                         placeholder="e.g., 600x400x300, 100ml"
                                                     />
                                                 </div>
-                                                {!isTemplateMode ? (
-                                                    <div className={styles.formGroup}>
-                                                        <label className={styles.formLabel}>SKU (Optional)</label>
-                                                        <input
-                                                            type="text"
-                                                            className={styles.formInput}
-                                                            value={formData.sku}
-                                                            onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                                                            placeholder="Unique Code"
-                                                        />
-                                                    </div>
-                                                ) : (
-                                                    <div className={styles.formGroup}>
-                                                        <label className={styles.formLabel}>Status</label>
-                                                        <CustomSelect
-                                                            options={[
-                                                                { value: 'active', label: 'Active' },
-                                                                { value: 'inactive', label: 'Inactive' }
-                                                            ]}
-                                                            value={formData.status}
-                                                            onChange={(val) => setFormData({ ...formData, status: val })}
-                                                        />
-                                                    </div>
-                                                )}
+
                                             </div>
 
-                                            {isTemplateMode && (
-                                                <>
                                                     <div className={styles.formGroup} style={{ marginTop: '1rem' }}>
                                                         <label className={styles.formLabel}>Default Cap Template (Optional)</label>
                                                         <CustomSelect
@@ -667,11 +576,9 @@ export default function ProductsPage() {
                                                             placeholder="Select inner template"
                                                         />
                                                         <p className={styles.inputHint}>
-                                                            Automatically deducts inners when products are packed.
+                                                            Automatically deducts inners when tubs are packed.
                                                         </p>
                                                     </div>
-                                                </>
-                                            )}
                                         </div>
 
                                         <div className={styles.formSection}>
@@ -707,33 +614,7 @@ export default function ProductsPage() {
                                                     />
                                                 </div>
                                             </div>
-                                            <div className={styles.formRow}>
-                                                <div className={styles.formGroup}>
-                                                    <label className={styles.formLabel}>Selling Price (Optional)</label>
-                                                    <div className={styles.prefixWrapper}>
-                                                        <input
-                                                            type="number"
-                                                            className={styles.formInput}
-                                                            value={formData.selling_price ?? ''}
-                                                            onChange={(e) => setFormData({ ...formData, selling_price: e.target.value === '' ? '' : e.target.value })}
-                                                            placeholder="0.80"
-                                                            min="0"
-                                                            step="0.01"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className={styles.formGroup}>
-                                                    <label className={styles.formLabel}>Status</label>
-                                                    <CustomSelect
-                                                        options={[
-                                                            { value: 'active', label: 'Active' },
-                                                            { value: 'inactive', label: 'Inactive' }
-                                                        ]}
-                                                        value={formData.status}
-                                                        onChange={(val) => setFormData({ ...formData, status: val })}
-                                                    />
-                                                </div>
-                                            </div>
+
                                         </div>
 
                                     </div>
@@ -758,9 +639,9 @@ export default function ProductsPage() {
                                                 />
                                             </div>
 
-                                            {/* Bundle Section */}
+                                            {/* Tub Section */}
                                             <div className={styles.packagingToggleRow}>
-                                                <span className={styles.toggleLabel}>Enable Bundle</span>
+                                                <span className={styles.toggleLabel}>Enable Tub Packaging</span>
                                                 <div 
                                                     className={`${styles.toggle} ${formData.bundle_enabled ? styles.toggleActive : ''}`}
                                                     onClick={() => setFormData({ ...formData, bundle_enabled: !formData.bundle_enabled })}
@@ -769,7 +650,7 @@ export default function ProductsPage() {
                                             {formData.bundle_enabled && (
                                                 <div className={styles.formRow} style={{ marginBottom: '1.5rem', animation: 'fadeIn 0.2s ease-out' }}>
                                                     <div className={styles.formGroup}>
-                                                        <label className={styles.formLabel}>Packets per Bundle *</label>
+                                                        <label className={styles.formLabel}>Packets per Tub *</label>
                                                         <input
                                                             type="number"
                                                             className={styles.formInput}
@@ -779,6 +660,17 @@ export default function ProductsPage() {
                                                             min="1"
                                                         />
                                                         <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_bundle || 0)} items</div>
+                                                    </div>
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Items per Tub</label>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.items_per_bundle}
+                                                            onChange={(e) => setFormData({ ...formData, items_per_bundle: e.target.value })}
+                                                            min="1"
+                                                        />
+                                                        <div className={styles.inputHint}>Loose items if no packets</div>
                                                     </div>
                                                 </div>
                                             )}
@@ -836,67 +728,85 @@ export default function ProductsPage() {
                                         <div className={styles.formSection}>
                                             <h3 className={styles.sectionTitle}>
                                                 <Plus size={16} />
-                                                {isTemplateMode ? 'Target Variants (Colors)' : 'Color Selection'}
+                                                Target Variants (Colors)
                                             </h3>
-                                            {isTemplateMode ? (
-                                                <div className={styles.colorTagSection}>
-                                                    <div className={styles.tagContainer}>
-                                                        {formData.colors.length === 0 && (
-                                                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                                Select at least one color below...
-                                                            </span>
-                                                        )}
-                                                        {formData.colors.map(col => (
-                                                            <div key={col} className={styles.colorTag}>
-                                                                <span>{col}</span>
-                                                                <button
-                                                                    type="button"
-                                                                    className={styles.removeTagBtn}
-                                                                    onClick={() => {
-                                                                        setFormData({
-                                                                            ...formData,
-                                                                            colors: formData.colors.filter(c => c !== col)
-                                                                        });
-                                                                    }}
-                                                                >
-                                                                    <X size={14} />
-                                                                </button>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                    <div className={styles.availableColors}>
-                                                        {COLORS.map(c => (
+                                            <div className={styles.colorTagSection}>
+                                                <div className={styles.tagContainer}>
+                                                    {formData.colors.length === 0 && (
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                            Select at least one color below...
+                                                        </span>
+                                                    )}
+                                                    {formData.colors.map(col => (
+                                                        <div key={col} className={styles.colorTag}>
+                                                            <span>{col}</span>
                                                             <button
-                                                                key={c.value}
                                                                 type="button"
-                                                                className={cn(
-                                                                    styles.colorChoiceBtn,
-                                                                    formData.colors.includes(c.value) && styles.colorChoiceBtnSelected
-                                                                )}
+                                                                className={styles.removeTagBtn}
                                                                 onClick={() => {
-                                                                    if (!formData.colors.includes(c.value)) {
-                                                                        setFormData({
-                                                                            ...formData,
-                                                                            colors: [...formData.colors, c.value]
-                                                                        });
-                                                                    }
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        colors: formData.colors.filter(c => c !== col)
+                                                                    });
                                                                 }}
-                                                                disabled={formData.colors.includes(c.value)}
                                                             >
-                                                                {c.label}
+                                                                <X size={14} />
                                                             </button>
-                                                        ))}
-                                                    </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            ) : (
-                                                <div className={styles.formGroup}>
-                                                    <CustomSelect
-                                                        options={COLORS}
-                                                        value={formData.color}
-                                                        onChange={(val) => setFormData({ ...formData, color: val })}
+                                                <div className={styles.availableColors}>
+                                                    {COLORS.map(c => (
+                                                        <button
+                                                            key={c.value}
+                                                            type="button"
+                                                            className={cn(
+                                                                styles.colorChoiceBtn,
+                                                                formData.colors.includes(c.value) && styles.colorChoiceBtnSelected
+                                                            )}
+                                                            onClick={() => {
+                                                                if (!formData.colors.includes(c.value)) {
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        colors: [...formData.colors, c.value]
+                                                                    });
+                                                                }
+                                                            }}
+                                                            disabled={formData.colors.includes(c.value)}
+                                                        >
+                                                            {c.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                                                    <input 
+                                                        className={styles.formInput}
+                                                        placeholder="Custom color..."
+                                                        value={customColor}
+                                                        onChange={(e) => setCustomColor(e.target.value)}
                                                     />
+                                                    <button 
+                                                        type="button"
+                                                        className={styles.secondaryButton}
+                                                        onClick={() => {
+                                                            if (customColor.trim()) {
+                                                                const color = customColor.trim();
+                                                                if (!formData.colors.includes(color)) {
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        colors: [...formData.colors, color]
+                                                                    });
+                                                                    setCustomColor('');
+                                                                } else {
+                                                                    toast.error('Color already added');
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        Add
+                                                    </button>
                                                 </div>
-                                            )}
+                                            </div>
                                         </div>
 
                                     </div>
@@ -922,9 +832,9 @@ export default function ProductsPage() {
                                             <span>Saving...</span>
                                         </>
                                     ) : editingProduct ? (
-                                        'Update Product'
+                                        'Update Tub'
                                     ) : (
-                                        'Create Product'
+                                        'Create Tub'
                                     )}
                                 </button>
                             </div>

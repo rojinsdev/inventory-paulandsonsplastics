@@ -49,7 +49,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
           if (previous?.isLoading ?? false) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('Bundling recorded successfully!'),
+                content: const Text('Tub packaging recorded successfully!'),
                 behavior: SnackBarBehavior.floating,
                 margin: const EdgeInsets.all(20),
                 shape: RoundedRectangleBorder(
@@ -82,7 +82,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Bundling Entry')),
+      appBar: AppBar(title: const Text('Tub Packaging Entry')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -109,8 +109,8 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                     Expanded(
                       child: Text(
                         _source == 'packed'
-                            ? 'Record finished bundles from packed packets.'
-                            : 'Record finished bundles directly from loose items.',
+                            ? 'Record finished tubs from packed packets.'
+                            : 'Record finished tubs directly from loose items.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onTertiaryContainer,
                         ),
@@ -126,7 +126,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 data: (templates) => DropdownButtonFormField<String>(
                   initialValue: _selectedProductTemplateId,
                   decoration: const InputDecoration(
-                    labelText: 'Product Type',
+                    labelText: 'Tub Type',
                     prefixIcon: Icon(Icons.inventory_2_outlined),
                   ),
                   items: templates
@@ -144,7 +144,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                     });
                   },
                   validator: (value) =>
-                      value == null ? 'Please select a product type' : null,
+                      value == null ? 'Please select a tub type' : null,
                 ),
                 loading: () => const LinearProgressIndicator(),
                 error: (error, _) => Text('Error: $error'),
@@ -165,7 +165,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                   if (template == null || template.bundleEnabled) {
                     segments.add(const ButtonSegment(
                       value: 'bundle',
-                      label: Text('Bundle'),
+                      label: Text('Tub'),
                       icon: Icon(Icons.inventory_2),
                     ));
                   }
@@ -204,7 +204,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Final Packaging Form',
+                        'Final Tub Form',
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: colorScheme.primary,
                           fontWeight: FontWeight.bold,
@@ -349,7 +349,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
 
               // Source Selector
               Text(
-                'Bundling Source',
+                'Tub Packaging Source',
                 style: theme.textTheme.titleSmall?.copyWith(
                   color: colorScheme.primary,
                   fontWeight: FontWeight.bold,
@@ -419,7 +419,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                       )
                     : const Icon(Icons.check),
                 label: Text(
-                  isSubmitting ? 'Submitting...' : 'Confirm Bundling',
+                  isSubmitting ? 'Submitting...' : 'Confirm Tub Packaging',
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: colorScheme.tertiary,

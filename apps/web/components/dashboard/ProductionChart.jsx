@@ -103,7 +103,7 @@ export default function ProductionChart({ data, timePeriod, compact }) {
                         },
                     ]}
                     yAxis={[
-                        { id: 'production', label: 'Bundles' },
+                        { id: 'production', label: 'Tubs' },
                         { id: 'efficiency', label: 'Efficiency %', position: 'right', max: 100, min: 0 }
                     ]}
                     series={[
@@ -111,7 +111,7 @@ export default function ProductionChart({ data, timePeriod, compact }) {
                             dataKey: 'actual',
                             label: 'Actual Production',
                             color: '#3b82f6',
-                            valueFormatter: (value) => `${formatNumber(value)} bundles`,
+                            valueFormatter: (value) => `${formatNumber(value)} tubs`,
                             yAxisId: 'production'
                         },
                         {
@@ -119,7 +119,7 @@ export default function ProductionChart({ data, timePeriod, compact }) {
                             dataKey: 'theoretical',
                             label: 'Theoretical Max',
                             color: '#94a3b8',
-                            valueFormatter: (value) => `${formatNumber(value)} bundles`,
+                            valueFormatter: (value) => `${formatNumber(value)} tubs`,
                             yAxisId: 'production',
                             strokeDasharray: '5 5',
                         },
@@ -137,7 +137,7 @@ export default function ProductionChart({ data, timePeriod, compact }) {
                             dataKey: 'yesterdayPace',
                             label: 'Yesterday Pace',
                             color: '#f59e0b', // Amber/Yellow for pace reference
-                            valueFormatter: (value) => `${formatNumber(value)} bundles`,
+                            valueFormatter: (value) => `${formatNumber(value)} tubs`,
                             yAxisId: 'production',
                             strokeDasharray: '3 3',
                         } : null

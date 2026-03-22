@@ -131,10 +131,14 @@ export class CapService {
 
     async getCapStockBalances(factoryId?: string) {
         let query = supabase
-            .from('cap_stock_balances')
+            .from('caps')
             .select(`
-                *,
-                caps (name, ideal_weight_grams, color)
+                id,
+                name,
+                color,
+                ideal_weight_grams,
+                factory_id,
+                balance:cap_stock_balances(id, quantity)
             `);
 
         if (factoryId) {
@@ -144,7 +148,19 @@ export class CapService {
         const { data, error } = await query;
 
         if (error) throw new Error(error.message);
-        return data;
+
+        // Map to match the flattened structure expected by the frontend
+        return (data || []).map((item: any) => ({
+            id: item.balance?.[0]?.id || `temp-${item.id}`,
+            cap_id: item.id,
+            factory_id: item.factory_id,
+            quantity: item.balance?.[0]?.quantity || 0,
+            caps: {
+                name: item.name,
+                color: item.color,
+                ideal_weight_grams: item.ideal_weight_grams
+            }
+        }));
     }
 
     // --- Template Management ---

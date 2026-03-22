@@ -14,7 +14,7 @@ class StockDetailScreen extends ConsumerStatefulWidget {
 class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
-  int _selectedTabIndex = 0; // 0: Products, 1: Caps
+  int _selectedTabIndex = 0; // 0: Tubs, 1: Caps
 
   @override
   void dispose() {
@@ -73,7 +73,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                               setState(() => _searchQuery = value),
                           decoration: InputDecoration(
                             hintText: _selectedTabIndex == 0
-                                ? 'Search products...'
+                                ? 'Search tubs...'
                                 : 'Search caps...',
                             prefixIcon: const Icon(Icons.search, size: 20),
                             suffixIcon: _searchQuery.isNotEmpty
@@ -107,7 +107,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                             Expanded(
                               child: _buildTab(
                                 context,
-                                'Products',
+                                'Tubs',
                                 _selectedTabIndex == 0,
                                 () => setState(() => _selectedTabIndex = 0),
                               ),
@@ -143,7 +143,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                         Icon(Icons.error_outline,
                             size: 48, color: colorScheme.error),
                         const SizedBox(height: 16),
-                        Text('Error loading product stock',
+                        Text('Error loading tub stock',
                             style: theme.textTheme.titleMedium),
                         TextButton(
                           onPressed: () =>
@@ -163,7 +163,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
 
                   if (filteredStocks.isEmpty) {
                     return const SliverFillRemaining(
-                      child: Center(child: Text('No products found')),
+                      child: Center(child: Text('No tubs found')),
                     );
                   }
 
@@ -344,7 +344,7 @@ class _ProductStockCard extends StatelessWidget {
               const SizedBox(width: 8),
               _CompactIndicator(
                 label: stock.unitType == null || stock.unitType!.isEmpty
-                    ? 'Bundles'
+                    ? 'Tubs'
                     : '${stock.unitType![0].toUpperCase()}${stock.unitType!.substring(1)}s',
                 value: stock.bundledQty,
                 color: colorScheme.primary,

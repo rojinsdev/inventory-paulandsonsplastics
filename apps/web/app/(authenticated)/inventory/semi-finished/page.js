@@ -9,7 +9,7 @@ export default function SemiFinishedPage() {
             description="Production items awaiting packing (Loose)"
             guide={{
                 title: "Semi-Finished Goods",
-                description: "Loose items produced by extruders/printers but not yet bundled.",
+                description: "Loose items produced by extruders/printers but not yet packed in tubs.",
                 logic: [
                     {
                         title: "WIP Calculation (Weight)",

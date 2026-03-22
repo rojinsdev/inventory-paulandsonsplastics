@@ -152,7 +152,7 @@ export default function UsersPage() {
             {/* Page Header */}
             <div className="page-header">
                 <div>
-                    <p className="text-muted">Manage production managers who can access the mobile app</p>
+                    <p className="text-muted">Manage tub production managers who can access the mobile app</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => { resetForm(); setShowModal(true); }}>
                     <Plus size={18} />
@@ -175,7 +175,7 @@ export default function UsersPage() {
                     {users.length === 0 ? (
                         <div className="empty-state">
                             <Users size={48} />
-                            <p>No users found. Create your first production manager account.</p>
+                            <p>No users found. Create your first tub production manager account.</p>
                             <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                                 Add User
                             </button>
@@ -207,7 +207,7 @@ export default function UsersPage() {
                                         <td>{user.email}</td>
                                         <td>
                                             <span className={cn('badge', user.role === 'admin' ? 'badge-primary' : 'badge-gray')}>
-                                                {user.role === 'admin' ? 'Admin' : 'Production Manager'}
+                                                {user.role === 'admin' ? 'Admin' : 'Tub Production Manager'}
                                             </span>
                                         </td>
                                         <td>
@@ -257,7 +257,7 @@ export default function UsersPage() {
                 <div className="modal-backdrop" onClick={() => setShowModal(false)}>
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2>{isEditMode ? 'Edit User' : 'Add Production Manager'}</h2>
+                            <h2>{isEditMode ? 'Edit User' : 'Add Tub Production Manager'}</h2>
                             <button className={styles.closeBtn} onClick={() => setShowModal(false)}>
                                 ×
                             </button>
@@ -307,7 +307,7 @@ export default function UsersPage() {
                                         value={formData.role}
                                         onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                                     >
-                                        <option value="production_manager">Production Manager</option>
+                                        <option value="production_manager">Tub Production Manager</option>
                                         <option value="admin">Admin</option>
                                     </select>
                                 </div>

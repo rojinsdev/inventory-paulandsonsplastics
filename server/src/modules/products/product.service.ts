@@ -67,7 +67,7 @@ export class ProductService {
             .select(`
                 *,
                 raw_materials(id, name),
-                product_templates(name)
+                product_templates(name, inner_template_id)
             `)
             .order('name', { ascending: true });
 

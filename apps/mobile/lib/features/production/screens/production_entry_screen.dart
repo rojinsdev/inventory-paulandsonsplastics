@@ -189,7 +189,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
     if (_formKey.currentState!.validate()) {
       if (_selectedMachineId == null || _selectedProductId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select machine and product')),
+          const SnackBar(content: Text('Please select machine and tub')),
         );
         return;
       }
@@ -295,7 +295,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 Icon(Icons.help_outline,
                     color: Theme.of(context).colorScheme.primary, size: 28),
                 const SizedBox(width: 12),
-                Text('Production Entry Guide',
+                Text('Tub Production Entry Guide',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           fontWeight: FontWeight.bold,
                         )),
@@ -421,7 +421,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('New Production Entry'),
+        title: const Text('New Tub Production Entry'),
         actions: [
           IconButton(
             onPressed: _showHelpGuide,
@@ -661,7 +661,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                             ? _selectedTemplateId 
                             : null,
                         decoration: const InputDecoration(
-                          labelText: 'Product Template',
+                          labelText: 'Tub Template',
                           prefixIcon: Icon(Icons.category_outlined),
                         ),
                         items: filteredTemplates
@@ -919,7 +919,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                       )
                     : const Icon(Icons.check),
                 label:
-                    Text(isSubmitting ? 'Submitting...' : 'Submit Production'),
+                    Text(isSubmitting ? 'Submitting...' : 'Submit Tub Production'),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(

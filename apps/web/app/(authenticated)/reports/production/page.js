@@ -25,12 +25,12 @@ export default function ProductionReportsPage() {
     const { selectedFactory } = useFactory();
 
     const [datePreset, setDatePreset] = useState('this_month');
-    const [category, setCategory] = useState('products'); // 'products' or 'inners'
+    const [category, setCategory] = useState('tubs'); // 'tubs' or 'inners'
     const [filters, setFilters] = useState({
         date_from: '',
         date_to: '',
         machine_id: '',
-        product_id: '',
+        tub_id: '',
         inner_template_id: '',
     });
 
@@ -54,7 +54,7 @@ export default function ProductionReportsPage() {
 
             return productionAPI.getLogs({
                 ...params,
-                product_id: filters.product_id || undefined,
+                product_id: filters.tub_id || undefined,
             });
         },
         enabled: !!(filters.date_from || filters.date_to),
@@ -74,8 +74,8 @@ export default function ProductionReportsPage() {
         },
     });
 
-    const { data: productsData } = useQuery({
-        queryKey: ['products', selectedFactory],
+    const { data: tubsDataRes } = useQuery({
+        queryKey: ['tubs', selectedFactory],
         queryFn: () => {
             const params = selectedFactory ? { factory_id: selectedFactory } : undefined;
             return productsAPI.getAll(params);
@@ -84,7 +84,7 @@ export default function ProductionReportsPage() {
 
     const logs = useMemo(() => logsData?.data || (Array.isArray(logsData) ? logsData : []), [logsData]);
     const machines = useMemo(() => machinesData?.data || (Array.isArray(machinesData) ? machinesData : []), [machinesData]);
-    const products = useMemo(() => productsData?.data || (Array.isArray(productsData) ? productsData : []), [productsData]);
+    const tubs = useMemo(() => tubsDataRes?.data || (Array.isArray(tubsDataRes) ? tubsDataRes : []), [tubsDataRes]);
     const innerTemplates = useMemo(() => innerTemplatesData?.data || (Array.isArray(innerTemplatesData) ? innerTemplatesData : []), [innerTemplatesData]);
 
     const error = queryError?.message;
@@ -143,14 +143,14 @@ export default function ProductionReportsPage() {
     }, [getDateRange]);
 
     useEffect(() => {
-        setPageTitle('Production Reports');
+        setPageTitle('Tub Production Reports');
         registerGuide({
-            title: "Production Reports",
+            title: "Tub Production Reports",
             description: "Deep analytics on factory output, efficiency trends, and verification compliance.",
             logic: [
                 {
                     title: "Efficiency Calculus (%)",
-                    explanation: "Efficiency is (Actual Output / Theoretical Capacity). 'Theoretical Capacity' is the maximum bundles a machine can produce in 23 hours. Anything above 70% is considered a healthy production run."
+                    explanation: "Efficiency is (Actual Output / Theoretical Capacity). 'Theoretical Capacity' is the maximum tubs a machine can produce in 23 hours. Anything above 70% is considered a healthy production run."
                 }
             ],
             components: [
@@ -180,7 +180,7 @@ export default function ProductionReportsPage() {
             date_from: '',
             date_to: '',
             machine_id: '',
-            product_id: '',
+            tub_id: '',
             inner_template_id: '',
         });
         setDatePreset('custom');
@@ -188,11 +188,11 @@ export default function ProductionReportsPage() {
 
     const handleExport = () => {
         const csvContent = [
-            ['Date', 'Machine', 'Product', 'Actual Quantity', 'Theoretical Quantity', 'Efficiency %', 'Status'].join(','),
+            ['Date', 'Machine', 'Tub', 'Actual Quantity', 'Theoretical Quantity', 'Efficiency %', 'Status'].join(','),
             ...logs.map(log => [
                 formatDate(log.date || log.created_at),
                 getMachineName(log.machine_id),
-                getProductName(log.product_id),
+                getTubName(log.product_id),
                 log.actual_quantity || 0,
                 log.theoretical_quantity || 0,
                 log.efficiency_percentage || log.efficiency || 0,
@@ -214,8 +214,8 @@ export default function ProductionReportsPage() {
         return m?.machine_name || m?.name || 'Unknown';
     };
 
-    const getProductName = (id) => {
-        const p = products.find((p) => p.product_id === id || p.id === id);
+    const getTubName = (id) => {
+        const p = tubs.find((p) => p.product_id === id || p.id === id);
         return p ? `${p.product_name || p.name} (${p.size || ''})` : 'Unknown';
     };
 
@@ -230,24 +230,24 @@ export default function ProductionReportsPage() {
         ? Math.round(logs.reduce((sum, log) => sum + (log.efficiency_percentage || log.efficiency || 0), 0) / logs.length)
         : 0;
     const lowEfficiencyCount = logs.filter((log) => (log.efficiency_percentage || log.efficiency || 0) < 70).length;
-    const hasFilters = filters.machine_id || filters.product_id || filters.date_from || filters.date_to;
+    const hasFilters = filters.machine_id || filters.tub_id || filters.date_from || filters.date_to;
 
     return (
         <>
             <div className={styles.pageHeader}>
                 <div>
-                    <h1 className={styles.pageTitle}>Production Reports</h1>
+                    <h1 className={styles.pageTitle}>Tub Production Reports</h1>
                     <p className={styles.pageDescription}>
-                        View production logs, efficiency metrics, and machine performance
+                        View tub production logs, efficiency metrics, and machine performance
                     </p>
                 </div>
                 <div className="flex gap-2">
                     <div className={styles.categoryToggle}>
                         <button 
-                            className={cn(styles.toggleBtn, category === 'products' && styles.toggleActive)}
-                            onClick={() => setCategory('products')}
+                            className={cn(styles.toggleBtn, category === 'tubs' && styles.toggleActive)}
+                            onClick={() => setCategory('tubs')}
                         >
-                            Products
+                            Tubs
                         </button>
                         <button 
                             className={cn(styles.toggleBtn, category === 'inners' && styles.toggleActive)}
@@ -325,14 +325,14 @@ export default function ProductionReportsPage() {
                     </div>
 
                     <div className={styles.filterGroup}>
-                        {category === 'products' ? (
+                        {category === 'tubs' ? (
                             <select
                                 className={styles.filterSelect}
-                                value={filters.product_id}
-                                onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}
+                                value={filters.tub_id}
+                                onChange={(e) => setFilters({ ...filters, tub_id: e.target.value })}
                             >
-                                <option value="">All Products</option>
-                                {products.map((p) => (
+                                <option value="">All Tubs</option>
+                                {tubs.map((p) => (
                                     <option key={p.product_id || p.id} value={p.product_id || p.id}>
                                         {p.product_name || p.name} ({p.size || ''})
                                     </option>
@@ -376,8 +376,8 @@ export default function ProductionReportsPage() {
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{formatNumber(totalProduction)}</div>
-                        <div className={styles.statLabel}>Total Production</div>
-                        <div className={styles.statSublabel}>Items produced</div>
+                        <div className={styles.statLabel}>Total Tubs Produced</div>
+                        <div className={styles.statSublabel}>Tubs produced</div>
                     </div>
                 </div>
                 <div className={styles.statCard}>
@@ -409,7 +409,7 @@ export default function ProductionReportsPage() {
                 {loading ? (
                     <div className={styles.loading}>
                         <Loader2 size={32} className={styles.spinner} />
-                        <span>Loading production logs...</span>
+                        <span>Loading tub production logs...</span>
                     </div>
                 ) : error ? (
                     <div className={styles.error}>
@@ -423,7 +423,7 @@ export default function ProductionReportsPage() {
                 ) : logs.length === 0 ? (
                     <div className={styles.emptyState}>
                         <Factory size={48} />
-                        <p>No production logs found</p>
+                        <p>No tub production logs found</p>
                         <p className={styles.emptyHint}>
                             {hasFilters ? 'Try adjusting your filters' : 'Production logs are created from the mobile app'}
                         </p>
@@ -435,9 +435,9 @@ export default function ProductionReportsPage() {
                                 <tr>
                                     <th>Date</th>
                                     <th>Machine</th>
-                                    <th>{category === 'products' ? 'Product' : 'Inner Template'}</th>
-                                    <th style={{ textAlign: 'right' }}>{category === 'products' ? 'Actual' : 'Qty Produced'}</th>
-                                    <th style={{ textAlign: 'right' }}>{category === 'products' ? 'Theoretical' : 'Weight (kg)'}</th>
+                                    <th>{category === 'tubs' ? 'Tub' : 'Inner Template'}</th>
+                                    <th style={{ textAlign: 'right' }}>{category === 'tubs' ? 'Actual' : 'Qty Produced'}</th>
+                                    <th style={{ textAlign: 'right' }}>{category === 'tubs' ? 'Theoretical' : 'Weight (kg)'}</th>
                                     <th style={{ textAlign: 'right' }}>Efficiency</th>
                                 </tr>
                             </thead>
@@ -445,10 +445,10 @@ export default function ProductionReportsPage() {
                                 {logs.map((log) => {
                                     const efficiency = log.efficiency_percentage || log.efficiency || 0;
                                     const isLow = efficiency < 70;
-                                    const actualQty = category === 'products' ? log.actual_quantity : log.calculated_quantity;
-                                    const secondaryLabel = category === 'products' ? log.theoretical_quantity : log.total_weight_produced_kg;
-                                    const displayName = category === 'products' 
-                                        ? getProductName(log.product_id) 
+                                    const actualQty = category === 'tubs' ? log.actual_quantity : log.calculated_quantity;
+                                    const secondaryLabel = category === 'tubs' ? log.theoretical_quantity : log.total_weight_produced_kg;
+                                    const displayName = category === 'tubs' 
+                                        ? getTubName(log.product_id) 
                                         : (log.inners?.inner_templates?.name || getInnerTemplateName(log.inners?.template_id));
                                     
                                     return (
@@ -460,7 +460,7 @@ export default function ProductionReportsPage() {
                                                 {formatNumber(actualQty)}
                                             </td>
                                             <td style={{ textAlign: 'right' }} className={styles.numberCellMuted}>
-                                                {category === 'products' ? formatNumber(secondaryLabel) : `${formatNumber(secondaryLabel, 2)} kg`}
+                                                {category === 'tubs' ? formatNumber(secondaryLabel) : `${formatNumber(secondaryLabel, 2)} kg`}
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
                                                 <span className={cn(styles.efficiencyBadge, isLow && styles.efficiencyLow)}>

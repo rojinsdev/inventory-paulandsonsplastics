@@ -128,13 +128,13 @@ export class InnerService {
 
     async getInnerStockBalances(factoryId?: string) {
         let query = supabase
-            .from('inner_stock_balances')
+            .from('inners')
             .select(`
-                *,
-                inner:inners (
-                    color,
-                    template:inner_templates (name, ideal_weight_grams)
-                )
+                id,
+                color,
+                factory_id,
+                template:inner_templates (name, ideal_weight_grams),
+                balance:inner_stock_balances(id, quantity)
             `);
 
         if (factoryId) {
@@ -144,7 +144,18 @@ export class InnerService {
         const { data, error } = await query;
 
         if (error) throw new Error(error.message);
-        return data;
+        
+        // Map to match the flattened structure expected by the frontend
+        return (data || []).map((item: any) => ({
+            id: item.balance?.[0]?.id || `temp-${item.id}`,
+            inner_id: item.id,
+            factory_id: item.factory_id,
+            quantity: item.balance?.[0]?.quantity || 0,
+            inners: {
+                color: item.color,
+                inner_templates: item.template
+            }
+        }));
     }
 
     // --- Template Management ---

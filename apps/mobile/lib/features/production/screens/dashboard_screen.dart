@@ -74,8 +74,8 @@ class DashboardScreen extends ConsumerWidget {
 
                     // Expressive Cards Grid
                     _ExpressiveCard(
-                      title: 'New Production',
-                      subtitle: 'Log machine output',
+                      title: 'Tub Production',
+                      subtitle: 'Log tub output',
                       icon: Icons.add_circle_outline,
                       containerColor: colorScheme.primaryContainer,
                       onTap: () => context.push('/production/entry'),
@@ -111,7 +111,7 @@ class DashboardScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/production/entry'),
         icon: const Icon(Icons.add),
-        label: const Text('Add Output'),
+        label: const Text('Add Tub Output'),
       ),
     );
   }

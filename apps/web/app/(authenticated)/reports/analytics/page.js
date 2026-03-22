@@ -132,7 +132,7 @@ export default function AnalyticsPage() {
     }, [fetchAllAnalytics]);
 
     useEffect(() => {
-        setPageTitle('Production Analytics');
+        setPageTitle('Tub Production Analytics');
         fetchAllAnalytics();
     }, [timePeriod, selectedFactory, fetchAllAnalytics, setPageTitle]);
 
@@ -152,7 +152,7 @@ export default function AnalyticsPage() {
             {/* Header */}
             <div className={styles.welcomeSection}>
                 <div>
-                    <h1 className={styles.welcomeTitle}>Production Analytics</h1>
+                    <h1 className={styles.welcomeTitle}>Tub Production Analytics</h1>
                     <p className={styles.welcomeSubtitle}>
                         Detailed insights into cycle time losses, material wastage, and downtime
                     </p>
@@ -247,9 +247,9 @@ export default function AnalyticsPage() {
                     gradient="linear-gradient(135deg, #3b82f6, #2563eb)"
                 />
                 <MetricCard
-                    title="Total Production"
+                    title="Total Tubs Produced"
                     value={summary?.total_production?.toLocaleString() || 0}
-                    subtitle="Units produced"
+                    subtitle="Tubs produced"
                     icon={Activity}
                     gradient="linear-gradient(135deg, #10b981, #059669)"
                 />
@@ -369,7 +369,7 @@ export default function AnalyticsPage() {
                                     <th>Date</th>
                                     <th>Shift</th>
                                     <th>Machine</th>
-                                    <th>Product</th>
+                                    <th>Tub</th>
                                     <th>Units Lost</th>
                                     <th>Actual Cycle Time</th>
                                     <th>Status</th>
@@ -422,7 +422,7 @@ export default function AnalyticsPage() {
                                     <th>Date</th>
                                     <th>Shift</th>
                                     <th>Machine</th>
-                                    <th>Product</th>
+                                    <th>Tub</th>
                                     <th>Wastage (kg)</th>
                                     <th>Actual Weight</th>
                                     <th>Ideal Weight</th>

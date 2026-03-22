@@ -1,6 +1,6 @@
 class ProductionRequest {
   final String id;
-  final String productId;
+  final String? productId;
   final String productName;
   final String? productSize;
   final String? productColor;
@@ -13,10 +13,11 @@ class ProductionRequest {
   final int availableStock;
   final bool isSatisfiable;
   final StockSummary? stockSummary;
+  final bool isInner;
 
   ProductionRequest({
     required this.id,
-    required this.productId,
+    this.productId,
     required this.productName,
     this.productSize,
     this.productColor,
@@ -29,6 +30,7 @@ class ProductionRequest {
     this.availableStock = 0,
     this.isSatisfiable = false,
     this.stockSummary,
+    this.isInner = false,
   });
 
   factory ProductionRequest.fromJson(Map<String, dynamic> json) {
@@ -58,6 +60,7 @@ class ProductionRequest {
       stockSummary: json['stock_summary'] != null 
           ? StockSummary.fromJson(json['stock_summary']) 
           : null,
+      isInner: json['is_inner'] ?? false,
     );
   }
 
@@ -72,6 +75,7 @@ class ProductionRequest {
         'created_at': createdAt.toIso8601String(),
         'available_stock': availableStock,
         'is_satisfiable': isSatisfiable,
+        'is_inner': isInner,
       };
 }
 

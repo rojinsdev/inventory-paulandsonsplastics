@@ -148,7 +148,7 @@ export default function Home() {
         },
         {
             id: 'production',
-            label: 'Units Produced',
+            label: 'Tubs Produced',
             sublabel: 'Today',
             value: production.today,
             icon: TrendingUp,
@@ -351,7 +351,7 @@ export default function Home() {
                         {recentLogs.length === 0 ? (
                             <div className={styles.emptyPanel}>
                                 <Factory size={28} />
-                                <span>No production logs yet.</span>
+                                <span>No tub production logs yet.</span>
                             </div>
                         ) : (
                             <div className={styles.logList}>
@@ -360,10 +360,10 @@ export default function Home() {
                                         <div className={styles.logDot} />
                                         <div className={styles.logContent}>
                                             <span className={styles.logProduct}>
-                                                {log.product?.name || log.product_name || 'Production Entry'}
+                                                {log.product?.name || log.product_name || 'Tub Production Entry'}
                                             </span>
                                             <span className={styles.logMeta}>
-                                                {log.actual_bundles ?? log.units_produced ?? 0} units
+                                                {log.actual_bundles ?? log.units_produced ?? 0} tubs
                                                 {log.machine?.name ? ` · ${log.machine.name}` : ''}
                                             </span>
                                         </div>

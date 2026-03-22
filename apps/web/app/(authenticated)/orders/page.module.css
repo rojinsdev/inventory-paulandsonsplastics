@@ -574,8 +574,8 @@
 }
 
 .modalWide {
-    max-width: 1400px;
-    height: 85vh;
+    max-width: min(1600px, 95vw);
+    height: 92vh;
 }
 
 :root[class~="dark"] .modal {
@@ -1158,14 +1158,20 @@
 /* Split Panel Form Layout */
 .splitForm {
     display: flex;
-    gap: 0;
+    flex-direction: column;
     height: 100%;
-    min-height: 700px;
     background-color: var(--surface);
+    overflow: hidden;
+}
+
+.formBody {
+    display: flex;
+    flex: 1;
+    min-height: 0;
 }
 
 .formPanel {
-    flex: 0 0 400px;
+    flex: 0 0 480px;
     padding: 24px;
     background-color: var(--slate-50);
     border-right: 1px solid var(--border);
@@ -1295,7 +1301,7 @@
 .productSelectGrid {
     padding: 20px;
     display: grid;
-    grid-template-columns: 180px 1fr 100px 120px 120px;
+    grid-template-columns: 200px 1fr 120px 140px 140px;
     gap: 16px;
     align-items: start;
 }
@@ -1422,18 +1428,33 @@
     color: var(--text-main);
 }
 
-.orderSummary {
-    padding: 20px 32px;
-    background-color: var(--slate-50);
+.formFooter {
+    padding: 1.25rem 2rem;
+    background-color: var(--surface);
     border-top: 1px solid var(--border);
     display: flex;
-    justify-content: flex-end;
-    gap: 32px;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 20;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.03);
+}
+
+:root[class~="dark"] .formFooter {
+    background-color: var(--surface);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.footerSummary {
+    display: flex;
+    gap: 2.5rem;
     align-items: center;
 }
 
-:root[class~="dark"] .orderSummary {
-    background-color: var(--surface-hover);
+.footerActions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
 }
 
 .summaryItem {
@@ -1456,6 +1477,76 @@
     color: var(--primary);
 }
 
+.formFooter {
+    background-color: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
+    z-index: 10;
+}
+
+:root[class~="dark"] .formFooter {
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.footerSummary {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.summaryItem {
+    display: flex;
+    flex-direction: column;
+}
+
+.summaryLabel {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.summaryValue {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.footerActions {
+    display: flex;
+    align-items: center;
+}
+
+.submitButton {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+}
+
+.submitButton:hover:not(:disabled) {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+}
+
+.submitButton:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
 @media (max-width: 900px) {
     .splitForm {
         flex-direction: column;
@@ -1471,4 +1562,61 @@
     .itemCard {
         grid-template-columns: 1fr;
     }
+}
+
+.innerToggleContainer {
+    grid-column: 1 / -1;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed var(--border-subtle);
+}
+
+.innerToggle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background-color: var(--slate-50);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border-subtle);
+    transition: all 0.2s ease;
+}
+
+:root[class~="dark"] .innerToggle {
+    background-color: rgba(255, 255, 255, 0.03);
+}
+
+.innerToggle:hover {
+    border-color: var(--primary-light);
+    background-color: var(--slate-100);
+}
+
+:root[class~="dark"] .innerToggle:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.checkboxModern {
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0.125rem;
+    cursor: pointer;
+    accent-color: var(--primary);
+}
+
+.toggleLabel {
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.toggleTitle {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.toggleDescription {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    line-height: 1.4;
 }

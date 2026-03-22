@@ -21,7 +21,7 @@ class ProductionRequestsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Production Requests'),
+        title: const Text('Tub Production Requests'),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
@@ -198,6 +198,7 @@ class _RequestRow extends ConsumerWidget {
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                         letterSpacing: -0.5,
+                        color: request.isInner ? Colors.purple[700] : null,
                       ),
                     ),
                     if (request.productSize != null ||
@@ -212,6 +213,19 @@ class _RequestRow extends ConsumerWidget {
                   ],
                 ),
               ),
+              if (request.isInner) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                  ),
+                  child: const Text('INNER', 
+                    style: TextStyle(color: Colors.purple, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                ),
+                const SizedBox(width: 8),
+              ],
               _StatusChip(status: request.status),
             ],
           ),
@@ -219,8 +233,13 @@ class _RequestRow extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              color: request.isInner 
+                  ? Colors.purple.withOpacity(0.05) 
+                  : colorScheme.surfaceContainerHighest.withOpacity(0.3),
               borderRadius: BorderRadius.circular(12),
+              border: request.isInner 
+                  ? Border.all(color: Colors.purple.withOpacity(0.2)) 
+                  : null,
             ),
             child: Row(
               children: [
@@ -297,9 +316,9 @@ class _RequestRow extends ConsumerWidget {
                     unit: 'PACKET',
                   ),
                   _StockDetailRow(
-                    label: 'Finished Bundles',
+                    label: 'Finished Tubs',
                     value: request.stockSummary!.factorySpecific.finished,
-                    unit: 'BUNDLE',
+                    unit: 'TUB',
                   ),
                 ],
               ),
@@ -313,7 +332,7 @@ class _RequestRow extends ConsumerWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Produce items first to increase stock.',
+                    'Produce tubs first to increase stock.',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: Colors.orange.shade900,
                     ),
@@ -468,7 +487,7 @@ class _FlowGuide extends StatelessWidget {
                     Icon(Icons.auto_awesome, color: colorScheme.primary, size: 20),
                     const SizedBox(width: 12),
                     Text(
-                      'Production Guide',
+                      'Tub Production Guide',
                       style: theme.textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,
@@ -490,7 +509,7 @@ class _FlowGuide extends StatelessWidget {
                 const _GuideStep(
                   icon: Icons.inventory_2_outlined,
                   title: 'Log Entry',
-                  description: 'Increase stock in "Simple Production".',
+                  description: 'Increase stock in "Tub Production".',
                 ),
                 const _GuideStep(
                   icon: Icons.check_circle_outline,

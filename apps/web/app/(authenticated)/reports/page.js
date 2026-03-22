@@ -10,26 +10,26 @@ import styles from './page.module.css';
 const reportTypes = [
     {
         id: 'production',
-        title: 'Production Reports',
-        description: 'View production logs, efficiency metrics, and machine performance',
+        title: 'Tub Production Reports',
+        description: 'View tub production logs, efficiency metrics, and machine performance',
         icon: Factory,
         href: '/reports/production',
         color: 'purple',
         stats: [
-            { label: 'Today&apos;s Production', value: '—' },
+            { label: 'Today&apos;s Tubs Produced', value: '—' },
             { label: 'Avg Efficiency', value: '—' },
         ],
     },
     {
         id: 'inventory',
         title: 'Inventory Reports',
-        description: 'Track stock movements, inventory levels, and product availability',
+        description: 'Track stock movements, inventory levels, and tub availability',
         icon: Package,
         href: '/reports/inventory',
         color: 'blue',
         stats: [
             { label: 'Total Items', value: '—' },
-            { label: 'Total Bundles', value: '—' },
+            { label: 'Total Tubs', value: '—' },
         ],
     },
     {
@@ -54,7 +54,7 @@ export default function ReportsPage() {
         setPageTitle('Reports');
         registerGuide({
             title: "Reports Overview",
-            description: "Hub for production, sales, and inventory analytics.",
+            description: "Hub for tub production, sales, and inventory analytics.",
             logic: [
                 {
                     title: "Data Aggregation",
@@ -83,7 +83,7 @@ export default function ReportsPage() {
                 <div>
                     <h1 className={styles.pageTitle}>Reports & Analytics</h1>
                     <p className={styles.pageDescription}>
-                        Access comprehensive reports and insights across production, inventory, and sales
+                        Access comprehensive reports and insights across tub production, inventory, and sales
                     </p>
                 </div>
             </div>

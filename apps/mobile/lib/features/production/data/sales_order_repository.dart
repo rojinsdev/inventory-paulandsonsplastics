@@ -70,15 +70,17 @@ class SalesOrderRepository {
     }
   }
 
-  Future<void> prepareItem(String itemId) async {
+  Future<void> prepareOrderItems(
+      String orderId, List<Map<String, dynamic>> items) async {
     try {
       await _apiClient.client.put(
-        '${ApiConstants.salesOrders}/items/$itemId/prepare',
+        '${ApiConstants.salesOrders}/$orderId/prepare-items',
+        data: {'items': items},
       );
     } catch (e) {
       if (e is DioException) {
         throw Exception(
-            e.response?.data['message'] ?? 'Failed to prepare item');
+            e.response?.data['message'] ?? 'Failed to prepare items');
       }
       rethrow;
     }

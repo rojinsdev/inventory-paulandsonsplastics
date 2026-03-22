@@ -7,6 +7,7 @@ import { Plus, Pencil, Trash2, Loader2, Link2, X, RefreshCw, Factory, Package, C
 import { dieMappingsAPI, machinesAPI, productTemplatesAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
+import CustomSelect from '@/components/ui/CustomSelect';
 import { cn } from '@/lib/utils';
 import styles from './page.module.css';
 
@@ -80,24 +81,24 @@ export default function DieMappingsPage() {
 
     // Load data
     useEffect(() => {
-        setPageTitle('Machine Mapping');
+        setPageTitle('Machine-Tub Mapping');
         registerGuide({
-            title: "Machine Mapping",
-            description: "Configure performance limits and production speeds for machine-product pairs.",
+            title: "Machine-Tub Mapping",
+            description: "Configure performance limits and production speeds for machine-tub pairs.",
             logic: [
                 {
                     title: "Cycle Time (Seconds per Piece)",
-                    explanation: "This is the speed of your production. It defines how many seconds the machine takes to finish one item. Lowering this number increases your 'Theoretical Yield' (max possible output)."
+                    explanation: "This is the speed of your production. It defines how many seconds the machine takes to finish one tub. Lowering this number increases your 'Theoretical Yield' (max possible output)."
                 },
                 {
                     title: "Capacity Restriction (Hard Limit)",
-                    explanation: "If a machine should only produce a certain amount of a specific product (e.g., due to wear or power limits), set a limit here to prevent the system from over-scheduling it."
+                    explanation: "If a machine should only produce a certain amount of a specific tub (e.g., due to wear or power limits), set a limit here to prevent the system from over-scheduling it."
                 }
             ],
             components: [
                 {
                     name: "Mapping Matrix",
-                    description: "Shows which machines are cleared to run which products."
+                    description: "Shows which machines are cleared to run which tubs."
                 },
                 {
                     name: "Performance Slider",
@@ -182,9 +183,9 @@ export default function DieMappingsPage() {
             {/* Page Header */}
             <div className={styles.pageHeader}>
                 <div>
-                    <h1 className={styles.pageTitle}>Machine Mapping</h1>
+                    <h1 className={styles.pageTitle}>Machine-Tub Mapping</h1>
                     <p className={styles.pageDescription}>
-                        Define which machines can produce which products and their cycle times
+                        Define which machines can produce which tubs and their cycle times
                     </p>
                 </div>
                 <button
@@ -206,7 +207,7 @@ export default function DieMappingsPage() {
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{totalMappings}</div>
                         <div className={styles.statLabel}>Total Mappings</div>
-                        <div className={styles.statSublabel}>Machine-product pairs</div>
+                        <div className={styles.statSublabel}>Machine-tub pairs</div>
                     </div>
                 </div>
                 <div className={styles.statCard}>
@@ -260,12 +261,12 @@ export default function DieMappingsPage() {
                 ) : mappings.length === 0 ? (
                     <div className={styles.emptyState}>
                         <Link2 size={48} />
-                        <p>No machine mappings configured yet</p>
+                        <p>No machine-tub mappings configured yet</p>
                         <p className={styles.emptyHint}>
                             {machines.length === 0 || templates.length === 0 ? (
-                                'Add machines and templates first before creating mappings'
+                                'Add machines and tub templates first before creating mappings'
                             ) : (
-                                'Create mappings to define which machines can produce which products'
+                                'Create mappings to define which machines can produce which tubs'
                             )}
                         </p>
                         {machines.length > 0 && templates.length > 0 && (
@@ -344,36 +345,28 @@ export default function DieMappingsPage() {
                             <div className={styles.modalBody}>
                                 <div className={styles.formGroup}>
                                     <label className={styles.formLabel}>Machine *</label>
-                                    <select
-                                        className={styles.formSelect}
+                                    <CustomSelect
                                         value={formData.machine_id}
-                                        onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                                        required
-                                    >
-                                        <option value="">Select Machine</option>
-                                        {machines.map((machine) => (
-                                            <option key={machine.id} value={machine.id}>
-                                                {machine.name} ({machine.type})
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(value) => setFormData({ ...formData, machine_id: value })}
+                                        options={machines.map(m => ({
+                                            label: `${m.name} (${m.type})`,
+                                            value: m.id
+                                        }))}
+                                        placeholder="Select Machine"
+                                    />
                                 </div>
 
                                 <div className={styles.formGroup}>
-                                    <label className={styles.formLabel}>Template *</label>
-                                    <select
-                                        className={styles.formSelect}
+                                    <label className={styles.formLabel}>Tub Template *</label>
+                                    <CustomSelect
                                         value={formData.product_template_id}
-                                        onChange={(e) => setFormData({ ...formData, product_template_id: e.target.value })}
-                                        required
-                                    >
-                                        <option value="">Select Template</option>
-                                        {templates.map((template) => (
-                                            <option key={template.id} value={template.id}>
-                                                {template.name} ({template.size})
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(value) => setFormData({ ...formData, product_template_id: value })}
+                                        options={templates.map(t => ({
+                                            label: `${t.name} (${t.size})`,
+                                            value: t.id
+                                        }))}
+                                        placeholder="Select Tub Template"
+                                    />
                                 </div>
 
                                 <div className={styles.formRow}>
@@ -389,7 +382,7 @@ export default function DieMappingsPage() {
                                             }
                                             required
                                             min="0.1"
-                                            placeholder="Time to produce one unit"
+                                            placeholder="Time to produce one tub"
                                         />
                                     </div>
                                     <div className={styles.formGroup}>
@@ -401,7 +394,7 @@ export default function DieMappingsPage() {
                                             onChange={(e) =>
                                                 setFormData({ ...formData, capacity_restriction: e.target.value })
                                             }
-                                            placeholder="Max daily units (optional)"
+                                            placeholder="Max daily tubs (optional)"
                                             min="0"
                                         />
                                     </div>

@@ -76,7 +76,7 @@ export default function ForecastsPage() {
         if (forecasts.length === 0) return;
 
         const csvRows = [
-            ['Product', 'Forecast Date', 'Horizon (Months)', 'Forecasted Qty', 'Actual Qty', 'Accuracy %', 'Method', 'Confidence Lower', 'Confidence Upper'],
+            ['Tub', 'Forecast Date', 'Horizon (Months)', 'Forecasted Qty', 'Actual Qty', 'Accuracy %', 'Method', 'Confidence Lower', 'Confidence Upper'],
             ...forecasts.map(f => [
                 f.product_name,
                 f.forecast_date,
@@ -162,7 +162,7 @@ export default function ForecastsPage() {
             <div className={styles.filterBar}>
                 <div className={styles.filterGroup}>
                     <Target size={16} className={styles.filterIcon} />
-                    <label className={styles.filterLabel}>Product:</label>
+                    <label className={styles.filterLabel}>Tub:</label>
                     <select
                         className={styles.filterSelect}
                         value={selectedProduct}
@@ -341,7 +341,7 @@ export default function ForecastsPage() {
             ) : (
                 <div className={styles.emptyState}>
                     <TrendingUp size={48} />
-                    <p>No forecasts available for this product</p>
+                    <p>No forecasts available for this tub</p>
                     <p className={styles.emptyHint}>Forecasts are generated automatically based on historical data</p>
                 </div>
             )}

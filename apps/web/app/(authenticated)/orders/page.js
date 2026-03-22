@@ -21,9 +21,9 @@ const ORDER_STATUSES = [
 ];
 
 const UNIT_OPTIONS = [
-    { value: 'bundle', label: 'Bundles' },
+    { value: 'bundle', label: 'Tubs' },
     { value: 'packet', label: 'Packets' },
-    { value: 'loose', label: 'Loose Items' },
+    { value: 'loose', label: 'Loose Tubs' },
 ];
 
 export default function OrdersPage() {
@@ -64,8 +64,8 @@ export default function OrdersPage() {
         queryFn: () => customersAPI.getAll().then(res => res?.customers || res?.data || (Array.isArray(res) ? res : [])),
     });
 
-    const { data: products = [] } = useQuery({
-        queryKey: ['products'], // Fetch all products for multi-factory support
+    const { data: tubs = [] } = useQuery({
+        queryKey: ['tubs'], // Fetch all tubs for multi-factory support
         queryFn: () => productsAPI.getAll().then(res => res?.products || res?.data || (Array.isArray(res) ? res : [])),
     });
 
@@ -122,21 +122,21 @@ export default function OrdersPage() {
             logic: [
                 {
                     title: "Horizontal Planning",
-                    explanation: "The new horizontal modal allows you to quickly build complex orders featuring products from different factories in one screen."
+                    explanation: "The new horizontal modal allows you to quickly build complex orders featuring tubs from different factories in one screen."
                 },
                 {
                     title: "Preparation Notifications",
-                    explanation: "When an order is created, product managers at each involved factory are notified. You'll see real-time updates as they 'Mark as Done' each item."
+                    explanation: "When an order is created, tub managers at each involved factory are notified. You'll see real-time updates as they 'Mark as Done' each item."
                 },
                 {
                     title: "Flexible Units",
-                    explanation: "Commit stock in Bundles, Packets, or even Loose items depending on the customer's specific needs."
+                    explanation: "Commit stock in Tubs, Packets, or even Loose items depending on the customer's specific needs."
                 }
             ],
             components: [
                 {
                     name: "Factory Routing",
-                    description: "Items are automatically routed to their respective factory managers based on product settings."
+                    description: "Items are automatically routed to their respective factory managers based on tub settings."
                 },
                 {
                     name: "Preparation Status",
@@ -149,8 +149,8 @@ export default function OrdersPage() {
 
 
     const getCustomerName = (id) => customers.find((c) => c.id === id)?.name || 'Unknown';
-    const getProductName = (id) => {
-        const p = products.find((p) => p.id === id);
+    const getTubName = (id) => {
+        const p = tubs.find((p) => p.id === id);
         return p ? `${p.name} (${p.size})` : 'Unknown';
     };
 
@@ -164,7 +164,8 @@ export default function OrdersPage() {
                 product_id: '',
                 quantity: 1,
                 unit_type: 'bundle',
-                unit_price: ''
+                unit_price: '',
+                include_inner: false
             }],
             notes: '',
             order_date: new Date().toISOString().split('T')[0],
@@ -180,13 +181,14 @@ export default function OrdersPage() {
         setFormData({
             customer_id: order.customer_id,
             items: items.map(item => {
-                const p = products.find(prod => prod.id === item.product_id);
+                const p = tubs.find(prod => prod.id === item.product_id);
                 return {
                     factory_id: p?.factory_id || '',
                     product_id: item.product_id,
                     quantity: item.quantity,
                     unit_type: item.unit_type || 'bundle',
-                    unit_price: item.unit_price || ''
+                    unit_price: item.unit_price || '',
+                    include_inner: item.include_inner || false
                 };
             }),
             notes: order.notes || '',
@@ -203,7 +205,8 @@ export default function OrdersPage() {
                 product_id: '',
                 quantity: 1,
                 unit_type: 'bundle',
-                unit_price: ''
+                unit_price: '',
+                include_inner: false
             }],
         });
     };
@@ -241,6 +244,7 @@ export default function OrdersPage() {
                 quantity: Number(item.quantity),
                 unit_type: item.unit_type,
                 unit_price: item.unit_price ? Number(item.unit_price) : undefined,
+                include_inner: item.include_inner || false,
             })),
             notes: formData.notes,
         };
@@ -281,17 +285,20 @@ export default function OrdersPage() {
         label: f.name
     })), [factories]);
 
-    const productOptions = useMemo(() => products.map(p => {
+    const tubOptions = useMemo(() => tubs.map(p => {
         const factory = factories.find(f => f.id === p.factory_id);
         const factoryName = factory ? factory.name : 'Unknown Factory';
+        const templateData = Array.isArray(p.product_templates) ? p.product_templates[0] : p.product_templates;
+        const hasInner = !!templateData?.inner_template_id;
 
         return {
             value: p.id,
             label: `${p.name} (${p.size}, ${p.color})`,
             factory_id: p.factory_id,
-            factoryName
+            factoryName,
+            hasInner
         };
-    }), [products, factories]);
+    }), [tubs, factories]);
 
     const getStockForProduct = (productId, unitType) => {
         const stockItems = availableStock.filter(s => s.product_id === productId);
@@ -322,7 +329,7 @@ export default function OrdersPage() {
 
     const orderSummary = useMemo(() => {
         const totals = {
-            unique_products: formData.items.filter(i => i.product_id).length,
+            unique_tubs: formData.items.filter(i => i.product_id).length,
             total_quantity: formData.items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
             units: {}
         };
@@ -352,13 +359,13 @@ export default function OrdersPage() {
                         <div>
                             <h1 className={styles.pageTitle}>Sales Orders</h1>
                             <p className={styles.pageDescription}>
-                                Multi-factory order management and preparation tracking
+                                Multi-factory tub order management and preparation tracking
                             </p>
                         </div>
                         <button
                             className={styles.addButton}
                             onClick={handleCreate}
-                            disabled={customers.length === 0 || products.length === 0}
+                            disabled={customers.length === 0 || tubs.length === 0}
                         >
                             <Plus size={18} />
                             <span>New Order</span>
@@ -424,8 +431,8 @@ export default function OrdersPage() {
                             <div className={styles.emptyState}>
                                 <ShoppingCart size={48} />
                                 <p>No orders found</p>
-                                {customers.length === 0 || products.length === 0 ? (
-                                    <p className={styles.emptyHint}>Add customers and products first</p>
+                                {customers.length === 0 || tubs.length === 0 ? (
+                                    <p className={styles.emptyHint}>Add customers and tubs first</p>
                                 ) : (
                                     <button className={styles.primaryButton} onClick={handleCreate}>
                                         Create First Order
@@ -439,7 +446,7 @@ export default function OrdersPage() {
                                         <tr>
                                             <th>Order ID</th>
                                             <th>Customer</th>
-                                            <th>Items</th>
+                                            <th>Tubs</th>
                                             <th>Delivery Date</th>
                                             <th>Status</th>
                                             <th>Date Created</th>
@@ -458,7 +465,7 @@ export default function OrdersPage() {
                                                     <td>{getCustomerName(order.customer_id)}</td>
                                                     <td>
                                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                            <span>{items.length} items</span>
+                                                            <span>{items.length} tubs</span>
                                                             {items.length > 0 && (
                                                                 <span style={{ fontSize: '0.75rem', color: allPrepared ? 'var(--success)' : 'var(--warning)' }}>
                                                                     {prepCount}/{items.length} Prepared
@@ -527,6 +534,7 @@ export default function OrdersPage() {
                         </div>
 
                         <form onSubmit={handleSubmit} className={styles.splitForm}>
+                            <div className={styles.formBody}>
                             {/* Left Panel: Delivery Details */}
                             <div className={styles.formPanel}>
                                 <div className={styles.panelTitle}>
@@ -572,24 +580,6 @@ export default function OrdersPage() {
                                         rows={4}
                                     />
                                 </div>
-
-                                <div style={{ marginTop: 'auto', paddingTop: '20px' }}>
-                                    <button
-                                        type="submit"
-                                        className={styles.submitButton}
-                                        style={{ width: '100%', padding: '12px' }}
-                                        disabled={createMutation.isPending || updateMutation.isPending}
-                                    >
-                                        {createMutation.isPending || updateMutation.isPending ? (
-                                            <>
-                                                <Loader2 size={18} className={styles.spinner} />
-                                                <span>{isEditing ? 'Updating...' : 'Creating...'}</span>
-                                            </>
-                                        ) : (
-                                            <span>{isEditing ? 'Update Order' : 'Create Order'}</span>
-                                        )}
-                                    </button>
-                                </div>
                             </div>
 
                             {/* Right Panel: Product Selection */}
@@ -605,7 +595,7 @@ export default function OrdersPage() {
                                         onClick={handleAddItem}
                                     >
                                         <Plus size={18} />
-                                        <span>Add Product</span>
+                                        <span>Add Tub</span>
                                     </button>
                                 </div>
 
@@ -615,12 +605,12 @@ export default function OrdersPage() {
                                             <ShoppingCart size={48} strokeWidth={1} style={{ marginBottom: '16px', opacity: 0.5 }} />
                                             <div className={styles.itemEmptyTitle}>Your order is empty</div>
                                             <p className={styles.itemEmptyText}>
-                                                Use the button above to add products to this sales order.
+                                                Use the button above to add tubs to this sales order.
                                             </p>
                                         </div>
                                     ) : (
                                         formData.items.map((item, index) => {
-                                            const filteredProducts = productOptions.filter(p => !item.factory_id || p.factory_id === item.factory_id);
+                                            const filteredTubs = tubOptions.filter(p => !item.factory_id || p.factory_id === item.factory_id);
                                             const currentStock = getStockForProduct(item.product_id, item.unit_type);
 
                                             return (
@@ -648,13 +638,13 @@ export default function OrdersPage() {
                                                             />
                                                         </div>
 
-                                                        {/* Product Select */}
+                                                        {/* Tub Select */}
                                                         <div className={styles.formItem}>
                                                             <CustomSelect
-                                                                options={filteredProducts}
+                                                                options={filteredTubs}
                                                                 value={item.product_id}
                                                                 onChange={(val) => handleItemChange(index, 'product_id', val)}
-                                                                placeholder="Choose Product..."
+                                                                placeholder="Choose Tub..."
                                                                 searchable={true}
                                                             />
                                                             {item.product_id && (
@@ -700,6 +690,25 @@ export default function OrdersPage() {
                                                                 step="0.01"
                                                             />
                                                         </div>
+
+                                                        {/* Include Inner Toggle */}
+                                                        {filteredTubs.find(op => op.value === item.product_id)?.hasInner && (
+                                                            <div className={styles.innerToggleContainer}>
+                                                                <div className={styles.innerToggle}>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id={`include_inner_${index}`}
+                                                                        checked={item.include_inner || false}
+                                                                        onChange={(e) => handleItemChange(index, 'include_inner', e.target.checked)}
+                                                                        className={styles.checkboxModern}
+                                                                    />
+                                                                    <label htmlFor={`include_inner_${index}`} className={styles.toggleLabel}>
+                                                                        <span className={styles.toggleTitle}>Include Inner Component</span>
+                                                                        <span className={styles.toggleDescription}>Adds mapped inner part (e.g. cap liner) to this order item</span>
+                                                                    </label>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             );
@@ -707,21 +716,49 @@ export default function OrdersPage() {
                                     )}
                                 </div>
 
-                                <div className={styles.orderSummary}>
+                                </div>
+                            </div>
+
+                            <div className={styles.formFooter}>
+                                <div className={styles.footerSummary}>
                                     <div className={styles.summaryItem}>
-                                        <div className={styles.summaryLabel}>Products</div>
-                                        <div className={styles.summaryValue}>{orderSummary.unique_products}</div>
+                                        <div className={styles.summaryLabel}>Tubs</div>
+                                        <div className={styles.summaryValue}>{orderSummary.unique_tubs}</div>
                                     </div>
-                                    {Object.entries(orderSummary.units).map(([unit, qty]) => (
-                                        <div key={unit} className={styles.summaryItem}>
-                                            <div className={styles.summaryLabel}>{unit}s</div>
-                                            <div className={styles.summaryValue}>{qty}</div>
-                                        </div>
-                                    ))}
+                                    <div className={styles.summaryItem}>
+                                        <div className={styles.summaryLabel}>Tubs</div>
+                                        <div className={styles.summaryValue}>{orderSummary.units['bundle'] || 0}</div>
+                                    </div>
+                                    {Object.entries(orderSummary.units).map(([unit, qty]) => {
+                                        if (unit === 'bundle') return null;
+                                        return (
+                                            <div key={unit} className={styles.summaryItem}>
+                                                <div className={styles.summaryLabel}>{unit}s</div>
+                                                <div className={styles.summaryValue}>{qty}</div>
+                                            </div>
+                                        );
+                                    })}
                                     <div className={styles.summaryItem}>
                                         <div className={styles.summaryLabel}>Total Units</div>
                                         <div className={styles.summaryValue}>{orderSummary.total_quantity}</div>
                                     </div>
+                                </div>
+
+                                <div className={styles.footerActions}>
+                                    <button
+                                        type="submit"
+                                        className={styles.submitButton}
+                                        disabled={createMutation.isPending || updateMutation.isPending}
+                                    >
+                                        {createMutation.isPending || updateMutation.isPending ? (
+                                            <>
+                                                <Loader2 size={18} className={styles.spinner} />
+                                                <span>{isEditing ? 'Updating...' : 'Creating...'}</span>
+                                            </>
+                                        ) : (
+                                            <span>{isEditing ? 'Update Order' : 'Create Order'}</span>
+                                        )}
+                                    </button>
                                 </div>
                             </div>
                         </form>
@@ -779,7 +816,7 @@ export default function OrdersPage() {
                                 <table className={styles.table}>
                                     <thead>
                                         <tr>
-                                            <th className={styles.colProduct}>Product</th>
+                                            <th className={styles.colProduct}>Tub</th>
                                             <th className={styles.colFactory}>Factory</th>
                                             <th className={styles.colQuantity}>Quantity</th>
                                             <th className={styles.colUnit}>Unit</th>
@@ -789,7 +826,7 @@ export default function OrdersPage() {
                                     </thead>
                                     <tbody>
                                         {(viewOrder.sales_order_items || viewOrder.items || []).map((item, idx) => {
-                                            const p = products.find(prod => prod.id === item.product_id);
+                                            const p = tubs.find(prod => prod.id === item.product_id);
                                             const f = factories.find(fac => fac.id === p?.factory_id);
 
                                             return (

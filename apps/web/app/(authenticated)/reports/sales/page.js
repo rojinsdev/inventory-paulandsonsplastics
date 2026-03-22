@@ -45,15 +45,15 @@ export default function SalesReportsPage() {
         queryFn: () => customersAPI.getAll({ factory_id: selectedFactory || undefined }),
     });
 
-    const { data: productsData } = useQuery({
-        queryKey: ['products', { factory_id: selectedFactory }],
+    const { data: tubsDataRes } = useQuery({
+        queryKey: ['tubs', { factory_id: selectedFactory }],
         queryFn: () => productsAPI.getAll({ factory_id: selectedFactory || undefined }),
     });
 
     const error = queryError?.message;
     const report = reportData || {};
     const customers = Array.isArray(customersData) ? customersData : [];
-    const products = Array.isArray(productsData) ? productsData : [];
+    const tubs = Array.isArray(tubsDataRes) ? tubsDataRes : [];
 
 
 
@@ -130,7 +130,7 @@ export default function SalesReportsPage() {
                 },
                 {
                     name: "Leadership Boards",
-                    description: "Rankings of top-performing products and high-value customers by quantity and frequency."
+                    description: "Rankings of top-performing tubs and high-value customers by quantity and frequency."
                 }
             ]
         });
@@ -161,14 +161,14 @@ export default function SalesReportsPage() {
         csvRows.push(['Period', `${filters.date_from || 'All'} to ${filters.date_to || 'All'}`]);
         csvRows.push(['Total Orders', report?.total_orders || 0]);
         csvRows.push(['Unique Customers', report?.unique_customers || 0]);
-        csvRows.push(['Total Bundles', report?.total_bundles || 0]);
+        csvRows.push(['Total Tubs', report?.total_bundles || 0]);
         csvRows.push(['Total Revenue', formatCurrency(report?.total_revenue || 0)]);
         csvRows.push([]);
 
         // Top Customers
         if (report?.top_customers && report.top_customers.length > 0) {
             csvRows.push(['Top Customers']);
-            csvRows.push(['Customer', 'Orders', 'Bundles'].join(','));
+            csvRows.push(['Customer', 'Orders', 'Tubs'].join(','));
             report.top_customers.forEach(item => {
                 csvRows.push([
                     getCustomerName(item.customer_id),
@@ -179,13 +179,13 @@ export default function SalesReportsPage() {
             csvRows.push([]);
         }
 
-        // Top Products
+        // Top Tubs
         if (report?.top_products && report.top_products.length > 0) {
-            csvRows.push(['Top Products']);
-            csvRows.push(['Product', 'Bundles Sold'].join(','));
+            csvRows.push(['Top Tubs']);
+            csvRows.push(['Tub', 'Tubs Sold'].join(','));
             report.top_products.forEach(item => {
                 csvRows.push([
-                    getProductName(item.product_id),
+                    getTubName(item.product_id),
                     item.quantity,
                 ].map(field => `"${field}"`).join(','));
             });
@@ -202,8 +202,8 @@ export default function SalesReportsPage() {
     };
 
     const getCustomerName = (id) => customers.find((c) => c.id === id)?.name || 'Unknown';
-    const getProductName = (id) => {
-        const p = products.find((p) => p.id === id);
+    const getTubName = (id) => {
+        const p = tubs.find((p) => p.id === id);
         return p ? `${p.name} (${p.size})` : 'Unknown';
     };
 
@@ -312,7 +312,7 @@ export default function SalesReportsPage() {
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{formatNumber(report?.total_bundles || 0)}</div>
-                        <div className={styles.statLabel}>Bundles Sold</div>
+                        <div className={styles.statLabel}>Tubs Sold</div>
                         <div className={styles.statSublabel}>Total quantity</div>
                     </div>
                 </div>
@@ -350,7 +350,7 @@ export default function SalesReportsPage() {
                                     <tr>
                                         <th>Customer</th>
                                         <th style={{ textAlign: 'right' }}>Orders</th>
-                                        <th style={{ textAlign: 'right' }}>Bundles</th>
+                                        <th style={{ textAlign: 'right' }}>Tubs</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -379,7 +379,7 @@ export default function SalesReportsPage() {
                 {/* Top Products */}
                 <div className={styles.tableCard}>
                     <div className={styles.cardHeader}>
-                        <h3 className={styles.cardTitle}>Top Products</h3>
+                        <h3 className={styles.cardTitle}>Top Tubs</h3>
                     </div>
                     {loading ? (
                         <div className={styles.loading}>
@@ -394,14 +394,14 @@ export default function SalesReportsPage() {
                             <table className={styles.table}>
                                 <thead>
                                     <tr>
-                                        <th>Product</th>
-                                        <th style={{ textAlign: 'right' }}>Bundles Sold</th>
+                                        <th>Tub</th>
+                                        <th style={{ textAlign: 'right' }}>Tubs Sold</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {report.top_products.slice(0, 10).map((item, idx) => (
                                         <tr key={idx}>
-                                            <td className={styles.productCell}>{getProductName(item.product_id)}</td>
+                                            <td className={styles.productCell}>{getTubName(item.product_id)}</td>
                                             <td style={{ textAlign: 'right' }} className={styles.numberCell}>
                                                 {formatNumber(item.quantity)}
                                             </td>
@@ -413,7 +413,7 @@ export default function SalesReportsPage() {
                     ) : (
                         <div className={styles.emptyState}>
                             <ShoppingCart size={32} />
-                            <p>No product data</p>
+                            <p>No tub data</p>
                         </div>
                     )}
                 </div>

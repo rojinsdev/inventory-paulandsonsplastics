@@ -116,10 +116,10 @@ export default function InventoryPageTemplate({ title, type, description, guide 
                             <div className={styles.statValue}>{formatNumber(stats.totalQuantity)}</div>
                             <div className={styles.statLabel}>Total Quantity</div>
                             <div className={styles.statSublabel}>
-                                {type === 'semi_finished' ? 'Items (Loose)' :
+                                {type === 'semi_finished' ? 'Tubs (Loose)' :
                                     type === 'packed' ? 'Packets' :
-                                        type === 'finished' ? 'Bundles' :
-                                            type === 'reserved' ? 'Bundles (Reserved)' : 'Units'}
+                                        type === 'finished' ? 'Tubs' :
+                                            type === 'reserved' ? 'Tubs (Reserved)' : 'Units'}
                             </div>
                         </div>
                     </div>
@@ -129,8 +129,8 @@ export default function InventoryPageTemplate({ title, type, description, guide 
                         </div>
                         <div className={styles.statContent}>
                             <div className={styles.statValue}>{stats.productVariants}</div>
-                            <div className={styles.statLabel}>Product Variants</div>
-                            <div className={styles.statSublabel}>Unique products</div>
+                            <div className={styles.statLabel}>Tub Variants</div>
+                            <div className={styles.statSublabel}>Unique tubs</div>
                         </div>
                     </div>
                 </div>
@@ -146,7 +146,7 @@ export default function InventoryPageTemplate({ title, type, description, guide 
                                 <input
                                     type="text"
                                     className={styles.filterInput}
-                                    placeholder="Search products..."
+                                    placeholder="Search tubs..."
                                     value={filters.search}
                                     onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                                 />
@@ -159,7 +159,7 @@ export default function InventoryPageTemplate({ title, type, description, guide 
                                 value={filters.product_id}
                                 onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}
                             >
-                                <option value="">All Products</option>
+                                <option value="">All Tubs</option>
                                 {products.map((p) => (
                                     <option key={p.id} value={p.id}>
                                         {p.name} ({p.size})

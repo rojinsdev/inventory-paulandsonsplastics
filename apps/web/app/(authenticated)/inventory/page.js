@@ -82,7 +82,7 @@ export default function StockOverviewPage() {
                 },
                 {
                     title: "Unified Hub",
-                    explanation: "The table below shows every product&apos;s status across all stages in a single row."
+                    explanation: "The table below shows every tub&apos;s status across all stages in a single row."
                 }
             ],
             components: [
@@ -92,7 +92,7 @@ export default function StockOverviewPage() {
                 },
                 {
                     name: "Internal Stock Table",
-                    description: "A product-centric view of your entire inventory."
+                    description: "A tub-centric view of your entire inventory."
                 }
             ]
         });
@@ -238,7 +238,7 @@ export default function StockOverviewPage() {
                                 )}
                             >
                                 <Package size={18} />
-                                <span>Products</span>
+                                <span>Tubs</span>
                                 {activeTab === 'products' && (
                                     <div className={styles.tabIndicator} />
                                 )}

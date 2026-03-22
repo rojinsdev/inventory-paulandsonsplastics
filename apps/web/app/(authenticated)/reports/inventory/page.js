@@ -27,7 +27,7 @@ export default function InventoryReportsPage() {
     const [filters, setFilters] = useState({
         date_from: '',
         date_to: '',
-        product_search: '',
+        tub_search: '',
     });
 
     // Queries
@@ -112,7 +112,7 @@ export default function InventoryReportsPage() {
             logic: [
                 {
                     title: "Stock Flow Dynamics (WIP to Finished)",
-                    explanation: "This tracks items as they move from 'Semi-Finished' (loose pieces) to 'Packed' (packets) and finally 'Finished' (sellable bundles). Bottlenecks here often indicate packing station delays."
+                    explanation: "This tracks items as they move from 'Semi-Finished' (loose pieces) to 'Packed' (packets) and finally 'Finished' (sellable tubs). Bottlenecks here often indicate packing station delays."
                 },
                 {
                     title: "Safety Thresholds (Sellable Stock)",
@@ -122,7 +122,7 @@ export default function InventoryReportsPage() {
             components: [
                 {
                     name: "Stock Status Heatmap",
-                    description: "Quick-look cards showing total capital tied up in items vs. ready bundles."
+                    description: "Quick-look cards showing total capital tied up in items vs. ready tubs."
                 },
                 {
                     name: "Inventory Matrix",
@@ -145,7 +145,7 @@ export default function InventoryReportsPage() {
         setFilters({
             date_from: '',
             date_to: '',
-            product_search: '',
+            tub_search: '',
         });
         setDatePreset('custom');
     };
@@ -154,15 +154,15 @@ export default function InventoryReportsPage() {
         if (!report?.by_product || report.by_product.length === 0) return;
 
         const csvContent = [
-            ['Product', 'Semi-Finished', 'Packed', 'Finished', 'Reserved', 'Total Bundles'].join(','),
+            ['Tub', 'Semi-Finished', 'Packed', 'Finished', 'Reserved', 'Total Tubs'].join(','),
             ...report.by_product
                 .filter(item => {
-                    if (!filters.product_search) return true;
-                    const productName = getProductName(item.product_id).toLowerCase();
-                    return productName.includes(filters.product_search.toLowerCase());
+                    if (!filters.tub_search) return true;
+                    const tubName = getTubName(item.product_id).toLowerCase();
+                    return tubName.includes(filters.tub_search.toLowerCase());
                 })
                 .map(item => [
-                    getProductName(item.product_id),
+                    getTubName(item.product_id),
                     item.semi_finished || 0,
                     item.packed || 0,
                     item.finished || 0,
@@ -180,19 +180,19 @@ export default function InventoryReportsPage() {
         window.URL.revokeObjectURL(url);
     };
 
-    const getProductName = (id) => {
+    const getTubName = (id) => {
         const p = products.find((p) => p.id === id);
         return p ? `${p.name} (${p.size})` : 'Unknown';
     };
 
-    const filteredProducts = report?.by_product?.filter(item => {
-        if (!filters.product_search) return true;
-        const productName = getProductName(item.product_id).toLowerCase();
-        return productName.includes(filters.product_search.toLowerCase());
+    const filteredTubs = report?.by_product?.filter(item => {
+        if (!filters.tub_search) return true;
+        const tubName = getTubName(item.product_id).toLowerCase();
+        return tubName.includes(filters.tub_search.toLowerCase());
     }) || [];
 
-    const hasFilters = filters.date_from || filters.date_to || filters.product_search;
-    const lowStockCount = filteredProducts.filter(item =>
+    const hasFilters = filters.date_from || filters.date_to || filters.tub_search;
+    const lowStockCount = filteredTubs.filter(item =>
         (item.finished || 0) + (item.reserved || 0) < 10
     ).length;
 
@@ -202,7 +202,7 @@ export default function InventoryReportsPage() {
                 <div>
                     <h1 className={styles.pageTitle}>Inventory Reports</h1>
                     <p className={styles.pageDescription}>
-                        Track stock movements, inventory levels, and product availability
+                        Track stock movements, inventory levels, and tub availability
                     </p>
                 </div>
                 {report?.by_product && report.by_product.length > 0 && (
@@ -262,9 +262,9 @@ export default function InventoryReportsPage() {
                         <input
                             type="text"
                             className={styles.filterInput}
-                            value={filters.product_search}
-                            onChange={(e) => setFilters({ ...filters, product_search: e.target.value })}
-                            placeholder="Search products..."
+                            value={filters.tub_search}
+                            onChange={(e) => setFilters({ ...filters, tub_search: e.target.value })}
+                            placeholder="Search tubs..."
                         />
                     </div>
 
@@ -300,7 +300,7 @@ export default function InventoryReportsPage() {
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{formatNumber(report?.total_bundles || 0)}</div>
-                        <div className={styles.statLabel}>Total Bundles</div>
+                        <div className={styles.statLabel}>Total Tubs</div>
                         <div className={styles.statSublabel}>Ready for sale</div>
                     </div>
                 </div>
@@ -344,12 +344,12 @@ export default function InventoryReportsPage() {
                             Retry
                         </button>
                     </div>
-                ) : filteredProducts.length === 0 ? (
+                ) : filteredTubs.length === 0 ? (
                     <div className={styles.emptyState}>
                         <Package size={48} />
                         <p>No inventory data found</p>
                         <p className={styles.emptyHint}>
-                            {hasFilters ? 'Try adjusting your filters' : 'No products in inventory'}
+                            {hasFilters ? 'Try adjusting your filters' : 'No tubs in inventory'}
                         </p>
                     </div>
                 ) : (
@@ -357,21 +357,21 @@ export default function InventoryReportsPage() {
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Product</th>
+                                    <th>Tub</th>
                                     <th style={{ textAlign: 'right' }}>Semi-Finished</th>
                                     <th style={{ textAlign: 'right' }}>Packed</th>
                                     <th style={{ textAlign: 'right' }}>Finished</th>
                                     <th style={{ textAlign: 'right' }}>Reserved</th>
-                                    <th style={{ textAlign: 'right' }}>Total Bundles</th>
+                                    <th style={{ textAlign: 'right' }}>Total Tubs</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredProducts.map((item, idx) => {
-                                    const totalBundles = (item.finished || 0) + (item.reserved || 0);
-                                    const isLowStock = totalBundles < 10;
+                                {filteredTubs.map((item, idx) => {
+                                    const totalTubs = (item.finished || 0) + (item.reserved || 0);
+                                    const isLowStock = totalTubs < 10;
                                     return (
                                         <tr key={idx}>
-                                            <td className={styles.productCell}>{getProductName(item.product_id)}</td>
+                                            <td className={styles.productCell}>{getTubName(item.product_id)}</td>
                                             <td style={{ textAlign: 'right' }} className={styles.numberCell}>
                                                 {formatNumber(item.semi_finished || 0)}
                                             </td>
@@ -386,7 +386,7 @@ export default function InventoryReportsPage() {
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
                                                 <span className={cn(styles.totalBadge, isLowStock && styles.totalBadgeLow)}>
-                                                    {formatNumber(totalBundles)}
+                                                    {formatNumber(totalTubs)}
                                                 </span>
                                             </td>
                                         </tr>

@@ -20,9 +20,9 @@ class ProductionTypeSelectionScreen extends StatelessWidget {
           children: [
             const SizedBox(height: 20),
             _SelectionCard(
-              title: 'Product Production',
+              title: 'Tub Production',
               description:
-                  'Log output for bottles and other finished products.',
+                  'Log output for tubs and other finished goods.',
               icon: Icons.inventory_2_outlined,
               color: colorScheme.primary,
               onTap: () => context.push('/production/submit'),

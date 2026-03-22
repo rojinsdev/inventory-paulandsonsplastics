@@ -89,7 +89,7 @@ export default function DemandInsightsPage() {
         if (!demandData) return;
 
         const csvRows = [
-            ['Product', 'Total Sold', 'Growth Rate', 'Trend', 'Seasonal Patterns'],
+            ['Tub', 'Total Sold', 'Growth Rate', 'Trend', 'Seasonal Patterns'],
             ...demandData.products.map(p => [
                 `${p.product_name} (${p.product_size})`,
                 p.total_sold,
@@ -235,11 +235,11 @@ export default function DemandInsightsPage() {
             {demandData && (
                 <div className={styles.statsGrid}>
                     <div className={styles.statCard}>
-                        <div className={styles.statLabel}>Total Products</div>
+                        <div className={styles.statLabel}>Total Tubs</div>
                         <div className={styles.statValue}>{demandData.products.length}</div>
                     </div>
                     <div className={styles.statCard}>
-                        <div className={styles.statLabel}>Growing Products</div>
+                        <div className={styles.statLabel}>Growing Tubs</div>
                         <div className={styles.statValue}>
                             {demandData.products.filter(p => p.trend === 'growing').length}
                         </div>
@@ -260,12 +260,12 @@ export default function DemandInsightsPage() {
             {/* Product Trends Table */}
             {demandData?.products?.length > 0 ? (
                 <div className={styles.section}>
-                    <h2 className={styles.sectionTitle}>Product Demand Trends</h2>
+                    <h2 className={styles.sectionTitle}>Tub Demand Trends</h2>
                     <div className={styles.tableContainer}>
                         <table className={styles.table}>
                             <thead>
                                 <tr>
-                                    <th>Product</th>
+                                    <th>Tub</th>
                                     <th style={{ textAlign: 'right' }}>Total Sold</th>
                                     <th style={{ textAlign: 'right' }}>Growth Rate</th>
                                     <th>Trend</th>
@@ -365,8 +365,8 @@ export default function DemandInsightsPage() {
                                 </div>
                                 <div className={styles.patternBody}>
                                     <div className={styles.patternDetail}>
-                                        <span className={styles.patternLabel}>Product:</span>
-                                        <span>{pattern.product_name || 'All Products'}</span>
+                                        <span className={styles.patternLabel}>Tub:</span>
+                                        <span>{pattern.product_name || 'All Tubs'}</span>
                                     </div>
                                     <div className={styles.patternDetail}>
                                         <span className={styles.patternLabel}>Period:</span>

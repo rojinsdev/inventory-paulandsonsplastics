@@ -62,10 +62,10 @@ export default function InventoryStateTable({ data, loading, type, filters = {},
 
     const getUnitLabel = (type) => {
         switch (type) {
-            case 'semi_finished': return 'Items (Loose)';
+            case 'semi_finished': return 'Tubs (Loose)';
             case 'packed': return 'Packets';
-            case 'finished': return 'Bundles';
-            case 'reserved': return 'Bundles (Reserved)';
+            case 'finished': return 'Tubs';
+            case 'reserved': return 'Tubs (Reserved)';
             default: return 'Qty';
         }
     };
@@ -76,7 +76,7 @@ export default function InventoryStateTable({ data, loading, type, filters = {},
                 <table className="table">
                     <thead>
                         <tr>
-                            <th>Product</th>
+                            <th>Tub</th>
                             <th>Size / Color</th>
                             <th style={{ textAlign: 'right' }}>Quantity ({getUnitLabel(type)})</th>
                             <th style={{ textAlign: 'right' }}>Last Updated</th>
@@ -88,7 +88,7 @@ export default function InventoryStateTable({ data, loading, type, filters = {},
                             return (
                                 <tr key={item.id}>
                                     <td className="font-medium">
-                                        {product?.name || 'Unknown Product'}
+                                        {product?.name || 'Unknown Tub'}
                                     </td>
                                     <td>
                                         {product?.size || '—'} - {product?.color || '—'}

@@ -34,6 +34,7 @@ export class StockAllocationService {
         if (request.status === 'completed') throw new Error('Request already completed');
 
         const unitType = request.unit_type;
+        const dbUnitType = unitType === 'loose' ? '' : unitType;
         const stateMapping: Record<string, string> = {
             'loose': 'semi_finished',
             'packet': 'packed',
@@ -50,7 +51,7 @@ export class StockAllocationService {
             .eq('product_id', request.product_id)
             .eq('state', fromState)
             .eq('factory_id', request.factory_id)
-            .eq('unit_type', unitType);
+            .eq('unit_type', dbUnitType);
 
         if (stockError) throw new Error(`Stock fetch error: ${stockError.message}`);
 
@@ -61,7 +62,7 @@ export class StockAllocationService {
         }
 
         // 3. Move stock to reserved (pass the fetched balances for sequential deduction)
-        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id, unitType, balances || []);
+        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id, dbUnitType, balances || []);
 
         // 4. Update Sales Order Item
         // Note: This updates all items for this product in this order. 
@@ -81,7 +82,8 @@ export class StockAllocationService {
             .eq('id', requestId)
             .select(`
                 *,
-                products (name, size, color, factory_id)
+                products (name, size, color, factory_id),
+                sales_order:sales_orders!left(order_number:id)
             `)
             .single();
 
@@ -101,7 +103,7 @@ export class StockAllocationService {
         return updatedRequest;
     }
 
-    private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, unitType: string, preFetchedBalances: any[] = []) {
+    private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, dbUnitType: string, preFetchedBalances: any[] = []) {
         let balances = preFetchedBalances;
         
         if (balances.length === 0) {
@@ -111,7 +113,7 @@ export class StockAllocationService {
                 .eq('product_id', productId)
                 .eq('state', fromState)
                 .eq('factory_id', factoryId)
-                .eq('unit_type', unitType);
+                .eq('unit_type', dbUnitType);
             balances = data || [];
         }
 
@@ -130,7 +132,7 @@ export class StockAllocationService {
                 p_state: fromState,
                 p_quantity_change: -deductAmount,
                 p_cap_id: balance.cap_id,
-                p_unit_type: unitType
+                p_unit_type: dbUnitType
             });
             if (deductError) throw new Error(`Failed to deduct stock: ${deductError.message}`);
 
@@ -141,7 +143,7 @@ export class StockAllocationService {
                 p_state: 'reserved',
                 p_quantity_change: deductAmount,
                 p_cap_id: balance.cap_id,
-                p_unit_type: unitType
+                p_unit_type: dbUnitType
             });
             if (reserveError) throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
 
