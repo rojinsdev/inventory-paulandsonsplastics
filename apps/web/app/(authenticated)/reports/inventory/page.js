@@ -300,7 +300,7 @@ export default function InventoryReportsPage() {
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{formatNumber(report?.total_bundles || 0)}</div>
-                        <div className={styles.statLabel}>Total Tubs</div>
+                        <div className={styles.statLabel}>Total Bundles</div>
                         <div className={styles.statSublabel}>Ready for sale</div>
                     </div>
                 </div>

@@ -316,9 +316,9 @@ class _RequestRow extends ConsumerWidget {
                     unit: 'PACKET',
                   ),
                   _StockDetailRow(
-                    label: 'Finished Tubs',
+                    label: 'Finished Bundles',
                     value: request.stockSummary!.factorySpecific.finished,
-                    unit: 'TUB',
+                    unit: 'BUNDLE',
                   ),
                 ],
               ),

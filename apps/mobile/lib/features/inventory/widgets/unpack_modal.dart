@@ -22,7 +22,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
 
   String get _unitLabel {
     final ut = widget.stock.unitType ?? 'bundle';
-    final label = ut == 'bundle' ? 'tub' : ut;
+    final label = ut == 'bundle' ? 'bundle' : ut;
     return label[0].toUpperCase() + label.substring(1);
   }
 

@@ -49,7 +49,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
           if (previous?.isLoading ?? false) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('Tub packaging recorded successfully!'),
+                content: const Text('Bundle packaging recorded successfully!'),
                 behavior: SnackBarBehavior.floating,
                 margin: const EdgeInsets.all(20),
                 shape: RoundedRectangleBorder(
@@ -82,7 +82,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Tub Packaging Entry')),
+      appBar: AppBar(title: const Text('Bundle Packaging Entry')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Form(
@@ -109,8 +109,8 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                     Expanded(
                       child: Text(
                         _source == 'packed'
-                            ? 'Record finished tubs from packed packets.'
-                            : 'Record finished tubs directly from loose items.',
+                            ? 'Record finished bundles from packed packets.'
+                            : 'Record finished bundles directly from loose items.',
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onTertiaryContainer,
                         ),
@@ -419,7 +419,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                       )
                     : const Icon(Icons.check),
                 label: Text(
-                  isSubmitting ? 'Submitting...' : 'Confirm Tub Packaging',
+                  isSubmitting ? 'Submitting...' : 'Confirm Bundle Packaging',
                 ),
                 style: FilledButton.styleFrom(
                   backgroundColor: colorScheme.tertiary,

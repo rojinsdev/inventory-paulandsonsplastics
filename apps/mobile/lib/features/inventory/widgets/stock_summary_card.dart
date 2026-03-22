@@ -89,7 +89,7 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
                     icon: Icons.inventory_2_outlined,
                   ),
                   StockItem(
-                    label: 'Tubs',
+                    label: 'Bundles',
                     value: totalBundled,
                     icon: Icons.layers_outlined,
                   ),

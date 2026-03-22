@@ -161,7 +161,7 @@ export default function SalesReportsPage() {
         csvRows.push(['Period', `${filters.date_from || 'All'} to ${filters.date_to || 'All'}`]);
         csvRows.push(['Total Orders', report?.total_orders || 0]);
         csvRows.push(['Unique Customers', report?.unique_customers || 0]);
-        csvRows.push(['Total Tubs', report?.total_bundles || 0]);
+        csvRows.push(['Total Bundles', report?.total_bundles || 0]);
         csvRows.push(['Total Revenue', formatCurrency(report?.total_revenue || 0)]);
         csvRows.push([]);
 
@@ -312,7 +312,7 @@ export default function SalesReportsPage() {
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{formatNumber(report?.total_bundles || 0)}</div>
-                        <div className={styles.statLabel}>Tubs Sold</div>
+                        <div className={styles.statLabel}>Total Bundles</div>
                         <div className={styles.statSublabel}>Total quantity</div>
                     </div>
                 </div>
@@ -350,7 +350,7 @@ export default function SalesReportsPage() {
                                     <tr>
                                         <th>Customer</th>
                                         <th style={{ textAlign: 'right' }}>Orders</th>
-                                        <th style={{ textAlign: 'right' }}>Tubs</th>
+                                        <th style={{ textAlign: 'right' }}>Bundles</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -379,7 +379,7 @@ export default function SalesReportsPage() {
                 {/* Top Products */}
                 <div className={styles.tableCard}>
                     <div className={styles.cardHeader}>
-                        <h3 className={styles.cardTitle}>Top Tubs</h3>
+                        <h3 className={styles.cardTitle}>Top Bundles</h3>
                     </div>
                     {loading ? (
                         <div className={styles.loading}>

@@ -363,7 +363,7 @@ export default function Home() {
                                                 {log.product?.name || log.product_name || 'Tub Production Entry'}
                                             </span>
                                             <span className={styles.logMeta}>
-                                                {log.actual_bundles ?? log.units_produced ?? 0} tubs
+                                                {log.actual_bundles ?? log.units_produced ?? 0} bundles
                                                 {log.machine?.name ? ` · ${log.machine.name}` : ''}
                                             </span>
                                         </div>

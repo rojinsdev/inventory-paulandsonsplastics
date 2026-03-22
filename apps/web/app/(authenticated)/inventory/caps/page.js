@@ -124,7 +124,7 @@ export default function CapManagementPage() {
                 },
                 {
                     title: 'Tub Mapping',
-                    explanation: 'Map a cap to multiple tubs. When these tubs are packed in tubs, the corresponding cap stock is automatically deducted.'
+                    explanation: 'Map a cap to multiple tubs. When these tubs are packed in bundles, the corresponding cap stock is automatically deducted.'
                 },
                 {
                     title: 'Ideal Cycle Time',

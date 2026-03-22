@@ -433,8 +433,8 @@ export default function ProductsPage() {
                                     <th>Weight (g)</th>
                                     <th>Raw Material</th>
                                     <th>Items/Pkt</th>
-                                    <th>Pkts/Tub</th>
-                                    <th>Items/Tub</th>
+                                    <th>Pkts/Bundle</th>
+                                    <th>Items/Bundle</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -639,9 +639,9 @@ export default function ProductsPage() {
                                                 />
                                             </div>
 
-                                            {/* Tub Section */}
+                                            {/* Bundle Section */}
                                             <div className={styles.packagingToggleRow}>
-                                                <span className={styles.toggleLabel}>Enable Tub Packaging</span>
+                                                <span className={styles.toggleLabel}>Enable Bundle Packaging</span>
                                                 <div 
                                                     className={`${styles.toggle} ${formData.bundle_enabled ? styles.toggleActive : ''}`}
                                                     onClick={() => setFormData({ ...formData, bundle_enabled: !formData.bundle_enabled })}
@@ -650,7 +650,7 @@ export default function ProductsPage() {
                                             {formData.bundle_enabled && (
                                                 <div className={styles.formRow} style={{ marginBottom: '1.5rem', animation: 'fadeIn 0.2s ease-out' }}>
                                                     <div className={styles.formGroup}>
-                                                        <label className={styles.formLabel}>Packets per Tub *</label>
+                                                        <label className={styles.formLabel}>Packets per Bundle *</label>
                                                         <input
                                                             type="number"
                                                             className={styles.formInput}
@@ -662,7 +662,7 @@ export default function ProductsPage() {
                                                         <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_bundle || 0)} items</div>
                                                     </div>
                                                     <div className={styles.formGroup}>
-                                                        <label className={styles.formLabel}>Items per Tub</label>
+                                                        <label className={styles.formLabel}>Items per Bundle</label>
                                                         <input
                                                             type="number"
                                                             className={styles.formInput}

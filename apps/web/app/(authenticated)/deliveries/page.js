@@ -249,7 +249,7 @@ export default function DeliveriesPage() {
                                             <span className={styles.itemProduct}>
                                                 {getProductName(item.product_id)}
                                             </span>
-                                            <span className={styles.itemQty}>{item.quantity} {item.unit_type === 'bundle' ? 'Tub' : item.unit_type}{item.quantity > 1 ? 's' : ''}</span>
+                                            <span className={styles.itemQty}>{item.quantity} {item.unit_type === 'bundle' ? 'Bundle' : item.unit_type}{item.quantity > 1 ? 's' : ''}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -304,7 +304,7 @@ export default function DeliveriesPage() {
                                         {deliveryForm.items.map((item) => (
                                             <div key={item.item_id} className={styles.pricingRow}>
                                                 <span className={styles.productName}>{getProductName(item.product_id)}</span>
-                                                <span className={styles.quantity}>{item.quantity} {item.unit_type === 'bundle' ? 'Tub' : item.unit_type}{item.quantity > 1 ? 's' : ''}</span>
+                                                <span className={styles.quantity}>{item.quantity} {item.unit_type === 'bundle' ? 'Bundle' : item.unit_type}{item.quantity > 1 ? 's' : ''}</span>
                                                 <div className={styles.prefixWrapper}>
                                                     <input
                                                         type="number"

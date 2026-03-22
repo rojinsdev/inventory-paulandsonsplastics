@@ -21,7 +21,7 @@ const ORDER_STATUSES = [
 ];
 
 const UNIT_OPTIONS = [
-    { value: 'bundle', label: 'Tubs' },
+    { value: 'bundle', label: 'Bundles' },
     { value: 'packet', label: 'Packets' },
     { value: 'loose', label: 'Loose Tubs' },
 ];
@@ -726,7 +726,7 @@ export default function OrdersPage() {
                                         <div className={styles.summaryValue}>{orderSummary.unique_tubs}</div>
                                     </div>
                                     <div className={styles.summaryItem}>
-                                        <div className={styles.summaryLabel}>Tubs</div>
+                                        <div className={styles.summaryLabel}>Bundles</div>
                                         <div className={styles.summaryValue}>{orderSummary.units['bundle'] || 0}</div>
                                     </div>
                                     {Object.entries(orderSummary.units).map(([unit, qty]) => {
