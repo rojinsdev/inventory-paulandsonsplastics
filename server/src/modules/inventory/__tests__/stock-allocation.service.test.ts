@@ -53,6 +53,7 @@ describe('StockAllocationService', () => {
             }
             if (table === 'stock_balances') {
                 chain.single = jest.fn().mockResolvedValue({ data: { quantity: 100 }, error: null });
+                chain.then = (resolve: any) => resolve({ data: [{ quantity: 100 }], error: null });
                 return chain;
             }
             if (table === 'sales_orders') {

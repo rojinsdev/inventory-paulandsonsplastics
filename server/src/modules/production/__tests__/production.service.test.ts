@@ -7,7 +7,8 @@ import { inventoryService } from '../../inventory/inventory.service';
 // Mock Dependencies
 jest.mock('../../../config/supabase', () => ({
     supabase: {
-        from: jest.fn()
+        from: jest.fn(),
+        rpc: jest.fn()
     }
 }));
 jest.mock('../../settings/settings.service');
@@ -88,7 +89,7 @@ describe('ProductionService', () => {
                 return createChain({ id: 'log-1' });
             }
             if (table === 'raw_materials') return createChain(mockRawMaterial);
-            if (table === 'stock_balances') return createChain({ quantity: 500 });
+            if (table === 'stock_balances') return createChain([{ quantity: 500 }]);
             return createChain({});
         });
 

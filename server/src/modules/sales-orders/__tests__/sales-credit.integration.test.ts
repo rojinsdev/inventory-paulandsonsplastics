@@ -88,10 +88,7 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
                 chain.insert = paymentInsertSpy;
                 return chain;
             }
-            if (table === 'notifications') {
-                // Notifications are not part of this specific payment flow verification
-                return createChain({});
-            }
+            if (table === 'stock_balances') return createChain([{ quantity: 1000 }]);
             return createChain({});
         });
 
@@ -142,9 +139,7 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
                 chain.insert = paymentInsertSpy;
                 return chain;
             }
-            if (table === 'notifications') {
-                return createChain({});
-            }
+            if (table === 'stock_balances') return createChain([{ quantity: 1000 }]);
             return createChain({});
         });
 

@@ -92,7 +92,7 @@ describe('SalesOrderService', () => {
             }
             if (table === 'sales_order_items') return createChain({});
             if (table === 'payments') return createChain({});
-            if (table === 'stock_balances') return createChain({ quantity: 50 });
+            if (table === 'stock_balances') return createChain([{ quantity: 50 }]);
             return createChain({});
         });
 
