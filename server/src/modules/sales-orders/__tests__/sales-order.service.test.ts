@@ -62,8 +62,8 @@ describe('SalesOrderService', () => {
 
         const deliveryData = {
             items: [
-                { item_id: 'item-1', unit_price: 100 }, // 10 * 100 = 1000
-                { item_id: 'item-2', unit_price: 200 }  // 5 * 200 = 1000
+                { item_id: 'item-1', quantity: 10, unit_price: 100 }, // 10 * 100 = 1000
+                { item_id: 'item-2', quantity: 5, unit_price: 200 }  // 5 * 200 = 1000
             ],
             discount_type: 'percentage' as const,
             discount_value: 10, // 10% of 2000 = 200

@@ -64,7 +64,7 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
         };
 
         const deliveryData = {
-            items: [{ item_id: 'item-1', unit_price: 10000 }], // Total 100,000
+            items: [{ item_id: 'item-1', quantity: 10, unit_price: 10000 }], // Total 100,000
             payment_mode: 'credit' as const,
             initial_payment: 15000,
             user_id: userId
