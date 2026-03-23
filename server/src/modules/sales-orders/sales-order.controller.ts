@@ -86,12 +86,22 @@ export class SalesOrderController {
         const { id } = req.params;
         const prepareSchema = z.object({
             items: z.array(z.object({
-                itemId: z.string().uuid(),
+                itemId: z.string().uuid().optional(),
+                item_id: z.string().uuid().optional(),
                 quantity: z.number().int().positive()
             })).min(1)
         });
         const { items } = prepareSchema.parse(req.body);
-        const result = await salesOrderService.prepareOrderItems(id, items, req.user!.id);
+
+        // Map item_id to itemId for backward compatibility in the service, 
+        // ensuring at least one is provided
+        const processedItems = items.map(item => {
+            const finalId = item.item_id || item.itemId;
+            if (!finalId) throw new AppError('Either itemId or item_id must be provided', 400);
+            return { itemId: finalId, quantity: item.quantity };
+        });
+
+        const result = await salesOrderService.prepareOrderItems(id, processedItems, req.user!.id);
         res.json(result);
     }
 
