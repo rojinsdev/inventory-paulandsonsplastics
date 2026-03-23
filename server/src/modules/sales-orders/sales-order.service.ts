@@ -821,6 +821,49 @@ export class SalesOrderService {
         return this.getOrderById(id);
     }
 
+    async syncOrderStatus(orderId: string) {
+        // 1. Fetch all items for this order to check backorder status
+        const { data: items, error: itemsError } = await supabase
+            .from('sales_order_items')
+            .select('is_backordered')
+            .eq('order_id', orderId);
+
+        if (itemsError) {
+            logger.error('Failed to fetch items for order status sync', { error: itemsError.message, orderId });
+            return;
+        }
+
+        const anyBackordered = items?.some(item => item.is_backordered) || false;
+
+        if (!anyBackordered) {
+            // 2. Fetch current order status
+            const { data: order, error: orderError } = await supabase
+                .from('sales_orders')
+                .select('status')
+                .eq('id', orderId)
+                .single();
+
+            if (orderError) {
+                logger.error('Failed to fetch order for status sync', { error: orderError.message, orderId });
+                return;
+            }
+
+            // Only transition from 'pending' to 'reserved' if no longer backordered
+            if (order.status === 'pending') {
+                const { error: updateError } = await supabase
+                    .from('sales_orders')
+                    .update({ status: 'reserved', updated_at: new Date().toISOString() })
+                    .eq('id', orderId);
+
+                if (updateError) {
+                    logger.error('Failed to update order status to reserved during sync', { error: updateError.message, orderId });
+                } else {
+                    logger.info('Order status synced to reserved', { orderId });
+                }
+            }
+        }
+    }
+
     async prepareOrderItems(orderId: string, items: Array<{ itemId: string; quantity: number }>, userId: string) {
         // 1. Fetch current items to validate quantities
         const { data: currentItems, error: fetchError } = await supabase
@@ -979,19 +1022,34 @@ export class SalesOrderService {
         }
 
         // 6. Update order-level totals and status
-        const updatedItems = await supabase.from('sales_order_items').select('quantity, quantity_shipped').eq('order_id', orderId);
-        const isFullyShipped = updatedItems.data?.every(i => i.quantity_shipped >= i.quantity);
+        const { data: allItems } = await supabase.from('sales_order_items').select('quantity, quantity_shipped, unit_price').eq('order_id', orderId);
+        const itemsArr = allItems || [];
+        const isFullyShipped = itemsArr.length > 0 && itemsArr.every(i => i.quantity_shipped >= i.quantity);
         
-        const newStatus = isFullyShipped ? 'delivered' : 'partially_delivered';
+        // Recalculate Order Totals
         const initialPayment = deliveryData.initial_payment || 0;
+        const orderSubtotal = itemsArr.reduce((sum, i) => sum + (i.quantity * (i.unit_price || 0)), 0);
+        let orderDiscount = 0;
+        if (deliveryData.discount_type === 'percentage') {
+            orderDiscount = (orderSubtotal * (deliveryData.discount_value || 0)) / 100;
+        } else {
+            orderDiscount = deliveryData.discount_value || 0;
+        }
+        const orderTotal = orderSubtotal - orderDiscount;
+        const newAmountPaid = (order.amount_paid || 0) + initialPayment;
+        const newBalanceDue = Math.max(0, orderTotal - newAmountPaid);
+
+        const newStatus = isFullyShipped ? 'delivered' : 'partially_delivered';
 
         const { error: orderUpdateError } = await supabase
             .from('sales_orders')
             .update({
                 status: newStatus,
-                amount_paid: (order.amount_paid || 0) + initialPayment,
-                // Optional: Recalculate balance_due based on cumulative total vs cumulative paid
-                // balance_due: ...
+                subtotal: orderSubtotal,
+                total_amount: orderTotal,
+                discount_value: orderDiscount,
+                amount_paid: newAmountPaid,
+                balance_due: newBalanceDue,
                 delivered_at: isFullyShipped ? new Date().toISOString() : order.delivered_at
             })
             .eq('id', orderId);
@@ -1000,15 +1058,26 @@ export class SalesOrderService {
 
         // 7. Payment Handling
         if (initialPayment > 0) {
+            // Record payment for the initial amount
             await supabase.from('payments').insert({
                 sales_order_id: orderId,
                 customer_id: order.customer_id,
                 amount: initialPayment,
                 payment_method: deliveryData.payment_method || 'Cash',
-                notes: `Payment for dispatch batch ${dispatchRecord.id.slice(-6).toUpperCase()}`,
+                notes: `Payment for dispatch batch ${(dispatchRecord?.id || 'DISPATCH').slice(-6).toUpperCase()}`,
                 recorded_by: deliveryData.user_id
             });
-            // Cash flow logging omitted for brevity but should be here
+
+            // Cash flow logging
+            const categoryId = await cashFlowService.getCategoryId('Sales', 'income');
+            await cashFlowService.logEntry({
+                amount: initialPayment,
+                category_id: categoryId,
+                payment_mode: deliveryData.payment_method || 'Cash',
+                notes: `Initial payment for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()}`,
+                reference_id: orderId,
+                is_automatic: true
+            });
         }
 
         logger.info('Partial delivery processed successfully', { orderId, dispatchId: dispatchRecord.id, newStatus });
@@ -1116,7 +1185,7 @@ export class SalesOrderService {
             const { error: notificationError } = await supabase.from('notifications').insert({
                 user_id: order.created_by,
                 title: 'Payment Completed',
-                message: `Order #${orderId.slice(-6).toUpperCase()} has been fully paid.`,
+                message: `Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} has been fully paid.`,
                 type: 'payment_completed',
                 metadata: { order_id: orderId }
             });
@@ -1154,12 +1223,12 @@ export class SalesOrderService {
         // Derive payment_records and orders_with_balance for frontend
         const paymentRecords = (orders as any[])?.flatMap((o: any) => (o.payments || []).map((p: any) => ({
             ...p,
-            order_number: `#${o.id.slice(-6).toUpperCase()}`
+            order_number: `#${(o.id || 'ORDER').slice(-6).toUpperCase()}`
         }))) || [];
 
         const ordersWithBalance = (orders as any[])?.filter((o: any) => (o.balance_due || 0) > 0).map((o: any) => ({
             ...o,
-            order_number: `#${o.id.slice(-6).toUpperCase()}`
+            order_number: `#${(o.id || 'ORDER').slice(-6).toUpperCase()}`
         })) || [];
 
         logger.info('Customer payment history fetched', { customerId, totalOrders: orders?.length, outstandingBalance });
@@ -1306,7 +1375,7 @@ export class SalesOrderService {
         const notifications = overdueOrders.map(order => ({
             user_id: order.created_by, // Notify the creator
             title: 'Overdue Payment Alert',
-            message: `Order #${order.id.slice(-6).toUpperCase()} is overdue. Balance: ₹${order.balance_due}. Deadline was ${order.credit_deadline}.`,
+            message: `Order #${(order.id || 'ORDER').slice(-6).toUpperCase()} is overdue. Balance: ₹${order.balance_due}. Deadline was ${order.credit_deadline}.`,
             type: 'overdue_payment',
             metadata: { order_id: order.id, customer_id: order.customer_id }
         }));

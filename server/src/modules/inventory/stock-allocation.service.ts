@@ -1,5 +1,6 @@
 import { supabase } from '../../config/supabase';
 import { pushNotificationService } from '../notifications/push-notification.service';
+import { salesOrderService } from '../sales-orders/sales-order.service';
 import { AppError } from '../../utils/AppError';
 
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
@@ -71,11 +72,15 @@ export class StockAllocationService {
             .from('sales_order_items')
             .update({ is_backordered: false })
             .eq('order_id', request.sales_order_id)
-            .eq('product_id', request.product_id);
+            .eq('product_id', request.product_id)
+            .eq('unit_type', request.unit_type);
 
         if (itemError) throw new Error(`Failed to update order item: ${itemError.message}`);
 
-        // 5. Mark request as completed
+        // 5. Sync simple status on parent Order (e.g. pending -> reserved)
+        await salesOrderService.syncOrderStatus(request.sales_order_id);
+
+        // 6. Mark request as completed
         const { data: updatedRequest, error: updateError } = await supabase
             .from('production_requests')
             .update({ status: 'completed' })
@@ -100,7 +105,7 @@ export class StockAllocationService {
             await this.notifyfulfillment(order.user_id, request.sales_order_id, request.product_id, request.quantity, unitType);
         }
 
-        return updatedRequest;
+        return { success: true, request: updatedRequest };
     }
 
     private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, dbUnitType: string, preFetchedBalances: any[] = []) {
@@ -181,7 +186,7 @@ export class StockAllocationService {
         await supabase.from('notifications').insert({
             user_id: userId,
             title: 'Backorder Fulfilled',
-            message: `Stock for Order #${orderId.slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${product?.name}.`,
+            message: `Stock for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${product?.name}.`,
             type: 'backorder_fulfillment',
             metadata: { order_id: orderId, product_id: productId }
         });
@@ -189,7 +194,7 @@ export class StockAllocationService {
         // Push Notification to Sales Admin
         await pushNotificationService.sendToUsers([userId], {
             title: 'Backorder Fulfilled',
-            body: `Stock for Order #${orderId.slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${product?.name || 'Product'}.`,
+            body: `Stock for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${product?.name || 'Product'}.`,
             data: { order_id: orderId, type: 'order_prepared' }
         });
     }

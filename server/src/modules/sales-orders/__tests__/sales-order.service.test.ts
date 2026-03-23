@@ -81,7 +81,11 @@ describe('SalesOrderService', () => {
         // Paid: 500
         // Balance: 1300
 
-        const updateSpy = jest.fn().mockReturnValue(createChain({}));
+        const updateSpy = jest.fn();
+        const itemsWithPrices = [
+            { quantity: 10, quantity_shipped: 10, unit_price: 100 },
+            { quantity: 5, quantity_shipped: 5, unit_price: 200 }
+        ];
 
         mockFrom.mockImplementation((table: string) => {
             if (table === 'sales_orders') {
@@ -92,10 +96,13 @@ describe('SalesOrderService', () => {
                 });
                 return chain;
             }
-            if (table === 'sales_order_items') return createChain({});
+            if (table === 'sales_order_items') return createChain(itemsWithPrices);
+            if (table === 'dispatch_records') return createChain({ id: 'disp-123456' });
+            if (table === 'dispatch_items') return createChain({});
             if (table === 'payments') return createChain({});
             if (table === 'stock_balances') return createChain([{ quantity: 50 }]);
-            return createChain({});
+            if (table === 'notifications') return createChain({});
+            return createChain([]);
         });
 
         (cashFlowService.getCategoryId as jest.Mock).mockResolvedValue('cat-1');

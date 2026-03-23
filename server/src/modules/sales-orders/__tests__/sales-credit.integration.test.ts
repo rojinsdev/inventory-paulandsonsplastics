@@ -84,13 +84,16 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
                 });
                 return chain;
             }
+            if (table === 'sales_order_items') return createChain([{ quantity: 10, quantity_shipped: 10, unit_price: 10000 }]);
+            if (table === 'dispatch_records') return createChain({ id: 'disp-100k' });
             if (table === 'payments') {
                 const chain = createChain({});
                 chain.insert = paymentInsertSpy;
                 return chain;
             }
             if (table === 'stock_balances') return createChain([{ quantity: 1000 }]);
-            return createChain({});
+            if (table === 'notifications') return createChain({});
+            return createChain([]);
         });
 
         (cashFlowService.getCategoryId as jest.Mock).mockResolvedValue('cat-sales');
@@ -135,13 +138,16 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
                 });
                 return chain;
             }
+            if (table === 'sales_order_items') return createChain([{ quantity: 10, quantity_shipped: 10, unit_price: 10000 }]);
+            if (table === 'dispatch_records') return createChain({ id: 'disp-100k' });
             if (table === 'payments') {
                 const chain = createChain({});
                 chain.insert = paymentInsertSpy;
                 return chain;
             }
             if (table === 'stock_balances') return createChain([{ quantity: 1000 }]);
-            return createChain({});
+            if (table === 'notifications') return createChain({});
+            return createChain([]);
         });
 
         await service.recordPayment(orderId, {
