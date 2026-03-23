@@ -129,6 +129,7 @@ class _OrderPreparedCard extends StatefulWidget {
 
 class _OrderPreparedCardState extends State<_OrderPreparedCard> {
   final Map<String, TextEditingController> _controllers = {};
+  final Set<String> _selectedItemIds = {};
 
   @override
   void initState() {
@@ -138,6 +139,10 @@ class _OrderPreparedCardState extends State<_OrderPreparedCard> {
         final remaining = item.quantity - item.quantityPrepared;
         _controllers[item.id] =
             TextEditingController(text: remaining > 0 ? remaining.toString() : '0');
+        // Select by default if quantity > 0
+        if (remaining > 0) {
+          _selectedItemIds.add(item.id);
+        }
       }
     }
   }
@@ -215,6 +220,16 @@ class _OrderPreparedCardState extends State<_OrderPreparedCard> {
                 return _ItemRow(
                   item: item,
                   controller: _controllers[item.id],
+                  isSelected: _selectedItemIds.contains(item.id),
+                  onSelectionChanged: (value) {
+                    setState(() {
+                      if (value == true) {
+                        _selectedItemIds.add(item.id);
+                      } else {
+                        _selectedItemIds.remove(item.id);
+                      }
+                    });
+                  },
                 );
               },
             ),
@@ -231,7 +246,7 @@ class _OrderPreparedCardState extends State<_OrderPreparedCard> {
 
                       for (final item in widget.items) {
                         final controller = _controllers[item.id];
-                        if (controller == null) continue;
+                        if (controller == null || !_selectedItemIds.contains(item.id)) continue;
 
                         final qty = int.tryParse(controller.text) ?? 0;
                         if (qty > 0) {
@@ -308,8 +323,15 @@ class _OrderPreparedCardState extends State<_OrderPreparedCard> {
 class _ItemRow extends StatelessWidget {
   final SalesOrderItem item;
   final TextEditingController? controller;
+  final bool isSelected;
+  final ValueChanged<bool?>? onSelectionChanged;
 
-  const _ItemRow({required this.item, this.controller});
+  const _ItemRow({
+    required this.item,
+    this.controller,
+    this.isSelected = false,
+    this.onSelectionChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -318,137 +340,155 @@ class _ItemRow extends StatelessWidget {
     final remaining = item.quantity - item.quantityPrepared;
 
     return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
+          if (controller != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Checkbox(
+                value: isSelected,
+                onChanged: onSelectionChanged,
+              ),
+            ),
+          Expanded(
+            child: Opacity(
+              opacity: isSelected ? 1.0 : 0.5,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.productName,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    if (item.productSize != null || item.productColor != null)
-                      Text(
-                        '${item.productSize ?? ''} ${item.productColor ?? ''}'
-                            .trim(),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item.productName,
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (item.productSize != null || item.productColor != null)
+                                Text(
+                                  '${item.productSize ?? ''} ${item.productColor ?? ''}'.trim(),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: colorScheme.secondaryContainer.withOpacity(0.3),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Total: ${item.quantity} ${item.unitType}',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  if (item.quantityPrepared > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        'Prepared: ${item.quantityPrepared}',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.primary,
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: colorScheme.secondaryContainer.withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'Total: ${item.quantity} ${item.unitType}',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (item.quantityPrepared > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Prepared: ${item.quantityPrepared}',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                      ),
+                      ],
                     ),
-                ],
-              ),
-            ],
-          ),
-          if (item.isBackordered) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.warning_amber_rounded,
-                    size: 14, color: Colors.orange),
-                const SizedBox(width: 4),
-                Text(
-                  'Awaiting Production',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: Colors.orange,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ] else ...[
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Qty to Prepare',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                    if (item.isBackordered) ...[
                       const SizedBox(height: 8),
-                      SizedBox(
-                        height: 48,
-                        child: TextField(
-                          controller: controller,
-                          keyboardType: TextInputType.number,
-                          decoration: InputDecoration(
-                            hintText: '0',
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      Row(
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Awaiting Production',
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.orange,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Qty to Prepare',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  height: 48,
+                                  child: TextField(
+                                    controller: controller,
+                                    keyboardType: TextInputType.number,
+                                    enabled: isSelected,
+                                    decoration: InputDecoration(
+                                      hintText: '0',
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 24),
+                            child: Text(
+                              '/ $remaining Remaining',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colorScheme.outline,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (item.notes != null && item.notes!.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Notes: ${item.notes}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Padding(
-                  padding: const EdgeInsets.only(top: 24),
-                  child: Text(
-                    '/ $remaining Remaining',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.outline,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (item.notes != null && item.notes!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Notes: ${item.notes}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontStyle: FontStyle.italic,
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
