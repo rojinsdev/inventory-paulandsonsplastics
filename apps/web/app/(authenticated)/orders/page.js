@@ -1005,7 +1005,7 @@ export default function OrdersPage() {
                                                             <div className={styles.emptyStateContainer}>
                                                                 <Clock size={40} opacity={0.5} />
                                                                 <p>No items are currently eligible for reservation.</p>
-                                                                <small>Backordered items must be marked as "Prepared" in Production first.</small>
+                                                                <small>Backordered items must be marked as &quot;Prepared&quot; in Production first.</small>
                                                             </div>
                                                         </td>
                                                     </tr>
