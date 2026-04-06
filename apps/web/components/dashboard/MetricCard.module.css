@@ -4,7 +4,6 @@
     padding: 1.5rem;
     border: 1px solid var(--border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    transition: transform 0.2s, box-shadow 0.2s;
     display: flex;
     align-items: flex-start;
     gap: 1.25rem;
@@ -17,7 +16,6 @@
 }
 
 .metricCard:hover {
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 

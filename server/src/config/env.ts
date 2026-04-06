@@ -15,6 +15,7 @@ const envSchema = z.object({
     TELEGRAM_CHAT_ID: z.string().optional(),
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+    SENTRY_DSN: z.string().url().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -39,5 +40,8 @@ export const config = {
     firebase: {
         projectId: parsed.data.FIREBASE_PROJECT_ID,
         serviceAccountPath: parsed.data.FIREBASE_SERVICE_ACCOUNT_PATH,
+    },
+    sentry: {
+        dsn: parsed.data.SENTRY_DSN,
     },
 };

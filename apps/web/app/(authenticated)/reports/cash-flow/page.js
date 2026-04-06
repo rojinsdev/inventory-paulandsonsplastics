@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-    DollarSign,
+    IndianRupee,
     ArrowUpCircle,
     ArrowDownCircle,
     Calendar,
@@ -313,7 +313,7 @@ export default function CashFlowPage() {
                     title="Net Position"
                     value={formatCurrency(analytics?.netCashFlow || 0)}
                     subtitle={analytics?.forecast ? `Forecast: ${formatCurrency(analytics.forecast.projectedNet)}` : "Available Liquidity"}
-                    icon={DollarSign}
+                    icon={IndianRupee}
                     spanClass="span1x1"
                     className={styles.netBorder}
                 />
@@ -432,7 +432,7 @@ export default function CashFlowPage() {
                 </div>
 
                 {/* Detailed Ledger - Full width at bottom */}
-                <div className={cn(styles.bentoCard, styles.span4x2)}>
+                <div className={cn(styles.bentoCard, styles.ledgerCard)}>
                     <div className={styles.chartHeader}>
                         <div className={styles.ledgerHeaderTop}>
                             <h3 className={styles.chartTitle}>Detailed Ledger</h3>
@@ -447,7 +447,7 @@ export default function CashFlowPage() {
                         </div>
                     </div>
 
-                    <div className={styles.ledgerTableContainer} style={{ maxHigh: '500px' }}>
+                    <div className={styles.ledgerTableContainer}>
                         <div className={styles.ledgerTable}>
                             <div className={styles.tableHead}>
                                 <span>Category & Detail</span>
@@ -716,8 +716,10 @@ function EntryModal({ type, onClose, onSuccess, categories, factories }) {
         if (!formData.category_id) return alert('Please select a category');
         setLoading(true);
         try {
+            const isShared = categories?.find(c => c.id === formData.category_id)?.is_shared;
             await cashFlowAPI.logEntry({
                 ...formData,
+                factory_id: isShared ? null : formData.factory_id,
                 amount: Number(formData.amount)
             });
             onSuccess();
@@ -751,29 +753,29 @@ function EntryModal({ type, onClose, onSuccess, categories, factories }) {
                                 onChange={e => setFormData({ ...formData, date: e.target.value })}
                             />
                         </div>
-                        <div className={styles.formGroup}>
-                            <label className={styles.label}>Factory</label>
-                            <select
-                                required
-                                className={styles.input}
-                                value={formData.factory_id}
-                                onChange={e => setFormData({ ...formData, factory_id: e.target.value })}
-                                disabled={categories?.find(c => c.id === formData.category_id)?.is_shared}
-                            >
-                                {categories?.find(c => c.id === formData.category_id)?.is_shared ? (
-                                    <option value="">All Factories (Shared)</option>
-                                ) : (
-                                    factories?.map(f => (
+                        {!categories?.find(c => c.id === formData.category_id)?.is_shared ? (
+                            <div className={styles.formGroup}>
+                                <label className={styles.label}>Factory</label>
+                                <select
+                                    required
+                                    className={styles.input}
+                                    value={formData.factory_id}
+                                    onChange={e => setFormData({ ...formData, factory_id: e.target.value })}
+                                >
+                                    {factories?.map(f => (
                                         <option key={f.id} value={f.id}>{f.name}</option>
-                                    ))
-                                )}
-                            </select>
-                            {categories?.find(c => c.id === formData.category_id)?.is_shared && (
-                                <p className={styles.splitHelpText}>
-                                    This cost will be split equally across all factories.
-                                </p>
-                            )}
-                        </div>
+                                    ))}
+                                </select>
+                            </div>
+                        ) : (
+                            <div className={cn(styles.formGroup, styles.sharedIndicator)}>
+                                <label className={styles.label}>Allocation</label>
+                                <div className={styles.sharedBadgeBig}>
+                                    <FactoryIcon size={16} />
+                                    <span>Shared (Auto-split)</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className={styles.formGroup}>

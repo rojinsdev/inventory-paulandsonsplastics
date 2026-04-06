@@ -90,17 +90,19 @@ export class PushNotificationService {
     }
 
     /**
-     * Send notification to all users with a specific role, optionally filtered by factory
+     * Send notification to all users with specific roles, optionally filtered by factory
      */
-    async sendToRole(role: string, payload: PushNotificationPayload, factoryId?: string) {
+    async sendToRole(role: string | string[], payload: PushNotificationPayload, factoryId?: string) {
         if (!this.isInitialized) return;
 
         try {
-            // Get users with the specific role from user_profiles
+            const roles = Array.isArray(role) ? role : [role];
+            
+            // Get users with the specific roles from user_profiles
             let query = supabase
                 .from('user_profiles')
                 .select('id')
-                .eq('role', role);
+                .in('role', roles);
 
             if (factoryId) {
                 query = query.eq('factory_id', factoryId);
@@ -109,16 +111,16 @@ export class PushNotificationService {
             const { data: profiles, error } = await query;
 
             if (error) {
-                logger.error('Error fetching users by role', { error, role, factoryId });
+                logger.error('Error fetching users by roles', { error, roles, factoryId });
                 return;
             }
 
-            logger.info('Found profiles for role', { count: profiles?.length, role, factoryId });
+            logger.info('Found profiles for roles', { count: profiles?.length, roles, factoryId });
 
             if (!profiles || profiles.length === 0) return;
 
             const userIds = profiles.map(p => p.id);
-            logger.info('Extracted userIds for role', { userIds, role });
+            logger.info('Extracted userIds for roles', { userIds, roles });
             await this.sendToUsers(userIds, payload);
         } catch (error) {
             logger.error('Error in sendToRole', { error, role, factoryId });

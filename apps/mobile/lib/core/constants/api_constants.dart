@@ -20,6 +20,7 @@ class ApiConstants {
   static const String productTemplates = '/products/templates';
   static const String caps = '/caps';
   static const String capTemplates = '/caps/templates';
+  static const String capMappings = '/machine-caps';
   static const String inners = '/inners';
   static const String innerTemplates = '/inners/templates';
 
@@ -29,8 +30,11 @@ class ApiConstants {
   static const String inventoryStock = '/inventory/stock';
 
   static const String inventoryStockOverview = '/inventory/overview';
+  static const String inventoryTransactions = '/inventory/transactions';
   static const String inventoryRawMaterials = '/inventory/raw-materials';
   static const String inventoryCapBalances = '/caps/balances';
+  static const String inventoryInnerBalances = '/inners/balances';
   static const String salesOrders = '/orders';
   static const String notificationsTokens = '/notifications/tokens';
+  static const String inventoryHistory = '/inventory/history';
 }

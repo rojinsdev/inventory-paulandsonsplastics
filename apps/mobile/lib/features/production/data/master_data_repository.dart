@@ -9,10 +9,42 @@ import 'models/cap_template_model.dart';
 import 'models/inner_model.dart';
 import 'models/inner_template_model.dart';
 
+import 'models/cap_mapping_model.dart';
+
 class MasterDataRepository {
   final ApiClient _apiClient;
 
   MasterDataRepository(this._apiClient);
+
+  Future<List<CapMapping>> getCapMappings() async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.capMappings}?factory_id=$factoryId'
+          : ApiConstants.capMappings;
+
+      final response = await _apiClient.client.get(endpoint);
+      final dynamic rawData = response.data;
+      List<dynamic> items = [];
+
+      if (rawData is List) {
+        items = rawData;
+      } else if (rawData is Map &&
+          rawData.containsKey('data') &&
+          rawData['data'] is List) {
+        items = rawData['data'];
+      } else {
+        throw Exception(
+            'Failed to load cap mappings: Unexpected data format from server.');
+      }
+
+      return items.map((e) => CapMapping.fromJson(e)).toList();
+    } catch (e) {
+      // ignore: avoid_print
+      print('Error loading cap mappings: $e');
+      return [];
+    }
+  }
 
   Future<List<Machine>> getMachines() async {
     try {

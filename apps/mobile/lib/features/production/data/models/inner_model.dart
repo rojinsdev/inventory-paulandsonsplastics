@@ -35,15 +35,23 @@ class Inner {
       name = json['template']['name'] as String? ?? 'Unknown';
     }
 
-    // Try to get weights/times from template if not present on variant
-    double weight = (json['ideal_weight_grams'] as num?)?.toDouble() ?? 0.0;
-    if (weight == 0.0 && json['template'] != null) {
-      weight = (json['template']['ideal_weight_grams'] as num?)?.toDouble() ?? 0.0;
+    // Helper for robust double parsing
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
     }
 
-    double cycleTime = (json['ideal_cycle_time_seconds'] as num?)?.toDouble() ?? 0.0;
+    // Try to get weights/times from template if not present on variant
+    double weight = parseDouble(json['ideal_weight_grams']);
+    if (weight == 0.0 && json['template'] != null) {
+      weight = parseDouble(json['template']['ideal_weight_grams']);
+    }
+
+    double cycleTime = parseDouble(json['ideal_cycle_time_seconds']);
     if (cycleTime == 0.0 && json['template'] != null) {
-      cycleTime = (json['template']['ideal_cycle_time_seconds'] as num?)?.toDouble() ?? 0.0;
+      cycleTime = parseDouble(json['template']['ideal_cycle_time_seconds']);
     }
 
     return Inner(

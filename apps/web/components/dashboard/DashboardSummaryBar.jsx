@@ -4,7 +4,7 @@ import React from 'react';
 import {
     TrendingUp,
     TrendingDown,
-    DollarSign,
+    IndianRupee,
     Package,
     Truck,
     BarChart3
@@ -31,7 +31,7 @@ const DashboardSummaryBar = ({ data = {} }) => {
             value: data.revenueMTD || '₹0',
             trend: '+8.2%',
             isTrendUp: true,
-            icon: DollarSign,
+            icon: IndianRupee,
             color: 'green'
         },
         {

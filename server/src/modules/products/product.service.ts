@@ -6,17 +6,17 @@ export interface CreateProductDTO {
     size: string;
     color: string;
     weight_grams: number;
-    selling_price?: number;
-    items_per_packet?: number;
-    packets_per_bundle?: number;
-    items_per_bundle?: number;
-    packets_per_bag?: number;
-    items_per_bag?: number;
-    packets_per_box?: number;
-    items_per_box?: number;
-    bundle_enabled?: boolean;
-    bag_enabled?: boolean;
-    box_enabled?: boolean;
+    selling_price?: number | null;
+    items_per_packet?: number | null;
+    packets_per_bundle?: number | null;
+    items_per_bundle?: number | null;
+    packets_per_bag?: number | null;
+    items_per_bag?: number | null;
+    packets_per_box?: number | null;
+    items_per_box?: number | null;
+    bundle_enabled?: boolean | null;
+    bag_enabled?: boolean | null;
+    box_enabled?: boolean | null;
     status?: 'active' | 'inactive';
     factory_id: string;
     raw_material_id?: string | null;
@@ -29,16 +29,16 @@ export interface ProductTemplate {
     name: string;
     size: string;
     weight_grams: number;
-    items_per_packet: number;
-    packets_per_bundle: number;
-    items_per_bundle: number;
-    packets_per_bag?: number;
-    items_per_bag?: number;
-    packets_per_box?: number;
-    items_per_box?: number;
-    bundle_enabled: boolean;
-    bag_enabled: boolean;
-    box_enabled: boolean;
+    items_per_packet?: number | null;
+    packets_per_bundle?: number | null;
+    items_per_bundle?: number | null;
+    packets_per_bag?: number | null;
+    items_per_bag?: number | null;
+    packets_per_box?: number | null;
+    items_per_box?: number | null;
+    bundle_enabled: boolean | null;
+    bag_enabled: boolean | null;
+    box_enabled: boolean | null;
     factory_id: string;
     raw_material_id?: string | null;
     cap_template_id?: string | null;
@@ -264,6 +264,73 @@ export class ProductService {
 
         if (error) throw new Error(error.message);
         return data;
+    }
+
+    async quickDefineVariant(templateId: string, color: string, factoryId: string, rawMaterialId?: string) {
+        // 1. Fetch Template
+        const template = await this.getTemplateById(templateId);
+
+        // 2. Prepare Variant
+        const variant = {
+            name: template.name,
+            size: template.size,
+            color: color,
+            weight_grams: template.weight_grams,
+            items_per_packet: template.items_per_packet || 12,
+            packets_per_bundle: template.packets_per_bundle || 50,
+            items_per_bundle: template.items_per_bundle || 600,
+            packets_per_bag: template.packets_per_bag || 60,
+            items_per_bag: template.items_per_bag || 720,
+            packets_per_box: template.packets_per_box || 100,
+            items_per_box: template.items_per_box || 1200,
+            bundle_enabled: template.bundle_enabled ?? true,
+            bag_enabled: template.bag_enabled ?? true,
+            box_enabled: template.box_enabled ?? true,
+            selling_price: template.selling_price || 0,
+            factory_id: factoryId,
+            template_id: template.id,
+            raw_material_id: rawMaterialId || template.raw_material_id,
+            cap_template_id: template.cap_template_id,
+            sku: `${template.name}-${template.size}-${color}`.toUpperCase().replace(/\s+/g, '_')
+        };
+
+        const { data: created, error } = await supabase
+            .from('products')
+            .insert(variant)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Failed to quick define product variant: ${error.message}`);
+        return created;
+    }
+
+    async quickDefineTemplate(name: string, size: string, factoryId: string) {
+        const templateData = {
+            name,
+            size,
+            weight_grams: 0,
+            items_per_packet: 12,
+            packets_per_bundle: 50,
+            items_per_bundle: 600,
+            packets_per_bag: 60,
+            items_per_bag: 720,
+            packets_per_box: 100,
+            items_per_box: 1200,
+            bundle_enabled: true,
+            bag_enabled: true,
+            box_enabled: true,
+            factory_id: factoryId,
+            status: 'active' as const
+        };
+
+        const { data: template, error } = await supabase
+            .from('product_templates')
+            .insert(templateData)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Failed to quick define product template: ${error.message}`);
+        return template;
     }
 }
 

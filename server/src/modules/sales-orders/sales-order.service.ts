@@ -1,20 +1,22 @@
 import { supabase } from '../../config/supabase';
+import { getIsoLocalDate } from '../../utils/dateUtils';
 import { AuditService } from '../audit/audit.service';
 import { inventoryService } from '../inventory/inventory.service';
 import { cashFlowService } from '../cash-flow/cash-flow.service';
 import logger from '../../utils/logger';
 import { getPagination } from '../../utils/supabase';
-import { pushNotificationService } from '../notifications/push-notification.service';
 import { AppError } from '../../utils/AppError';
+import { eventBus } from '../../core/eventBus';
+import { SystemEvents } from '../../core/events';
 
-const auditService = new AuditService();
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
 
 export interface CreateSalesOrderDTO {
     customer_id: string;
     delivery_date?: string; // Added: Delivery date requirement from user
     items: Array<{
-        product_id: string;
+        product_id?: string;
+        cap_id?: string;
         quantity: number;
         unit_type?: 'bundle' | 'packet' | 'loose' | 'bag' | 'box'; // Default to bundle if not provided
         unit_price?: number; // Optional: Custom rate for this customer
@@ -25,225 +27,80 @@ export interface CreateSalesOrderDTO {
 }
 
 export interface UpdateOrderStatusDTO {
-    status: 'reserved' | 'delivered' | 'cancelled' | 'pending';
+    status: 'reserved' | 'delivered' | 'cancelled' | 'pending' | 'partially_delivered';
     user_id: string; // Added: Track which admin updated the status
 }
 
 export class SalesOrderService {
     async createOrder(data: CreateSalesOrderDTO) {
-        // Start a transaction-like approach
-        // 1. Create the order
-        const { data: order, error: orderError } = await supabase
-            .from('sales_orders')
-            .insert({
-                customer_id: data.customer_id,
-                delivery_date: data.delivery_date, // Save delivery date
-                status: 'pending',
-                notes: data.notes,
-                created_by: data.user_id, // Track which admin created the order
-                order_date: new Date().toISOString().split('T')[0] // Explicitly set order date
-            })
-            .select()
-            .maybeSingle();
+        logger.info('Creating sales order atomically:', { customerId: data.customer_id, itemCount: data.items.length, userId: data.user_id });
 
-        if (orderError) throw new Error(orderError.message);
+        // 1. Core Logic: Call atomic RPG for order and items creation
+        const { data: result, error: rpcError } = await supabase.rpc('create_order_atomic', {
+            p_customer_id: data.customer_id,
+            p_delivery_date: data.delivery_date || null,
+            p_notes: data.notes || '',
+            p_user_id: data.user_id,
+            p_items: data.items,
+            p_order_date: getIsoLocalDate()
+        });
 
-        // 2. Create order items and reserve stock
-        for (const item of data.items) {
-            const unit_type = item.unit_type || 'bundle';
+        if (rpcError) {
+            logger.error('create_order_atomic failed:', rpcError);
+            throw new Error(`Failed to create order: ${rpcError.message}`);
+        }
 
-            // Fetch product price and factory
-            const { data: product } = await supabase
-                .from('products')
-                .select(`
-                    selling_price, 
-                    factory_id, 
-                    color, 
-                    items_per_bundle, 
-                    items_per_packet, 
-                    items_per_bag, 
-                    items_per_box, 
-                    product_templates(inner_template_id)
-                `)
-                .eq('id', item.product_id)
-                .single();
+        const orderId = result.order_id;
+        logger.info('Sales order created atomically', { orderId });
 
-            // Check if stock is available
-            const factoryId = product?.factory_id || MAIN_FACTORY_ID;
-            const availableStock = await this.getAvailableStock(item.product_id, unit_type, factoryId);
-            const isBackordered = availableStock < item.quantity;
+        // 3. Demand Signaling: Create production requests for backordered items
+        // Fetch newly created backordered items for this order
+        const { data: backorderedItems, error: fetchError } = await supabase
+            .from('sales_order_items')
+            .select('product_id, cap_id, quantity, unit_type, inner_id, include_inner, order_id')
+            .eq('order_id', orderId)
+            .eq('is_backordered', true);
 
-            // Create order item
-            const { error: itemError } = await supabase
-                .from('sales_order_items')
-                .insert({
-                    order_id: order.id,
-                    product_id: item.product_id,
-                    quantity: item.quantity,
-                    unit_type: unit_type,
-                    unit_price: item.unit_price ?? product?.selling_price ?? 0,
-                    is_backordered: isBackordered
-                });
-
-            if (itemError) {
-                logger.error('Failed to create sales order item', { error: itemError.message, orderId: order.id, item });
-                await supabase.from('sales_orders').delete().eq('id', order.id);
-                throw new Error(`Failed to create order item: ${itemError.message}`);
-            }
-
-            if (!isBackordered) {
-                // Reserve stock
-                await this.reserveStock(item.product_id, item.quantity, unit_type, factoryId);
-            } else {
-                // Trigger Demand Signal (Production Request)
-                const needed = item.quantity - availableStock;
-                await this.createProductionRequest(item.product_id, factoryId, needed, unit_type, order.id);
-
-                // Partially reserve if something is available
-                if (availableStock > 0) {
-                    await this.reserveStock(item.product_id, availableStock, unit_type, factoryId);
+        if (!fetchError && backorderedItems) {
+            for (const item of backorderedItems) {
+                // Determine factory_id (can be cached if needed, for now we follow existing service pattern)
+                let factoryId = MAIN_FACTORY_ID;
+                if (item.product_id) {
+                    const { data: prod } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
+                    factoryId = prod?.factory_id || MAIN_FACTORY_ID;
+                } else if (item.cap_id) {
+                    const { data: cap } = await supabase.from('caps').select('factory_id').eq('id', item.cap_id).single();
+                    factoryId = cap?.factory_id || MAIN_FACTORY_ID;
                 }
-            }
 
-            // Handle Inner logic
-            if (item.include_inner) {
-                // Determine template array or obj depending on supabase response (usually single obj since product belongs to template)
-                const templateData = Array.isArray(product?.product_templates) ? product?.product_templates[0] : product?.product_templates;
-                const innerTemplateId = templateData?.inner_template_id;
-                
-                if (innerTemplateId && product?.color) {
-                    // Find actual inner
-                    const { data: inner } = await supabase
-                        .from('inners')
-                        .select('id')
-                        .eq('template_id', innerTemplateId)
-                        .eq('color', product.color)
-                        .maybeSingle();
-
-                    if (inner) {
-                        // Calculate loose items required
-                        let multiplier = 1;
-                        if (unit_type === 'bundle') multiplier = product.items_per_bundle || 1;
-                        else if (unit_type === 'packet') multiplier = product.items_per_packet || 1;
-                        else if (unit_type === 'bag') multiplier = product.items_per_bag || 1;
-                        else if (unit_type === 'box') multiplier = product.items_per_box || 1;
-                        
-                        const requiredInners = item.quantity * multiplier;
-
-                        // Check stock available
-                        const { data: innerStock } = await supabase
-                            .from('inner_stock_balances')
-                            .select('quantity')
-                            .eq('inner_id', inner.id)
-                            .or(`factory_id.eq.${factoryId},factory_id.is.null`)
-                            .maybeSingle();
-
-                        const availableInner = innerStock?.quantity || 0;
-
-                        // Deduct mathematically required inners
-                        const deduction = Math.min(requiredInners, availableInner);
-
-                        if (deduction > 0) {
-                            const { error: deductError } = await supabase.rpc('adjust_inner_stock', {
-                                p_inner_id: inner.id,
-                                p_factory_id: factoryId,
-                                p_quantity_change: -deduction
-                            });
-                            if (deductError) {
-                                logger.error('Failed to deduct inner stock', { error: deductError.message, innerId: inner.id });
-                            }
-                        }
-
-                        // Create production request if short
-                        const missingInners = requiredInners - availableInner;
-                        if (missingInners > 0) {
-                            const { error: reqError } = await supabase
-                                .from('production_requests')
-                                .insert({
-                                    inner_id: inner.id,
-                                    factory_id: factoryId,
-                                    quantity: missingInners,
-                                    unit_type: 'loose', // inners are tracked loosely
-                                    sales_order_id: order.id,
-                                    status: 'pending'
-                                });
-                            if (reqError) {
-                                logger.error('Failed to create inner production request', { error: reqError.message, innerId: inner.id });
-                            }
-                        }
-                    }
-                }
+                await this.createProductionRequest(
+                    item.product_id, 
+                    factoryId, 
+                    item.quantity, 
+                    item.unit_type, 
+                    orderId, 
+                    item.cap_id || undefined, 
+                    item.inner_id || undefined
+                );
             }
         }
 
-        // 3. Notify Product Managers of all factories involved in this order
-        const factoryIds = new Set<string>();
-        for (const item of data.items) {
-            const { data: p } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
-            const fid = p?.factory_id || MAIN_FACTORY_ID;
-            factoryIds.add(fid);
-        }
+        // 4. Side Effects: Emit Event
+        // Side effects (Notifications, Audit, Finance) are now handled by event listeners
+        eventBus.emit(SystemEvents.SALES_ORDER_CREATED, {
+            order_id: orderId,
+            customer_id: data.customer_id,
+            userId: data.user_id,
+            total_amount: result.total_amount || 0, // Could be enriched if needed
+            items: data.items,
+            delivery_date: data.delivery_date
+        });
 
-        for (const factoryId of factoryIds) {
-            const { data: managers, error: managerError } = await supabase
-                .from('user_profiles')
-                .select('id')
-                .eq('role', 'production_manager')
-                .eq('factory_id', factoryId);
-
-            if (managerError) {
-                logger.warn('Could not fetch production managers for factory', { factoryId, error: managerError.message });
-            }
-
-            if (managers) {
-                for (const manager of managers) {
-                    const { error: notificationError } = await supabase.from('notifications').insert({
-                        user_id: manager.id,
-                        title: 'New Sales Order Needs Preparation',
-                        message: `Order #${order.id.slice(-6).toUpperCase()} has items from your factory. Delivery scheduled for ${data.delivery_date || 'ASAP'}.`,
-                        type: 'sales_order_preparation',
-                        metadata: { order_id: order.id }
-                    });
-                    if (notificationError) {
-                        logger.error('Failed to send sales order preparation notification', { error: notificationError.message, managerId: manager.id, orderId: order.id });
-                    }
-                }
-
-                // Push Notification to Factory Managers
-                await pushNotificationService.sendToRole('production_manager', {
-                    title: 'New Sales Order Received',
-                    body: `Order #${order.id.slice(-6).toUpperCase()} requires items from your factory.`,
-                    data: { order_id: order.id, type: 'sales_order' }
-                }, factoryId);
-            }
-        }
-
-        // Return full order with items
-        const fullOrder = await this.getOrderById(order.id);
-
-        // Audit logging for order creation
-        try {
-            await auditService.logAction(
-                data.user_id,
-                'create_sales_order',
-                'sales_orders',
-                order.id,
-                {
-                    customer_id: data.customer_id,
-                    items: data.items,
-                    total_items: data.items.reduce((sum, item) => sum + (item.quantity || 0), 0)
-                }
-            );
-        } catch (auditError: any) {
-            logger.error('Failed to create audit log for sales order creation', { error: auditError.message, userId: data.user_id, orderId: order.id });
-            // Do not rethrow, audit logging should not block core functionality
-        }
-
-        logger.info('Sales order created successfully', { orderId: order.id, customerId: data.customer_id, userId: data.user_id });
-        return fullOrder;
+        // Return full order for the UI
+        return this.getOrderById(orderId);
     }
 
-    private async getAvailableStock(productId: string, unitType: string, factoryId: string): Promise<number> {
+    private async getAvailableStock(productId: string | null, unitType: string, factoryId: string, capId?: string): Promise<number> {
         const stateMapping: Record<string, string> = {
             'loose': 'semi_finished',
             'packet': 'packed',
@@ -252,29 +109,41 @@ export class SalesOrderService {
 
         const targetState = stateMapping[unitType] || 'finished';
 
-        const { data: stock, error } = await supabase
-            .from('stock_balances')
-            .select('quantity, unit_type, factory_id')
-            .eq('product_id', productId)
-            .eq('state', targetState)
-            .or(`factory_id.eq.${factoryId},factory_id.is.null`);
+        let query;
+        if (capId) {
+            query = supabase
+                .from('cap_stock_balances')
+                .select('quantity, unit_type, factory_id')
+                .eq('cap_id', capId)
+                .eq('state', targetState)
+                .or(`factory_id.eq.${factoryId},factory_id.is.null`);
+        } else {
+            query = supabase
+                .from('stock_balances')
+                .select('quantity, unit_type, factory_id')
+                .eq('product_id', productId)
+                .eq('state', targetState)
+                .or(`factory_id.eq.${factoryId},factory_id.is.null`);
+        }
+
+        const { data: stock, error } = await query;
 
         if (error) {
-            logger.error('Stock fetch error in getAvailableStock', { error: error.message, productId, unitType, factoryId });
+            logger.error('Stock fetch error in getAvailableStock', { error: error.message, productId, capId, unitType, factoryId });
             throw new Error(`Stock fetch error: ${error.message}`);
         }
         
-        const total = stock?.reduce((sum, item) => {
+        const total = stock?.reduce((sum, item: any) => {
             // If we're looking for a specific unit type, skip others
-            if (item.unit_type && item.unit_type !== unitType) {
+            if (item.unit_type && item.unit_type !== unitType && !capId) {
                 return sum;
             }
             return sum + Number(item.quantity);
         }, 0) || 0;
 
-        logger.info(`[Stock Check] Product: ${productId}, Unit: ${unitType}, State: ${targetState}, Factory: ${factoryId}, Total: ${total}`, {
+        logger.info(`[Stock Check] ${capId ? 'Cap' : 'Product'}: ${capId || productId}, Unit: ${unitType}, State: ${targetState}, Factory: ${factoryId}, Total: ${total}`, {
             rowCount: stock?.length,
-            rows: stock?.map(s => `Qty: ${s.quantity}, Unit: ${s.unit_type}, Fact: ${s.factory_id}`)
+            rows: stock?.map((s: any) => `Qty: ${s.quantity}, Unit: ${s.unit_type}, Fact: ${s.factory_id}`)
         });
 
         return total;
@@ -288,43 +157,84 @@ export class SalesOrderService {
         };
         const sourceState = stateMapping[unitType] || 'finished';
 
-        // 1. Deduct from source state atomically
-        const { error: deductError } = await supabase.rpc('adjust_stock', {
-            p_product_id: productId,
-            p_factory_id: factoryId,
-            p_state: sourceState,
-            p_quantity_change: -quantity,
-            p_cap_id: null,
-            p_unit_type: unitType
-        });
+        // 1. Fetch specific balances to deduct from sequentially
+        const query = supabase
+            .from('stock_balances')
+            .select('id, quantity, cap_id, inner_id, unit_type')
+            .eq('product_id', productId)
+            .eq('state', sourceState)
+            .or(`factory_id.eq.${factoryId},factory_id.is.null`)
+            .eq('unit_type', unitType);
 
-        if (deductError) {
-            logger.error('Failed to deduct stock during reservation', { error: deductError.message, productId, quantity, unitType, factoryId, sourceState });
-            throw new Error(`Failed to deduct ${sourceState} stock: ${deductError.message}`);
+        const { data: balances, error: stockError } = await query;
+
+        if (stockError) throw new Error(`Failed to fetch stock for reservation: ${stockError.message}`);
+
+        let remainingToReserve = quantity;
+        const sortedBalances = [...(balances || [])].sort((a, b) => Number(b.quantity) - Number(a.quantity));
+
+        for (const balance of sortedBalances) {
+            if (remainingToReserve <= 0) break;
+
+            const deductAmount = Math.min(remainingToReserve, Number(balance.quantity));
+
+            // Deduct from source state using ID (Most reliable for NULL identity columns)
+            const { error: deductError } = await supabase.rpc('adjust_stock_by_id', {
+                p_id: balance.id,
+                p_quantity_change: -deductAmount
+            });
+
+            if (deductError) {
+                logger.error('Failed to deduct stock during sequential reservation', { error: deductError.message, productId, deductAmount, unitType, balance });
+                throw new Error(`Failed to deduct ${sourceState} stock: ${deductError.message}`);
+            }
+
+            // Add to reserved state
+            // Robust check for existing reserved row to avoid ON CONFLICT NULL issues
+            const reservedQuery = supabase
+                .from('stock_balances')
+                .select('id')
+                .eq('product_id', productId)
+                .eq('factory_id', factoryId)
+                .eq('state', 'reserved')
+                .eq('unit_type', unitType);
+            
+            if (balance.cap_id) reservedQuery.eq('cap_id', balance.cap_id);
+            else reservedQuery.is('cap_id', null);
+
+            if (balance.inner_id) reservedQuery.eq('inner_id', balance.inner_id);
+            else reservedQuery.is('inner_id', null);
+
+            const { data: existingReserved } = await reservedQuery.maybeSingle();
+
+            if (existingReserved) {
+                await supabase.rpc('adjust_stock_by_id', {
+                    p_id: existingReserved.id,
+                    p_quantity_change: deductAmount
+                });
+            } else {
+                const { error: reserveError } = await supabase.rpc('adjust_stock', {
+                    p_product_id: productId,
+                    p_factory_id: factoryId,
+                    p_state: 'reserved',
+                    p_quantity_change: deductAmount,
+                    p_cap_id: balance.cap_id,
+                    p_inner_id: balance.inner_id,
+                    p_unit_type: unitType
+                });
+
+                if (reserveError) {
+                    logger.error('Failed to add to reserved stock during sequential reservation', { error: reserveError.message, productId, deductAmount, unitType, balance });
+                    throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
+                }
+            }
+
+            remainingToReserve -= deductAmount;
         }
 
-        // 2. Add to reserved state atomically
-        const { error: reserveError } = await supabase.rpc('adjust_stock', {
-            p_product_id: productId,
-            p_factory_id: factoryId,
-            p_state: 'reserved',
-            p_quantity_change: quantity,
-            p_cap_id: null,
-            p_unit_type: unitType
-        });
-
-        if (reserveError) {
-            logger.error('Failed to update reserved stock during reservation', { error: reserveError.message, productId, quantity, unitType, factoryId });
-            // ROLLING BACK the deduction if addition fails (though unlikely with simple increment)
-            await supabase.rpc('adjust_stock', {
-                p_product_id: productId,
-                p_factory_id: factoryId,
-                p_state: sourceState,
-                p_quantity_change: quantity,
-                p_cap_id: null,
-                p_unit_type: unitType
-            });
-            throw new Error(`Failed to update reserved stock: ${reserveError.message}`);
+        if (remainingToReserve > 0) {
+            // Log warning instead of throwing, so the order creation succeeds as backordered.
+            logger.warn(`Could not fully reserve stock for order item. Missing ${remainingToReserve} units.`, { productId, quantity, unitType, factoryId });
         }
 
         // 3. Log Audit Trail
@@ -336,12 +246,14 @@ export class SalesOrderService {
         logger.info('Stock reserved successfully', { productId, quantity, unitType, factoryId });
     }
 
-    private async createProductionRequest(productId: string, factoryId: string, quantity: number, unitType: string, orderId: string) {
+    private async createProductionRequest(productId: string | null, factoryId: string, quantity: number, unitType: string, orderId: string, capId?: string, innerId?: string) {
         // 1. Create Request
         const { data: request, error: reqError } = await supabase
             .from('production_requests')
             .insert({
-                product_id: productId,
+                product_id: productId || null,
+                cap_id: capId || null,
+                inner_id: innerId || null,
                 factory_id: factoryId,
                 quantity: quantity,
                 unit_type: unitType,
@@ -352,50 +264,25 @@ export class SalesOrderService {
             .single();
 
         if (reqError) {
-            logger.error('Failed to create production request', { error: reqError.message, productId, factoryId, quantity, orderId });
+            logger.error('Failed to create production request', { error: reqError.message, productId, capId, factoryId, quantity, orderId });
             throw new Error(`Failed to create production request: ${reqError.message}`);
         }
 
-        // 2. Notify Production Manager
-        const { data: managers, error: managerError } = await supabase
-            .from('user_profiles')
-            .select('id')
-            .eq('role', 'production_manager')
-            .eq('factory_id', factoryId);
+        // 2. Side Effects: Emit Event
+        eventBus.emit(SystemEvents.PRODUCTION_REQUEST_CREATED, {
+            request_id: request.id,
+            product_id: productId,
+            cap_id: capId,
+            order_id: orderId,
+            factory_id: factoryId,
+            quantity: quantity,
+            unit_type: unitType
+        });
 
-        if (managerError) {
-            logger.warn('Could not fetch production managers for factory during production request notification', { factoryId, error: managerError.message });
-        }
-
-        if (managers && managers.length > 0) {
-            const { data: product, error: productError } = await supabase.from('products').select('name').eq('id', productId).single();
-            if (productError) {
-                logger.warn('Could not fetch product name for production request notification', { productId, error: productError.message });
-            }
-            for (const manager of managers) {
-                const { error: notificationError } = await supabase.from('notifications').insert({
-                    user_id: manager.id,
-                    title: 'New Production Request',
-                    message: `Demand Signal: ${quantity} units of ${product?.name || 'Unknown Product'} (${unitType}) needed for Order #${orderId.slice(-6).toUpperCase()}`,
-                    type: 'production_request',
-                    metadata: { request_id: request.id, order_id: orderId }
-                });
-                if (notificationError) {
-                    logger.error('Failed to send production request notification', { error: notificationError.message, managerId: manager.id, requestId: request.id });
-                }
-            }
-
-            // Push Notification for Production Request
-            await pushNotificationService.sendToRole('production_manager', {
-                title: 'New Production Request',
-                body: `${quantity} units of ${product?.name || 'Product'} needed for Order #${orderId.slice(-6).toUpperCase()}`,
-                data: { request_id: request.id, order_id: orderId, type: 'production_request' }
-            }, factoryId);
-        }
-        logger.info('Production request created', { requestId: request.id, productId, quantity, orderId });
+        logger.info('Production request created', { requestId: request.id, productId, capId, quantity, orderId });
     }
 
-    private async unreserveStock(productId: string, quantity: number, unitType: string, factoryId: string) {
+    private async unreserveStock(productId: string | null, quantity: number, unitType: string, factoryId: string, capId?: string) {
         const stateMapping: Record<string, string> = {
             'loose': 'semi_finished',
             'packet': 'packed',
@@ -403,24 +290,40 @@ export class SalesOrderService {
         };
         const targetState = stateMapping[unitType] || 'finished';
 
-        // 1. Fetch ALL reserved stock records for this specific combination
-        const { data: balances, error: fetchError } = await supabase
-            .from('stock_balances')
-            .select('quantity, cap_id')
-            .eq('product_id', productId)
-            .eq('state', 'reserved')
-            .eq('factory_id', factoryId)
-            .eq('unit_type', unitType);
+        // 1. Fetch ALL reserved stock records
+        const tableName = capId ? 'cap_stock_balances' : 'stock_balances';
+        const idField = capId ? 'cap_id' : 'product_id';
+        const idValue = capId || productId;
+
+        let query;
+        if (capId) {
+            query = supabase
+                .from('cap_stock_balances')
+                .select('quantity')
+                .eq('cap_id', capId)
+                .eq('state', 'reserved')
+                .eq('factory_id', factoryId)
+                .eq('unit_type', unitType);
+        } else {
+            query = supabase
+                .from('stock_balances')
+                .select('quantity, cap_id, inner_id')
+                .eq('product_id', productId!)
+                .eq('state', 'reserved')
+                .eq('factory_id', factoryId)
+                .eq('unit_type', unitType);
+        }
+
+        const { data: balances, error: fetchError } = await query;
 
         if (fetchError) {
-            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchError.message, productId, factoryId, unitType });
+            logger.error('Failed to fetch reserved stock for unreservation', { error: fetchError.message, productId, capId, factoryId, unitType });
             throw new Error(`Failed to fetch reserved stock: ${fetchError.message}`);
         }
 
         const totalReserved = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
         if (totalReserved < quantity) {
-            logger.warn('Attempted to unreserve more than available in reserved state', { productId, quantity, totalReserved });
-            // We'll proceed with what we have, but log the warning
+            logger.warn('Attempted to unreserve more than available in reserved state', { productId, capId, quantity, totalReserved });
         }
 
         let remainingToUnreserve = Math.min(quantity, totalReserved);
@@ -432,25 +335,26 @@ export class SalesOrderService {
             const moveAmount = Math.min(remainingToUnreserve, Number(balance.quantity));
 
             // Deduct from reserved
-            const { error: deductError } = await supabase.rpc('adjust_stock', {
-                p_product_id: productId,
+            const adjustParams: any = {
                 p_factory_id: factoryId,
                 p_state: 'reserved',
                 p_quantity_change: -moveAmount,
-                p_cap_id: balance.cap_id,
+                p_cap_id: capId || (balance as any).cap_id,
                 p_unit_type: unitType
-            });
+            };
+            if (!capId) {
+                adjustParams.p_product_id = productId;
+                adjustParams.p_inner_id = (balance as any).inner_id;
+            }
+
+            const { error: deductError } = await supabase.rpc(capId ? 'adjust_cap_stock' : 'adjust_stock', adjustParams);
             if (deductError) throw new Error(`Failed to deduct reserved stock: ${deductError.message}`);
 
             // Add back to target state
-            const { error: addBackError } = await supabase.rpc('adjust_stock', {
-                p_product_id: productId,
-                p_factory_id: factoryId,
-                p_state: targetState,
-                p_quantity_change: moveAmount,
-                p_cap_id: balance.cap_id,
-                p_unit_type: unitType
-            });
+            adjustParams.p_state = targetState;
+            adjustParams.p_quantity_change = moveAmount;
+            
+            const { error: addBackError } = await supabase.rpc(capId ? 'adjust_cap_stock' : 'adjust_stock', adjustParams);
             if (addBackError) throw new Error(`Failed to add back to target stock: ${addBackError.message}`);
 
             remainingToUnreserve -= moveAmount;
@@ -458,32 +362,48 @@ export class SalesOrderService {
 
         // 3. Log Audit Trail
         try {
-            await inventoryService.logTransaction('unreserve', productId, quantity, unitType, 'reserved', targetState, factoryId);
+            await inventoryService.logTransaction('unreserve', (productId || capId)!, quantity, unitType, 'reserved', targetState, factoryId);
         } catch (auditError: any) {
-            logger.error('Failed to log inventory transaction for stock unreservation', { error: auditError.message, productId, quantity, factoryId });
+            logger.error('Failed to log inventory transaction for stock unreservation', { error: auditError.message, productId, capId, quantity, factoryId });
         }
-        logger.info('Stock unreserved successfully', { productId, quantity, unitType, factoryId });
     }
 
-    private async deliverStock(productId: string, quantity: number, unitType: string, factoryId: string) {
+    private async deliverStock(productId: string | null, quantity: number, unitType: string, factoryId: string, capId?: string) {
         // Permanently remove from reserved (stock is sold)
         // 1. Fetch ALL reserved stock records
-        const { data: balances, error: fetchError } = await supabase
-            .from('stock_balances')
-            .select('quantity, cap_id')
-            .eq('product_id', productId)
-            .eq('state', 'reserved')
-            .eq('factory_id', factoryId)
-            .eq('unit_type', unitType);
+        const tableName = capId ? 'cap_stock_balances' : 'stock_balances';
+        const idField = capId ? 'cap_id' : 'product_id';
+        const idValue = capId || productId;
+
+        let query;
+        if (capId) {
+            query = supabase
+                .from('cap_stock_balances')
+                .select('quantity')
+                .eq('cap_id', capId)
+                .eq('state', 'reserved')
+                .eq('factory_id', factoryId)
+                .eq('unit_type', unitType);
+        } else {
+            query = supabase
+                .from('stock_balances')
+                .select('quantity, cap_id')
+                .eq('product_id', productId!)
+                .eq('state', 'reserved')
+                .eq('factory_id', factoryId)
+                .eq('unit_type', unitType);
+        }
+
+        const { data: balances, error: fetchError } = await query;
 
         if (fetchError) {
-            logger.error('Failed to fetch reserved stock for delivery', { error: fetchError.message, productId, factoryId, unitType });
+            logger.error('Failed to fetch reserved stock for delivery', { error: fetchError.message, productId, capId, factoryId, unitType });
             throw new Error(`Failed to fetch reserved stock: ${fetchError.message}`);
         }
 
         const totalReserved = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
         if (totalReserved < quantity) {
-            logger.warn('Attempted to deliver more than available in reserved state', { productId, quantity, totalReserved });
+            logger.warn('Attempted to deliver more than available in reserved state', { productId, capId, quantity, totalReserved });
         }
 
         let remainingToDeliver = Math.min(quantity, totalReserved);
@@ -495,14 +415,18 @@ export class SalesOrderService {
             const deliverAmount = Math.min(remainingToDeliver, Number(balance.quantity));
 
             // Deduct from reserved atomically and permanently (since it's delivered)
-            const { error: deductError } = await supabase.rpc('adjust_stock', {
-                p_product_id: productId,
+            const adjustParams: any = {
                 p_factory_id: factoryId,
                 p_state: 'reserved',
                 p_quantity_change: -deliverAmount,
-                p_cap_id: balance.cap_id,
+                p_cap_id: capId || (balance as any).cap_id,
                 p_unit_type: unitType
-            });
+            };
+            if (!capId) {
+                adjustParams.p_product_id = productId;
+            }
+
+            const { error: deductError } = await supabase.rpc(capId ? 'adjust_cap_stock' : 'adjust_stock', adjustParams);
             if (deductError) throw new Error(`Failed to deduct reserved stock for delivery: ${deductError.message}`);
 
             remainingToDeliver -= deliverAmount;
@@ -510,11 +434,10 @@ export class SalesOrderService {
 
         // Log Audit Trail
         try {
-            await inventoryService.logTransaction('delivery', productId, quantity, unitType, 'reserved', null, factoryId);
+            await inventoryService.logTransaction('delivery', (productId || capId)!, quantity, unitType, 'reserved', null, factoryId);
         } catch (auditError: any) {
-            logger.error('Failed to log inventory transaction for stock delivery', { error: auditError.message, productId, quantity, factoryId });
+            logger.error('Failed to log inventory transaction for stock delivery', { error: auditError.message, productId, capId, quantity, factoryId });
         }
-        logger.info('Stock delivered successfully', { productId, quantity, factoryId });
     }
 
     async getAllOrders(filters?: { status?: string; factoryId?: string; page?: number; size?: number }) {
@@ -525,21 +448,34 @@ export class SalesOrderService {
             .select(`
                 *,
                 customer:customers(name, phone, type),
-                sales_order_items!inner(
+                sales_order_items(
                     id,
                     product_id,
+                    cap_id,
                     quantity,
+                    quantity_shipped,
+                    quantity_prepared,
+                    quantity_reserved,
                     unit_type,
                     unit_price,
                     is_backordered,
                     is_prepared,
                     prepared_at,
-                    products!inner(name, size, color, selling_price, factory_id)
-                )
+                    include_inner,
+                    inner_id,
+                    products(name, size, color, selling_price, factory_id),
+                    caps(name, factory_id)
+                ),
+                production_requests(product_id, cap_id, status)
             `, { count: 'exact' });
 
         if (filters?.status) {
-            query = query.eq('status', filters.status);
+            const statuses = filters.status.split(',');
+            if (statuses.length > 1) {
+                query = query.in('status', statuses);
+            } else {
+                query = query.eq('status', filters.status);
+            }
         }
 
         if (filters?.factoryId) {
@@ -547,7 +483,7 @@ export class SalesOrderService {
         }
 
         const { data, error, count } = await query
-            .order('order_date', { ascending: false })
+            .order('created_at', { ascending: false })
             .range(from, to);
 
         if (error) {
@@ -573,13 +509,21 @@ export class SalesOrderService {
                 sales_order_items(
                     id,
                     product_id,
+                    cap_id,
                     quantity,
+                    quantity_shipped,
+                    quantity_prepared,
+                    quantity_reserved,
                     unit_type,
                     unit_price,
                     is_backordered,
                     is_prepared,
-                    products(name, size, color, selling_price, factory_id)
-                )
+                    include_inner,
+                    inner_id,
+                    products(name, size, color, selling_price, factory_id),
+                    caps(name, factory_id)
+                ),
+                production_requests(product_id, cap_id, status)
             `)
             .eq('id', id)
             .maybeSingle();
@@ -618,11 +562,9 @@ export class SalesOrderService {
             // If it IS backordered, it might be partially reserved if is_prepared is false but availableStock was > 0.
             // However, the current system doesn't track partial reservation quantity in sales_order_items.
             // For now, we follow the existing pattern: unreserve full quantity for non-backordered.
-            if (!item.is_backordered) {
-                await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
-            } else if (item.is_prepared) {
-                // If it was backordered but now prepared, it is effectively reserved.
-                await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
+            // Use quantity_reserved as the source of truth for what needs to be unreserved.
+            if (item.quantity_reserved && item.quantity_reserved > 0) {
+                await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId);
             }
         }
 
@@ -668,17 +610,28 @@ export class SalesOrderService {
 
         // 5. Re-apply Reservation and Production Request Logic for NEW items
         for (const item of data.items) {
-            const unit_type = item.unit_type || 'bundle';
+            const unit_type = item.unit_type || (item.cap_id ? 'loose' : 'bundle');
+            let factoryId = MAIN_FACTORY_ID;
+            let sellingPrice = 0;
 
-            // Fetch current product info
-            const { data: product } = await supabase
-                .from('products')
-                .select('selling_price, factory_id')
-                .eq('id', item.product_id)
-                .single();
+            if (item.product_id) {
+                const { data: product } = await supabase
+                    .from('products')
+                    .select('selling_price, factory_id')
+                    .eq('id', item.product_id)
+                    .single();
+                factoryId = product?.factory_id || MAIN_FACTORY_ID;
+                sellingPrice = product?.selling_price || 0;
+            } else if (item.cap_id) {
+                const { data: cap } = await supabase
+                    .from('caps')
+                    .select('factory_id')
+                    .eq('id', item.cap_id)
+                    .single();
+                factoryId = cap?.factory_id || MAIN_FACTORY_ID;
+            }
 
-            const factoryId = product?.factory_id || MAIN_FACTORY_ID;
-            const availableStock = await this.getAvailableStock(item.product_id, unit_type, factoryId);
+            const availableStock = await this.getAvailableStock(item.product_id || null, unit_type, factoryId, item.cap_id);
             const isBackordered = availableStock < item.quantity;
 
             // Insert new item
@@ -686,10 +639,11 @@ export class SalesOrderService {
                 .from('sales_order_items')
                 .insert({
                     order_id: id,
-                    product_id: item.product_id,
-                    quantity: item.quantity,
+                    product_id: item.product_id || null,
+                    cap_id: item.cap_id || null,
+                    quantity_reserved: 0,
                     unit_type: unit_type,
-                    unit_price: item.unit_price ?? product?.selling_price ?? 0,
+                    unit_price: item.unit_price ?? sellingPrice,
                     is_backordered: isBackordered
                 });
 
@@ -698,41 +652,25 @@ export class SalesOrderService {
                 throw new Error(`Failed to update order item: ${itemError.message}`);
             }
 
-            // Handle stock reservation or production request
-            if (!isBackordered) {
-                await this.reserveStock(item.product_id, item.quantity, unit_type, factoryId);
-            } else {
+            // Demand Signaling
+            if (isBackordered) {
                 const needed = item.quantity - availableStock;
-                await this.createProductionRequest(item.product_id, factoryId, needed, unit_type, id);
-                
-                if (availableStock > 0) {
-                    await this.reserveStock(item.product_id, availableStock, unit_type, factoryId);
-                }
+                await this.createProductionRequest(item.product_id || null, factoryId, needed, unit_type, id, item.cap_id);
             }
         }
 
-        // 6. Audit Logging
-        try {
-            await auditService.logAction(
-                data.user_id,
-                'update_sales_order',
-                'sales_orders',
-                id,
-                {
-                    old_order_items: order.sales_order_items.map((i: any) => ({ product_id: i.product_id, quantity: i.quantity })),
-                    new_order_items: data.items,
-                    customer_id: data.customer_id
-                }
-            );
-        } catch (auditError: any) {
-            logger.error('Failed to log audit action for sales order update', { error: auditError.message, orderId: id });
-        }
+        // 3. Side Effects: Emit Event
+        eventBus.emit(SystemEvents.SALES_ORDER_UPDATED, {
+            order_id: id,
+            userId: data.user_id,
+            changes: data
+        });
 
         logger.info('Sales order updated successfully', { orderId: id, userId: data.user_id });
         return this.getOrderById(id);
     }
 
-    async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled' | 'pending', userId: string) {
+    async updateOrderStatus(id: string, status: 'reserved' | 'delivered' | 'cancelled' | 'pending' | 'partially_delivered', userId: string) {
         const order = await this.getOrderById(id);
 
         if (!order) {
@@ -754,27 +692,29 @@ export class SalesOrderService {
         if (status === 'delivered') {
             // Permanently deduct reserved stock (only for those that were NOT backordered)
             for (const item of order.sales_order_items) {
-                if (!item.is_backordered) {
-                    const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-                    await this.deliverStock(item.product_id, item.quantity, item.unit_type, factoryId);
+                if (item.quantity_reserved && item.quantity_reserved > 0) {
+                    const factoryId = (item.products as any)?.factory_id || (item.caps as any)?.factory_id || MAIN_FACTORY_ID;
+                    await this.deliverStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId, item.cap_id);
                 }
             }
             logger.info('Order delivered, stock deducted', { orderId: id, userId });
         } else if (status === 'cancelled') {
             // Return stock to inventory (only for those that were NOT backordered, as backordered items never left inventory)
             for (const item of order.sales_order_items) {
-                if (!item.is_backordered) {
-                    const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-                    await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
-                } else {
+                if (item.quantity_reserved && item.quantity_reserved > 0) {
+                    const factoryId = (item.products as any)?.factory_id || (item.caps as any)?.factory_id || MAIN_FACTORY_ID;
+                    await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId, item.cap_id);
+                }
+                
+                if (item.is_backordered) {
                     // Cancel the production request if it exists
                     const { error: cancelReqError } = await supabase
                         .from('production_requests')
                         .update({ status: 'cancelled' })
                         .eq('sales_order_id', id)
-                        .eq('product_id', item.product_id);
+                        .or(`product_id.eq.${item.product_id},cap_id.eq.${item.cap_id}`);
                     if (cancelReqError) {
-                        logger.error('Failed to cancel production request for cancelled order item', { error: cancelReqError.message, orderId: id, productId: item.product_id });
+                        logger.error('Failed to cancel production request for cancelled order item', { error: cancelReqError.message, orderId: id, productId: item.product_id, capId: item.cap_id });
                     }
                 }
             }
@@ -799,29 +739,24 @@ export class SalesOrderService {
             throw new Error(error.message);
         }
 
-        // Audit logging for status change
-        try {
-            await auditService.logAction(
-                userId,
-                status === 'delivered' ? 'deliver_order' : 'cancel_order',
-                'sales_orders',
-                id,
-                {
-                    previous_status: order.status,
-                    new_status: status,
-                    customer_id: order.customer_id,
-                    total_items: order.sales_order_items.reduce((sum: number, item: any) => sum + item.quantity, 0)
-                }
-            );
-        } catch (auditError: any) {
-            logger.error('Failed to create audit log for sales order status update', { error: auditError.message, userId, orderId: id, newStatus: status });
-        }
+        // Side Effects: Emit Event
+        eventBus.emit(SystemEvents.SALES_ORDER_STATUS_CHANGED, {
+            order_id: id,
+            userId: userId,
+            previous_status: order.status,
+            new_status: status
+        });
 
         logger.info('Sales order status updated', { orderId: id, newStatus: status, userId });
         return this.getOrderById(id);
     }
 
     async syncOrderStatus(orderId: string) {
+        if (!orderId) {
+            logger.warn('Skipping order status sync: No orderId provided');
+            return;
+        }
+
         // 1. Fetch all items for this order to check backorder status
         const { data: items, error: itemsError } = await supabase
             .from('sales_order_items')
@@ -841,86 +776,65 @@ export class SalesOrderService {
                 .from('sales_orders')
                 .select('status')
                 .eq('id', orderId)
-                .single();
+                .maybeSingle();
 
             if (orderError) {
                 logger.error('Failed to fetch order for status sync', { error: orderError.message, orderId });
                 return;
             }
 
-            // Only transition from 'pending' to 'reserved' if no longer backordered
+            if (!order) {
+                logger.warn('Order not found during status sync', { orderId });
+                return;
+            }
+
+            // REMOVED automatic transition to 'reserved' here.
+            // Stock reservation and status change to 'reserved' MUST be a manual, 
+            // intentional action by the PM in the Order Preparation screen.
+            /*
             if (order.status === 'pending') {
                 const { error: updateError } = await supabase
                     .from('sales_orders')
                     .update({ status: 'reserved', updated_at: new Date().toISOString() })
                     .eq('id', orderId);
-
-                if (updateError) {
-                    logger.error('Failed to update order status to reserved during sync', { error: updateError.message, orderId });
-                } else {
-                    logger.info('Order status synced to reserved', { orderId });
-                }
+                ...
             }
+            */
+            logger.info('Order transition to reserved skipped - waiting for manual PM preparation', { orderId });
         }
     }
 
     async prepareOrderItems(orderId: string, items: Array<{ itemId: string; quantity: number }>, userId: string) {
-        // 1. Fetch current items to validate quantities
-        const { data: currentItems, error: fetchError } = await supabase
-            .from('sales_order_items')
-            .select('id, quantity, quantity_prepared, quantity_shipped, is_backordered')
-            .in('id', items.map(i => i.itemId));
+        logger.info('Executing atomic order preparation:', { orderId, itemCount: items.length, userId });
 
-        if (fetchError || !currentItems) {
-            logger.error('Failed to fetch sales order items for preparation', { error: fetchError?.message, orderId });
-            throw new AppError('Order items not found', 404);
+        // Map item ID variants (itemId vs item_id) to the format expected by RPC
+        const mappedItems = items.map(i => ({
+            item_id: (i as any).itemId || (i as any).item_id,
+            quantity: i.quantity
+        }));
+
+        const { data: result, error: rpcError } = await supabase.rpc('prepare_order_items_atomic', {
+            p_order_id: orderId,
+            p_items: mappedItems,
+            p_user_id: userId
+        });
+
+        if (rpcError) {
+            logger.error('prepare_order_items_atomic failed:', rpcError);
+            // Handle specific PG raises if needed, otherwise generic AppError
+            throw new AppError(`Order preparation failed: ${rpcError.message}`, 500);
         }
 
-        for (const update of items) {
-            const currentItem = currentItems.find(i => i.id === update.itemId);
-            if (!currentItem) continue;
-
-            if (currentItem.is_backordered) {
-                logger.warn('Attempted to prepare a backordered item', { itemId: update.itemId, orderId, userId });
-                throw new AppError(`Cannot prepare backordered item: ${update.itemId}. Fulfill production request first.`, 400);
-            }
-
-            const maxPrepareable = currentItem.quantity - currentItem.quantity_prepared;
-            if (update.quantity > maxPrepareable) {
-                throw new AppError(`Cannot prepare ${update.quantity} units for item ${update.itemId}. Only ${maxPrepareable} remaining to be prepared.`, 400);
-            }
-
-            // Update item
-            const newPreparedQty = currentItem.quantity_prepared + update.quantity;
-            const { error: itemError } = await supabase
-                .from('sales_order_items')
-                .update({
-                    quantity_prepared: newPreparedQty,
-                    is_prepared: newPreparedQty >= currentItem.quantity,
-                    prepared_at: new Date().toISOString(),
-                    prepared_by: userId
-                })
-                .eq('id', update.itemId);
-
-            if (itemError) {
-                logger.error('Failed to update sales order item preparation', { error: itemError.message, itemId: update.itemId });
-                throw new Error(itemError.message);
-            }
-        }
-
-        // 2. Update order status to 'reserved' if any item is prepared
-        const { error: updateOrderError } = await supabase
-            .from('sales_orders')
-            .update({ status: 'reserved' })
-            .eq('id', orderId)
-            .neq('status', 'delivered'); // Don't move back if already delivered
-
-        if (updateOrderError) {
-            logger.error('Failed to update order status to reserved', { error: updateOrderError.message, orderId });
-        }
-
-        // 3. Notifications (Simplified for batch)
-        logger.info('Sales order items prepared', { orderId, itemCount: items.length, userId });
+        logger.info('Sales order items prepared atomically', { orderId, updatedCount: result.reserved_count });
+        
+        // Side Effects: Emit Event
+        eventBus.emit(SystemEvents.SALES_ORDER_ITEMS_PREPARED, {
+            order_id: orderId,
+            userId: userId,
+            items: mappedItems
+        });
+        
+        // Return full order with updated statuses for the UI/Mobile App
         return this.getOrderById(orderId);
     }
 
@@ -935,152 +849,53 @@ export class SalesOrderService {
         notes?: string;
         user_id: string;
     }) {
-        // 1. Fetch the order
-        const order = await this.getOrderById(orderId);
+        logger.info('Processing partial delivery via RPC', { orderId, itemsCount: deliveryData.items.length, userId: deliveryData.user_id });
 
-        if (!order) {
-            logger.warn('Attempted to process delivery for non-existent order', { orderId, deliveryData });
-            throw new Error('Order not found');
+        // Call the atomic RPC
+        const { data, error } = await supabase.rpc('process_partial_dispatch', {
+            p_order_id: orderId,
+            p_items: deliveryData.items,
+            p_discount_type: deliveryData.discount_type || 'fixed',
+            p_discount_value: deliveryData.discount_value || 0,
+            p_payment_mode: deliveryData.payment_mode || 'cash',
+            p_credit_deadline: deliveryData.credit_deadline ?? null,
+            p_initial_payment: deliveryData.initial_payment || 0,
+            p_notes: deliveryData.notes || '',
+            p_user_id: deliveryData.user_id,
+            p_payment_method: deliveryData.payment_method || 'cash'
+        });
+
+        if (error) {
+            logger.error('Failed to process partial delivery via RPC', { error: error.message, orderId, userId: deliveryData.user_id });
+            throw new Error(error.message);
         }
 
-        // 2. Validate items and calculate subtotal
-        let subtotal = 0;
-        const itemsToUpdate = [];
+        logger.info('Partial delivery processed successfully via RPC', { orderId, result: data, userId: deliveryData.user_id });
 
-        for (const dispatchItem of deliveryData.items) {
-            const item = order.sales_order_items.find((i: any) => i.id === dispatchItem.item_id);
-            if (!item) {
-                throw new Error(`Item ${dispatchItem.item_id} not found in order`);
+        // 2. Side Effects: Emit Payment Event if initial payment was made
+        if (deliveryData.initial_payment && deliveryData.initial_payment > 0 && data.payment_id) {
+            // We need the order's customer_id and factory_id for the event
+            const updatedOrder = await this.getOrderById(orderId);
+            if (updatedOrder) {
+                const factoryId = (updatedOrder.sales_order_items?.[0]?.products as any)?.factory_id || 
+                                (updatedOrder.sales_order_items?.[0]?.caps as any)?.factory_id || 
+                                'MAIN_FACTORY'; // Safe fallback
+                
+                eventBus.emit(SystemEvents.SALES_PAYMENT_RECORDED, {
+                    payment_id: data.payment_id,
+                    order_id: orderId,
+                    customer_id: updatedOrder.customer_id,
+                    amount: Number(deliveryData.initial_payment),
+                    payment_mode: deliveryData.payment_method || 'cash',
+                    userId: deliveryData.user_id,
+                    factory_id: factoryId
+                });
+                logger.info('Sales payment event emitted for initial payment', { orderId, paymentId: data.payment_id });
+                return updatedOrder;
             }
-
-            const maxDispatchable = item.quantity_prepared - item.quantity_shipped;
-            if (dispatchItem.quantity > maxDispatchable) {
-                throw new Error(`Cannot dispatch ${dispatchItem.quantity} for item ${item.id}. Only ${maxDispatchable} prepared and ready.`);
-            }
-
-            subtotal += dispatchItem.unit_price * dispatchItem.quantity;
-            itemsToUpdate.push({
-                ...item,
-                dispatch_qty: dispatchItem.quantity,
-                unit_price: dispatchItem.unit_price
-            });
         }
 
-        // 3. Calculate discount and total for THIS batch
-        let batchDiscount = 0;
-        if (deliveryData.discount_type && deliveryData.discount_value) {
-            if (deliveryData.discount_type === 'percentage') {
-                batchDiscount = (subtotal * deliveryData.discount_value) / 100;
-            } else {
-                batchDiscount = deliveryData.discount_value;
-            }
-        }
-        const batchTotal = subtotal - batchDiscount;
-
-        // 4. Create Dispatch Record
-        const { data: dispatchRecord, error: dispatchError } = await supabase
-            .from('dispatch_records')
-            .insert({
-                order_id: orderId,
-                subtotal,
-                discount_value: batchDiscount,
-                total_amount: batchTotal,
-                recorded_by: deliveryData.user_id,
-                notes: deliveryData.notes
-            })
-            .select()
-            .single();
-
-        if (dispatchError) {
-            logger.error('Failed to create dispatch record', { error: dispatchError.message, orderId });
-            throw new Error(`Failed to create dispatch record: ${dispatchError.message}`);
-        }
-
-        // 5. Update Items and Create Dispatch Items
-        for (const item of itemsToUpdate) {
-            // Update cumulative shipped qty
-            const { error: itemUpdateError } = await supabase
-                .from('sales_order_items')
-                .update({
-                    quantity_shipped: item.quantity_shipped + item.dispatch_qty,
-                    unit_price: item.unit_price // Update price to the latest dispatch price
-                })
-                .eq('id', item.id);
-
-            if (itemUpdateError) throw new Error(`Failed to update item ${item.id}: ${itemUpdateError.message}`);
-
-            // Insert dispatch item link
-            await supabase.from('dispatch_items').insert({
-                dispatch_id: dispatchRecord.id,
-                sales_order_item_id: item.id,
-                quantity_shipped: item.dispatch_qty
-            });
-
-            // Deliver stock (move from reserved to delivered)
-            const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-            await this.deliverStock(item.product_id, item.dispatch_qty, item.unit_type, factoryId);
-        }
-
-        // 6. Update order-level totals and status
-        const { data: allItems } = await supabase.from('sales_order_items').select('quantity, quantity_shipped, unit_price').eq('order_id', orderId);
-        const itemsArr = allItems || [];
-        const isFullyShipped = itemsArr.length > 0 && itemsArr.every(i => i.quantity_shipped >= i.quantity);
-        
-        // Recalculate Order Totals
-        const initialPayment = deliveryData.initial_payment || 0;
-        const orderSubtotal = itemsArr.reduce((sum, i) => sum + (i.quantity * (i.unit_price || 0)), 0);
-        let orderDiscount = 0;
-        if (deliveryData.discount_type === 'percentage') {
-            orderDiscount = (orderSubtotal * (deliveryData.discount_value || 0)) / 100;
-        } else {
-            orderDiscount = deliveryData.discount_value || 0;
-        }
-        const orderTotal = orderSubtotal - orderDiscount;
-        const newAmountPaid = (order.amount_paid || 0) + initialPayment;
-        const newBalanceDue = Math.max(0, orderTotal - newAmountPaid);
-
-        const newStatus = isFullyShipped ? 'delivered' : 'partially_delivered';
-
-        const { error: orderUpdateError } = await supabase
-            .from('sales_orders')
-            .update({
-                status: newStatus,
-                subtotal: orderSubtotal,
-                total_amount: orderTotal,
-                discount_value: orderDiscount,
-                amount_paid: newAmountPaid,
-                balance_due: newBalanceDue,
-                delivered_at: isFullyShipped ? new Date().toISOString() : order.delivered_at
-            })
-            .eq('id', orderId);
-
-        if (orderUpdateError) throw new Error(`Failed to update order status: ${orderUpdateError.message}`);
-
-        // 7. Payment Handling
-        if (initialPayment > 0) {
-            // Record payment for the initial amount
-            await supabase.from('payments').insert({
-                sales_order_id: orderId,
-                customer_id: order.customer_id,
-                amount: initialPayment,
-                payment_method: deliveryData.payment_method || 'Cash',
-                notes: `Payment for dispatch batch ${(dispatchRecord?.id || 'DISPATCH').slice(-6).toUpperCase()}`,
-                recorded_by: deliveryData.user_id
-            });
-
-            // Cash flow logging
-            const categoryId = await cashFlowService.getCategoryId('Sales', 'income');
-            await cashFlowService.logEntry({
-                amount: initialPayment,
-                category_id: categoryId,
-                payment_mode: deliveryData.payment_method || 'Cash',
-                notes: `Initial payment for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()}`,
-                reference_id: orderId,
-                is_automatic: true
-            });
-        }
-
-        logger.info('Partial delivery processed successfully', { orderId, dispatchId: dispatchRecord.id, newStatus });
+        // Return the updated order
         return this.getOrderById(orderId);
     }
 
@@ -1114,7 +929,7 @@ export class SalesOrderService {
         }
 
         // 2. Create payment record
-        const { error: paymentError } = await supabase
+        const { data: payment, error: paymentError } = await supabase
             .from('payments')
             .insert({
                 sales_order_id: orderId,
@@ -1123,26 +938,13 @@ export class SalesOrderService {
                 payment_method: paymentData.payment_method,
                 notes: paymentData.notes,
                 recorded_by: paymentData.user_id
-            });
+            })
+            .select()
+            .single();
 
         if (paymentError) {
             logger.error('Failed to record payment', { error: paymentError.message, orderId, paymentData });
             throw new Error(`Failed to record payment: ${paymentError.message}`);
-        }
-
-        // Log to Cash Flow
-        try {
-            const categoryId = await cashFlowService.getCategoryId('Cash Sales', 'income');
-            await cashFlowService.logEntry({
-                category_id: categoryId,
-                amount: paymentData.amount,
-                payment_mode: paymentData.payment_method,
-                reference_id: orderId,
-                notes: `Payment for Order #${orderId.slice(-6).toUpperCase()}: ${paymentData.notes || 'No notes'}`,
-                is_automatic: true
-            });
-        } catch (cashFlowError: any) {
-            logger.error('Failed to log payment to cash flow', { error: cashFlowError.message, orderId, paymentAmount: paymentData.amount });
         }
 
         // 3. Update order balance
@@ -1163,22 +965,18 @@ export class SalesOrderService {
             throw new Error(`Failed to update order balance: ${updateError.message}`);
         }
 
-        // 4. Audit logging
-        try {
-            await auditService.logAction(
-                paymentData.user_id,
-                'record_payment',
-                'sales_orders',
-                orderId,
-                {
-                    amount: paymentData.amount,
-                    payment_method: paymentData.payment_method,
-                    new_balance: newBalanceDue
-                }
-            );
-        } catch (auditError: any) {
-            logger.error('Failed to create audit log for payment recording', { error: auditError.message, userId: paymentData.user_id, orderId });
-        }
+        // 4. Side Effects: Emit Event
+        const factoryId = (order.sales_order_items?.[0]?.products as any)?.factory_id || MAIN_FACTORY_ID;
+
+        eventBus.emit(SystemEvents.SALES_PAYMENT_RECORDED, {
+            payment_id: payment.id,
+            order_id: orderId,
+            customer_id: order.customer_id,
+            amount: paymentData.amount,
+            payment_mode: paymentData.payment_method,
+            userId: paymentData.user_id,
+            factory_id: factoryId
+        });
 
         // 5. Notify if balance is cleared
         if (newBalanceDue === 0) {
@@ -1311,9 +1109,9 @@ export class SalesOrderService {
         if (order.status === 'reserved') {
             // Unreserve stock first (only for non-backordered)
             for (const item of order.sales_order_items) {
-                if (!item.is_backordered) {
+                if (item.quantity_reserved && item.quantity_reserved > 0) {
                     const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-                    await this.unreserveStock(item.product_id, item.quantity, item.unit_type, factoryId);
+                    await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId);
                 }
             }
             logger.info('Stock unreserved for deleted reserved order', { orderId: id });
@@ -1338,7 +1136,7 @@ export class SalesOrderService {
      * @returns Number of orders marked as overdue
      */
     async checkAndUpdateOverdueOrders(): Promise<{ count: number; orders: any[] }> {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getIsoLocalDate();
 
         // Find orders that should be marked as overdue
         const { data: overdueOrders, error: selectError } = await supabase

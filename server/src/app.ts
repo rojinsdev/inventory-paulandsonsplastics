@@ -1,8 +1,10 @@
+import * as Sentry from "@sentry/node";
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import { config } from './config/env';
 import { apiLimiter, authLimiter } from './middleware/rateLimiter';
 import machineRoutes from './modules/machines/machine.routes';
 import productRoutes from './modules/products/product.routes';
@@ -23,18 +25,26 @@ import innerRoutes from './modules/inventory/inner.routes';
 import capRoutes from './modules/inventory/cap.routes';
 import cashFlowRoutes from './modules/cash-flow/cash-flow.routes';
 import notificationRoutes from './modules/notifications/notification.routes';
+import supplierRoutes from './modules/suppliers/supplier.routes';
+import purchaseRoutes from './modules/purchases/purchase.routes';
+import machineCapRoutes from './modules/machine-caps/machine-cap.routes';
 import logger from './utils/logger';
+import { initEventHandlers } from './modules/events';
+
 
 
 
 dotenv.config();
 
+// Initialize Event-Driven Architecture Handlers
+initEventHandlers();
+
 const app = express();
+
 
 app.use(helmet());
 
 // CORS Policy
-import { config } from './config/env';
 const allowedOrigins = config.allowedOrigins;
 app.use(cors({
     origin: (origin, callback) => {
@@ -66,6 +76,11 @@ app.use('/api', apiLimiter);
 
 app.get('/', (req, res) => {
     res.json({ message: 'Inventory Production System API is running' });
+});
+
+// Sentry Debug Route
+app.get("/debug-sentry", function mainHandler(req, res) {
+  throw new Error("My first Sentry error!");
 });
 
 import { HealthUtility } from './utils/health';
@@ -106,12 +121,29 @@ app.use('/api/caps', capRoutes);
 app.use('/api/inners', innerRoutes);
 app.use('/api/cash-flow', cashFlowRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/suppliers', supplierRoutes);
+app.use('/api/purchases', purchaseRoutes);
+app.use('/api/machine-caps', machineCapRoutes);
+
+// 404 Logger
+app.use((req, res, next) => {
+    if (req.url.startsWith('/api')) {
+        console.log(`404 NOT FOUND: ${req.method} ${req.url}`);
+    }
+    next();
+});
 
 
 
 
 // Global Error Handler
 import { errorHandler } from './middleware/errorHandler';
+
+// The error handler must be registered before any other error middleware and after all controllers
+if (config.sentry.dsn) {
+    Sentry.setupExpressErrorHandler(app);
+}
+
 app.use(errorHandler);
 
 

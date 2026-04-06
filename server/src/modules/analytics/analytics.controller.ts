@@ -90,6 +90,19 @@ export class AnalyticsController {
             res.status(500).json({ error: error.message });
         }
     }
+
+    async getActionRequired(req: Request, res: Response) {
+        try {
+            const filters = {
+                factory_id: req.query.factory_id as string,
+                machine_id: req.query.machine_id as string,
+            };
+            const data = await analyticsService.getActionRequiredEntries(filters);
+            res.json(data);
+        } catch (error: any) {
+            res.status(500).json({ error: error.message });
+        }
+    }
 }
 
 export const analyticsController = new AnalyticsController();

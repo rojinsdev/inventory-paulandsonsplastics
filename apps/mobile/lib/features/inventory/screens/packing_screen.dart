@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:collection/collection.dart';
 import '../../production/providers/master_data_provider.dart';
 import '../providers/inventory_provider.dart';
 
@@ -73,6 +74,7 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
 
     final productTemplatesAsync = ref.watch(productTemplatesProvider);
     final capTemplatesAsync = ref.watch(capTemplatesProvider);
+    final stockAsync = ref.watch(inventoryStockProvider);
     final isSubmitting = ref.watch(inventoryOperationProvider).isLoading;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -273,6 +275,23 @@ class _PackingScreenState extends ConsumerState<PackingScreen> {
                   }
                   final n = int.tryParse(value);
                   if (n == null || n <= 0) return 'Must be greater than 0';
+
+                  // Stock Validation
+                  final stockRecords = stockAsync.value;
+                  if (stockRecords != null && _selectedProductVariantId != null) {
+                    final item = stockRecords.firstWhereOrNull(
+                      (s) => s.productId == _selectedProductVariantId,
+                    );
+
+                    if (item != null) {
+                      final itemsPerPacket = item.itemsPerPacket ?? 12;
+                      final requiredItems = n * itemsPerPacket;
+                      if (item.semiFinishedQty < requiredItems) {
+                        return 'Insufficient loose stock. Have: ${item.semiFinishedQty}, Need: $requiredItems';
+                      }
+                    }
+                  }
+
                   return null;
                 },
               ),

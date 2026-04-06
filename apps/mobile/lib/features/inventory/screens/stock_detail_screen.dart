@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../widgets/transaction_modal.dart';
 import '../widgets/unpack_modal.dart';
 import '../providers/inventory_provider.dart';
 import '../providers/cap_stock_model.dart';
+import '../providers/inner_stock_model.dart';
 
 class StockDetailScreen extends ConsumerStatefulWidget {
   const StockDetailScreen({super.key});
@@ -14,7 +16,7 @@ class StockDetailScreen extends ConsumerStatefulWidget {
 class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
-  int _selectedTabIndex = 0; // 0: Tubs, 1: Caps
+  int _selectedTabIndex = 0; // 0: Tubs, 1: Caps, 2: Inners
 
   @override
   void dispose() {
@@ -28,6 +30,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
     final colorScheme = theme.colorScheme;
     final stockAsync = ref.watch(inventoryStockProvider);
     final capStockAsync = ref.watch(capStockProvider);
+    final innerStockAsync = ref.watch(innerStockProvider);
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -35,6 +38,7 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
         onRefresh: () async {
           ref.invalidate(inventoryStockProvider);
           ref.invalidate(capStockProvider);
+          ref.invalidate(innerStockProvider);
         },
         child: CustomScrollView(
           slivers: [
@@ -74,7 +78,9 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                           decoration: InputDecoration(
                             hintText: _selectedTabIndex == 0
                                 ? 'Search tubs...'
-                                : 'Search caps...',
+                                : _selectedTabIndex == 1
+                                    ? 'Search caps...'
+                                    : 'Search inners...',
                             prefixIcon: const Icon(Icons.search, size: 20),
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
@@ -118,6 +124,14 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                                 'Caps',
                                 _selectedTabIndex == 1,
                                 () => setState(() => _selectedTabIndex = 1),
+                              ),
+                            ),
+                            Expanded(
+                              child: _buildTab(
+                                context,
+                                'Inners',
+                                _selectedTabIndex == 2,
+                                () => setState(() => _selectedTabIndex = 2),
                               ),
                             ),
                           ],
@@ -180,8 +194,8 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                     ),
                   );
                 },
-              )
-            else
+            )
+            else if (_selectedTabIndex == 1)
               capStockAsync.when(
                 loading: () => const SliverFillRemaining(
                   child: Center(child: CircularProgressIndicator()),
@@ -225,6 +239,55 @@ class _StockDetailScreenState extends ConsumerState<StockDetailScreen> {
                           return _CapStockCard(cap: filteredCaps[index]);
                         },
                         childCount: filteredCaps.length,
+                      ),
+                    ),
+                  );
+                },
+              )
+            else
+              innerStockAsync.when(
+                loading: () => const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (err, _) => SliverFillRemaining(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error_outline,
+                            size: 48, color: colorScheme.error),
+                        const SizedBox(height: 16),
+                        Text('Error loading inner stock',
+                            style: theme.textTheme.titleMedium),
+                        TextButton(
+                          onPressed: () => ref.invalidate(innerStockProvider),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                data: (inners) {
+                  final filteredInners = inners
+                      .where((i) => i.innerName
+                          .toLowerCase()
+                          .contains(_searchQuery.toLowerCase()))
+                      .toList();
+
+                  if (filteredInners.isEmpty) {
+                    return const SliverFillRemaining(
+                      child: Center(child: Text('No inners found')),
+                    );
+                  }
+
+                  return SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          return _InnerStockCard(inner: filteredInners[index]);
+                        },
+                        childCount: filteredInners.length,
                       ),
                     ),
                   );
@@ -316,6 +379,25 @@ class _ProductStockCard extends StatelessWidget {
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
+                    builder: (context) => InventoryTransactionModal(
+                      productId: stock.productId,
+                      productName: stock.displayName,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.history, size: 20),
+                tooltip: 'History',
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(40, 40),
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                onPressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
                     builder: (context) => UnpackModal(stock: stock),
                   );
                 },
@@ -399,6 +481,56 @@ class _CapStockCard extends StatelessWidget {
           _CompactIndicator(
             label: 'Total Loose',
             value: cap.quantity,
+            color: colorScheme.tertiary,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InnerStockCard extends StatelessWidget {
+  final InnerStock inner;
+
+  const _InnerStockCard({required this.inner});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            inner.innerName,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (inner.color != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Color: ${inner.color}',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          _CompactIndicator(
+            label: 'Total Loose',
+            value: inner.quantity,
             color: colorScheme.tertiary,
           ),
         ],

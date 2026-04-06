@@ -29,21 +29,21 @@ const unpackSchema = z.object({
 
 
 export class InventoryController {
-    async pack(req: Request, res: Response) {
+    async pack(req: AuthRequest, res: Response) {
         const { product_id, packets_created, cap_id } = packSchema.parse(req.body);
-        await inventoryService.packItems(product_id, packets_created, cap_id);
+        await inventoryService.packItems(product_id, packets_created, cap_id, undefined, req.user?.id);
         res.status(200).json({ message: 'Packing successful' });
     }
 
-    async bundle(req: Request, res: Response) {
+    async bundle(req: AuthRequest, res: Response) {
         const { product_id, units_created, unit_type, source, cap_id } = bundleSchema.parse(req.body);
-        await inventoryService.bundlePackets(product_id, units_created, unit_type, source, cap_id);
+        await inventoryService.bundlePackets(product_id, units_created, unit_type, source, cap_id, undefined, req.user?.id);
         res.status(200).json({ message: 'Bundling successful' });
     }
 
-    async unpack(req: Request, res: Response) {
+    async unpack(req: AuthRequest, res: Response) {
         const { product_id, quantity, from_state, to_state, unit_type, cap_id } = unpackSchema.parse(req.body);
-        await inventoryService.unpack(product_id, quantity, from_state, to_state, unit_type, cap_id);
+        await inventoryService.unpack(product_id, quantity, from_state, to_state, unit_type, cap_id, undefined, req.user?.id);
         res.status(200).json({ message: 'Unpacking successful' });
     }
 
@@ -76,6 +76,18 @@ export class InventoryController {
         res.json(stock);
     }
 
+    async getTransactions(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+        const filters = {
+            factoryId: resolvedFactoryId || req.query.factory_id as string,
+            productId: req.query.product_id as string,
+            page: req.query.page ? parseInt(req.query.page as string) : 1,
+            size: req.query.size ? parseInt(req.query.size as string) : 20,
+        };
+        const result = await inventoryService.getTransactions(filters);
+        res.json(result);
+    }
+
     // Raw Materials
     async getRawMaterials(req: AuthRequest, res: Response) {
         const resolvedFactoryId = resolveAuthorizedFactoryId(req);
@@ -88,7 +100,7 @@ export class InventoryController {
         res.json(result);
     }
 
-    async adjustRawMaterial(req: Request, res: Response) {
+    async adjustRawMaterial(req: AuthRequest, res: Response) {
         const { id } = req.params;
         const data = z.object({
             quantity: z.number(),
@@ -98,7 +110,7 @@ export class InventoryController {
             payment_mode: z.enum(['Cash', 'Credit']).optional()
         }).parse(req.body);
 
-        const result = await inventoryService.adjustRawMaterial(id, data);
+        const result = await inventoryService.adjustRawMaterial(id, data, req.user?.id);
         res.json(result);
     }
 
@@ -128,6 +140,58 @@ export class InventoryController {
 
         const result = await inventoryService.updateRawMaterial(id, data);
         res.json(result);
+    }
+
+    async getProductionHistory(req: AuthRequest, res: Response) {
+        const resolvedFactoryId = resolveAuthorizedFactoryId(req);
+        const filters = {
+            factoryId: resolvedFactoryId || (req.query.factory_id as string),
+            userId: req.query.user_id as string,
+            itemType: req.query.item_type as string,
+            actionType: req.query.action_type as string,
+            startDate: req.query.start_date as string,
+            endDate: req.query.end_date as string,
+            page: req.query.page ? parseInt(req.query.page as string) : 1,
+            size: req.query.size ? parseInt(req.query.size as string) : 20,
+        };
+        const result = await inventoryService.getProductionHistory(filters);
+        res.json(result);
+    }
+
+    async quickDefine(req: AuthRequest, res: Response) {
+        const schema = z.object({
+            type: z.enum(['product', 'cap', 'inner']),
+            templateId: z.string().uuid().optional(),
+            templateName: z.string().optional(),
+            size: z.string().optional(),
+            color: z.string().optional(),
+            factoryId: z.string().uuid()
+        });
+
+        const data = schema.parse(req.body);
+        const result = await inventoryService.quickDefine(data);
+        res.status(201).json(result);
+    }
+
+    async bulkInitialize(req: AuthRequest, res: Response) {
+        const schema = z.object({
+            factoryId: z.string().uuid(),
+            items: z.array(z.object({
+                type: z.enum(['raw_material', 'product', 'cap', 'inner']),
+                id: z.string().uuid(),
+                quantity: z.number().min(0),
+                unit_type: z.string().optional(),
+                state: z.string().optional()
+            }))
+        });
+
+        const { factoryId, items } = schema.parse(req.body);
+        const result = await inventoryService.bulkInitializeInventory({
+            factoryId,
+            userId: req.user?.id!,
+            items
+        });
+        res.json({ message: 'Bulk initialization complete', details: result });
     }
 }
 

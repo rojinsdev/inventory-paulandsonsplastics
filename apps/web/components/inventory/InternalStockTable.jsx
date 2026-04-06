@@ -235,7 +235,7 @@ export default function InternalStockTable({ stock, products, loading, filters, 
                                                         {variant.color} | {variant.sku || 'No SKU'} 
                                                         {variant.unit_type && (
                                                             <span className={cn(styles.badge, styles.unitBadge)}>
-                                                                {variant.unit_type === 'bundle' ? 'tub' : variant.unit_type}
+                                                                {variant.unit_type}
                                                             </span>
                                                         )}
                                                     </div>

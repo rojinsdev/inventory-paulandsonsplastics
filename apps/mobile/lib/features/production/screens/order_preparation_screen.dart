@@ -51,7 +51,8 @@ class _OrderPreparationScreenState
         data: (items) {
           final groupedItems = <String, List<SalesOrderItem>>{};
           for (final item in items) {
-            if (!item.isPrepared) {
+            final isReady = !item.isBackordered || item.productionStatus == 'prepared';
+            if (!item.isPrepared && isReady) {
               groupedItems.putIfAbsent(item.orderId, () => []).add(item);
             }
           }
@@ -135,14 +136,12 @@ class _OrderPreparedCardState extends State<_OrderPreparedCard> {
   void initState() {
     super.initState();
     for (final item in widget.items) {
-      if (!item.isBackordered) {
-        final remaining = item.quantity - item.quantityPrepared;
-        _controllers[item.id] =
-            TextEditingController(text: remaining > 0 ? remaining.toString() : '0');
-        // Select by default if quantity > 0
-        if (remaining > 0) {
-          _selectedItemIds.add(item.id);
-        }
+      final remaining = item.quantity - item.quantityPrepared;
+      _controllers[item.id] =
+          TextEditingController(text: remaining > 0 ? remaining.toString() : '0');
+      // Select by default if quantity > 0
+      if (remaining > 0) {
+        _selectedItemIds.add(item.id);
       }
     }
   }
@@ -300,8 +299,8 @@ class _OrderPreparedCardState extends State<_OrderPreparedCard> {
                         }
                       }
                     },
-                    icon: const Icon(Icons.rocket_launch_outlined),
-                    label: const Text('Forward Selection to Dispatch'),
+                    icon: const Icon(Icons.security_outlined),
+                    label: const Text('Reserve & Forward to Dispatch'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -355,80 +354,81 @@ class _ItemRow extends StatelessWidget {
           Expanded(
             child: Opacity(
               opacity: isSelected ? 1.0 : 0.5,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (item.itemType == 'cap')
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blue.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: Colors.blue.withOpacity(0.5)),
+                                        ),
+                                        child: const Text('CAP', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                      ),
+                                    Expanded(
+                                      child: Text(
+                                        item.productName ?? 'Unknown resource',
+                                        style: theme.textTheme.titleMedium?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (item.productSize != null || item.productColor != null)
+                                  Text(
+                                    '${item.productSize ?? ''} ${item.productColor ?? ''}'.trim(),
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(
-                                item.productName,
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.secondaryContainer.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Total: ${item.quantity} ${item.unitType}',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                              if (item.productSize != null || item.productColor != null)
-                                Text(
-                                  '${item.productSize ?? ''} ${item.productColor ?? ''}'.trim(),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
+                              if (item.quantityPrepared > 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'Prepared: ${item.quantityPrepared}',
+                                    style: theme.textTheme.labelSmall?.copyWith(
+                                      color: colorScheme.primary,
+                                    ),
                                   ),
                                 ),
                             ],
                           ),
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: colorScheme.secondaryContainer.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'Total: ${item.quantity} ${item.unitType}',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            if (item.quantityPrepared > 0)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  'Prepared: ${item.quantityPrepared}',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    if (item.isBackordered) ...[
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orange),
-                          const SizedBox(width: 4),
-                          Text(
-                            'Awaiting Production',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: Colors.orange,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
                         ],
                       ),
-                    ] else ...[
                       const SizedBox(height: 16),
                       Row(
                         children: [
@@ -436,12 +436,44 @@ class _ItemRow extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  'Qty to Prepare',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                Row(
+                                  children: [
+                                    Text(
+                                      'Qty to Prepare',
+                                      style: theme.textTheme.labelSmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (item.includeInner) ...[
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.withAlpha(20),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(color: Colors.purple.withAlpha(50)),
+                                        ),
+                                        child: const Text(
+                                          'WITH INNER',
+                                          style: TextStyle(
+                                            color: Colors.purple, 
+                                            fontSize: 8, 
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    if (item.isBackordered) ...[
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.warning_amber_rounded, size: 12, color: Colors.orange),
+                                      const Text(
+                                        ' (Backordered)',
+                                        style: TextStyle(color: Colors.orange, fontSize: 10),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                                 const SizedBox(height: 8),
                                 SizedBox(
@@ -474,19 +506,18 @@ class _ItemRow extends StatelessWidget {
                           ),
                         ],
                       ),
-                    ],
-                    if (item.notes != null && item.notes!.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Notes: ${item.notes}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          fontStyle: FontStyle.italic,
+                      if (item.notes != null && item.notes!.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Notes: ${item.notes}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
             ),
           ),
         ],

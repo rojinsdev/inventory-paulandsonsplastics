@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { useUI } from '@/contexts/UIContext';
-import { ArrowLeft, TrendingUp, ShoppingCart, Calendar, Tag, Loader2, Plus, DollarSign, AlertCircle, X } from 'lucide-react';
+import { ArrowLeft, TrendingUp, ShoppingCart, Calendar, Tag, Loader2, Plus, IndianRupee, AlertCircle, X } from 'lucide-react';
 import { customersAPI, ordersAPI } from '@/lib/api';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import styles from './page.module.css';
@@ -336,7 +336,7 @@ export default function CustomerDetailPage() {
                                                             }}
                                                             className={styles.recordButton}
                                                         >
-                                                            <DollarSign size={14} />
+                                                            <IndianRupee size={14} />
                                                             Record Payment
                                                         </button>
                                                     ) : (
@@ -379,7 +379,7 @@ export default function CustomerDetailPage() {
                                     </div>
                                     <div className={styles.summaryCard}>
                                         <div className={styles.summaryIcon} style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                                            <DollarSign size={24} />
+                                            <IndianRupee size={24} />
                                         </div>
                                         <div>
                                             <div className={styles.summaryLabel}>Total Paid</div>
@@ -388,7 +388,7 @@ export default function CustomerDetailPage() {
                                     </div>
                                     <div className={styles.summaryCard}>
                                         <div className={styles.summaryIcon} style={{ background: paymentHistory.outstanding_balance > 0 ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-                                            {paymentHistory.outstanding_balance > 0 ? <AlertCircle size={24} /> : <DollarSign size={24} />}
+                                            {paymentHistory.outstanding_balance > 0 ? <AlertCircle size={24} /> : <IndianRupee size={24} />}
                                         </div>
                                         <div>
                                             <div className={styles.summaryLabel}>Outstanding Balance</div>
@@ -445,7 +445,7 @@ export default function CustomerDetailPage() {
                                                                 }}
                                                                 className={styles.recordButton}
                                                             >
-                                                                <DollarSign size={14} />
+                                                                <IndianRupee size={14} />
                                                                 Record Payment
                                                             </button>
                                                         </td>
@@ -488,14 +488,14 @@ export default function CustomerDetailPage() {
                                 {(!paymentHistory.orders_with_balance || paymentHistory.orders_with_balance.length === 0) &&
                                     (!paymentHistory.payment_records || paymentHistory.payment_records.length === 0) && (
                                         <div className="empty-state">
-                                            <DollarSign size={48} />
+                                            <IndianRupee size={48} />
                                             <p>No payment history available</p>
                                         </div>
                                     )}
                             </>
                         ) : (
                             <div className="empty-state">
-                                <DollarSign size={48} />
+                                <IndianRupee size={48} />
                                 <p>No payment data available</p>
                             </div>
                         )}
@@ -727,7 +727,7 @@ export default function CustomerDetailPage() {
                                     className={styles.submitButton}
                                     disabled={recordPaymentMutation.isPending}
                                 >
-                                    <DollarSign size={18} />
+                                    <IndianRupee size={18} />
                                     {recordPaymentMutation.isPending ? 'Recording...' : 'Record Payment'}
                                 </button>
                             </div>

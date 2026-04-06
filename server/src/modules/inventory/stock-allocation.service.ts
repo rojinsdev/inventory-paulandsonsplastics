@@ -35,55 +35,58 @@ export class StockAllocationService {
         if (request.status === 'completed') throw new Error('Request already completed');
 
         const unitType = request.unit_type;
-        const dbUnitType = unitType === 'loose' ? '' : unitType;
-        const stateMapping: Record<string, string> = {
-            'loose': 'semi_finished',
-            'packet': 'packed',
-            'bundle': 'finished'
-        };
-        const fromState = stateMapping[unitType];
+        const dbUnitTypes = unitType === 'loose' ? ['loose', ''] : [unitType];
+        
+        // Match state mapping from refine prepare_order_items_atomic RPC
+        let fromState = 'finished';
+        if (request.product_id) {
+            const stateMapping: Record<string, string> = {
+                'loose': 'semi_finished',
+                'packet': 'packed',
+                'bundle': 'finished'
+            };
+            fromState = stateMapping[unitType] || 'finished';
+        }
 
         if (!fromState) throw new Error(`Invalid unit type for fulfillment: ${unitType}`);
 
-        // 2. Validate sufficient stock exists in the required state (aggregate across all caps)
-        const { data: balances, error: stockError } = await supabase
-            .from('stock_balances')
-            .select('quantity, cap_id')
-            .eq('product_id', request.product_id)
-            .eq('state', fromState)
-            .eq('factory_id', request.factory_id)
-            .eq('unit_type', dbUnitType);
+        // 2. Validate sufficient stock exists in the required state
+        let totalAvailable = 0;
+        if (request.product_id) {
+            const { data: balances, error: stockError } = await supabase
+                .from('stock_balances')
+                .select('quantity')
+                .eq('product_id', request.product_id)
+                .eq('state', fromState)
+                .eq('factory_id', request.factory_id)
+                .in('unit_type', dbUnitTypes);
 
-        if (stockError) throw new Error(`Stock fetch error: ${stockError.message}`);
+            if (stockError) throw new Error(`Stock fetch error: ${stockError.message}`);
+            totalAvailable = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
+        } else if (request.cap_id) {
+            const { data: balances, error: stockError } = await supabase
+                .from('cap_stock_balances')
+                .select('quantity')
+                .eq('cap_id', request.cap_id)
+                .eq('state', fromState)
+                .eq('factory_id', request.factory_id)
+                .in('unit_type', dbUnitTypes);
 
-        const totalAvailable = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
-
-        if (totalAvailable < request.quantity) {
-            throw new AppError(`Insufficient ${unitType} stock (${fromState}). Have ${totalAvailable}, need ${request.quantity}.`, 400);
+            if (stockError) throw new Error(`Cap Stock fetch error: ${stockError.message}`);
+            totalAvailable = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
         }
 
-        // 3. Move stock to reserved (pass the fetched balances for sequential deduction)
-        await this.reserveFulfillment(request.product_id, fromState, request.quantity, request.factory_id, dbUnitType, balances || []);
+        if (totalAvailable < request.quantity) {
+            throw new AppError(`Insufficient ${unitType} stock (${fromState}) to mark as prepared. Have ${totalAvailable}, need ${request.quantity}. Please log production first.`, 400);
+        }
 
-        // 4. Update Sales Order Item
-        // Note: This updates all items for this product in this order. 
-        // In a more complex system, we'd link production_requests directly to sales_order_items.
-        const { error: itemError } = await supabase
-            .from('sales_order_items')
-            .update({ is_backordered: false })
-            .eq('order_id', request.sales_order_id)
-            .eq('product_id', request.product_id)
-            .eq('unit_type', request.unit_type);
+        // 3. Mark request as prepared
+        // This is a status-only signal. Stock reservation is performed manually in the Order Preparation screen.
 
-        if (itemError) throw new Error(`Failed to update order item: ${itemError.message}`);
-
-        // 5. Sync simple status on parent Order (e.g. pending -> reserved)
-        await salesOrderService.syncOrderStatus(request.sales_order_id);
-
-        // 6. Mark request as completed
+        // 4. Mark request as prepared
         const { data: updatedRequest, error: updateError } = await supabase
             .from('production_requests')
-            .update({ status: 'completed' })
+            .update({ status: 'prepared', updated_at: new Date().toISOString() })
             .eq('id', requestId)
             .select(`
                 *,
@@ -102,7 +105,7 @@ export class StockAllocationService {
             .single();
 
         if (order?.user_id) {
-            await this.notifyfulfillment(order.user_id, request.sales_order_id, request.product_id, request.quantity, unitType);
+            await this.notifyfulfillment(order.user_id, request.sales_order_id, request.product_id, request.quantity, unitType, request.cap_id);
         }
 
         return { success: true, request: updatedRequest };
@@ -180,21 +183,28 @@ export class StockAllocationService {
         }
     }
 
-    private async notifyfulfillment(userId: string, orderId: string, productId: string, quantity: number, unitType: string) {
-        const { data: product } = await supabase.from('products').select('name').eq('id', productId).single();
+    private async notifyfulfillment(userId: string, orderId: string, productId: string | null, quantity: number, unitType: string, capId?: string) {
+        let name = 'Item';
+        if (productId) {
+            const { data: product } = await supabase.from('products').select('name').eq('id', productId).single();
+            name = product?.name || 'Product';
+        } else if (capId) {
+            const { data: cap } = await supabase.from('caps').select('name').eq('id', capId).single();
+            name = cap?.name || 'Cap';
+        }
 
         await supabase.from('notifications').insert({
             user_id: userId,
             title: 'Backorder Fulfilled',
-            message: `Stock for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${product?.name}.`,
+            message: `Stock for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${name}.`,
             type: 'backorder_fulfillment',
-            metadata: { order_id: orderId, product_id: productId }
+            metadata: { order_id: orderId, product_id: productId, cap_id: capId }
         });
 
         // Push Notification to Sales Admin
         await pushNotificationService.sendToUsers([userId], {
             title: 'Backorder Fulfilled',
-            body: `Stock for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${product?.name || 'Product'}.`,
+            body: `Stock for Order #${(orderId || 'ORDER').slice(-6).toUpperCase()} is now ready: ${quantity} ${unitType} of ${name}.`,
             data: { order_id: orderId, type: 'order_prepared' }
         });
     }

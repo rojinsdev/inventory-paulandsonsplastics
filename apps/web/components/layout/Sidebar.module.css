@@ -16,11 +16,11 @@
     width: 80px;
 }
 
-:root[class~="dark"] .sidebar {
+:global(.dark) .sidebar {
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
-:root[class~="dark"] .logoBadge {
+:global(.dark) .logoBadge {
     background: linear-gradient(135deg, var(--primary), var(--primary-hover));
 }
 
@@ -85,6 +85,13 @@
 
 .logoIcon {
     color: #fff;
+}
+
+.logoImage {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 4px;
 }
 
 .orgInfo {
@@ -165,7 +172,7 @@
     color: var(--text-main);
 }
 
-:root[class~="dark"] .menuItem:hover {
+:global(.dark) .menuItem:hover {
     background-color: var(--surface-hover);
 }
 
@@ -228,7 +235,7 @@
 }
 
 
-:root[class~="dark"] .submenuLine {
+:global(.dark) .submenuLine {
     background: linear-gradient(180deg, var(--primary), transparent);
 }
 
@@ -253,7 +260,7 @@
     background-color: var(--slate-100);
 }
 
-:root[class~="dark"] .submenuItem:hover {
+:global(.dark) .submenuItem:hover {
     background-color: var(--surface-hover);
 }
 
@@ -263,9 +270,14 @@
     font-weight: 500;
 }
 
-:root[class~="dark"] .submenuItem.active {
+:global(.dark) .submenuItem.active {
     color: var(--primary);
     background-color: var(--primary-light);
+}
+
+:global(.dark) .submenuItem.active {
+    color: var(--primary);
+    background-color: rgba(99, 102, 241, 0.15);
 }
 
 .footer {
@@ -300,6 +312,6 @@
     border-color: var(--error);
 }
 
-:root[class~="dark"] .logoutBtn:hover {
+:global(.dark) .logoutBtn:hover {
     background-color: rgba(239, 68, 68, 0.15);
 }

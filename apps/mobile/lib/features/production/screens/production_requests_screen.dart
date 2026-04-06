@@ -5,7 +5,6 @@ import '../providers/production_request_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../data/models/production_request_model.dart';
 
-final _guideDismissedProvider = StateProvider<bool>((ref) => false);
 
 class ProductionRequestsScreen extends ConsumerWidget {
   const ProductionRequestsScreen({super.key});
@@ -15,7 +14,6 @@ class ProductionRequestsScreen extends ConsumerWidget {
     final authState = ref.watch(authStateProvider);
     final user = authState.value;
     final requestsAsync = ref.watch(productionRequestsProvider);
-    final isGuideDismissed = ref.watch(_guideDismissedProvider);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -23,11 +21,6 @@ class ProductionRequestsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Tub Production Requests'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () =>
-                ref.read(_guideDismissedProvider.notifier).state = false,
-          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () =>
@@ -39,19 +32,13 @@ class ProductionRequestsScreen extends ConsumerWidget {
       ),
       body: requestsAsync.when(
         data: (requests) {
-          final groupedRequests = <String, List<ProductionRequest>>{};
-          final standaloneRequests = <ProductionRequest>[];
+          final filteredRequests = requests.where((request) {
+            return request.status != 'completed' && 
+                   request.status != 'prepared' && 
+                   request.status != 'cancelled';
+          }).toList();
 
-          for (final request in requests) {
-            if (request.salesOrderId != null) {
-              final groupId = request.orderNumber ?? request.salesOrderId!;
-              groupedRequests.putIfAbsent(groupId, () => []).add(request);
-            } else {
-              standaloneRequests.add(request);
-            }
-          }
-
-          if (requests.isEmpty) {
+          if (filteredRequests.isEmpty) {
             return Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -70,14 +57,21 @@ class ProductionRequestsScreen extends ConsumerWidget {
             );
           }
 
+          final groupedRequests = <String, List<ProductionRequest>>{};
+          final standaloneRequests = <ProductionRequest>[];
+
+          for (final request in filteredRequests) {
+            if (request.salesOrderId != null) {
+              final groupId = request.orderNumber ?? request.salesOrderId!;
+              groupedRequests.putIfAbsent(groupId, () => []).add(request);
+            } else {
+              standaloneRequests.add(request);
+            }
+          }
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              if (!isGuideDismissed)
-                _FlowGuide(
-                  onDismiss: () =>
-                      ref.read(_guideDismissedProvider.notifier).state = true,
-                ),
               for (final entry in groupedRequests.entries)
                 _OrderProductionCard(
                   orderNumber: entry.key,
@@ -210,6 +204,33 @@ class _RequestRow extends ConsumerWidget {
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
+                    if (request.requiredInnerName != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withAlpha(25),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.withAlpha(75)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.layers_outlined, size: 12, color: Colors.orange.shade900),
+                            const SizedBox(width: 6),
+                            Text(
+                              'REQUIRES INNER: ${request.requiredInnerName}',
+                              style: TextStyle(
+                                color: Colors.orange.shade900, 
+                                fontSize: 10, 
+                                fontWeight: FontWeight.bold, 
+                                letterSpacing: 0.5
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -346,69 +367,90 @@ class _RequestRow extends ConsumerWidget {
               ],
             ),
           ],
-          if (request.status == 'pending' || request.status == 'in_production') ...[
+          if (request.status != 'completed' && request.status != 'prepared' && request.status != 'cancelled') ...[
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: request.status == 'pending'
-                  ? FilledButton.icon(
-                      onPressed: () async {
-                        try {
-                          await ref
-                              .read(productionRequestsProvider.notifier)
-                              .updateStatus(request.id, 'in_production');
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
-                            );
-                          }
+            Column(
+              children: [
+                if (!request.isSatisfiable) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: () {
+                        if (request.isInner) {
+                          context.push('/production/inner-submit');
+                        } else if (request.unitType == 'loose') {
+                          context.push('/production/submit');
+                        } else if (request.unitType == 'packet') {
+                          context.push('/inventory/pack');
+                        } else {
+                          context.push('/inventory/bundle');
                         }
                       },
-                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                      label: const Text('Start Work'),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                    )
-                  : FilledButton.tonalIcon(
-                      onPressed: !request.isSatisfiable
-                          ? null
-                          : () async {
-                              try {
-                                await ref
-                                    .read(productionRequestsProvider.notifier)
-                                    .updateStatus(request.id, 'completed');
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text('Request completed')),
-                                  );
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('$e')),
-                                  );
-                                }
-                              }
-                            },
                       icon: Icon(
-                          request.isSatisfiable
-                              ? Icons.check_circle_outline
-                              : Icons.lock_outline,
-                          size: 18),
+                        request.unitType == 'loose' 
+                            ? Icons.factory_outlined 
+                            : request.unitType == 'packet' 
+                                ? Icons.inventory_2_outlined 
+                                : Icons.layers_outlined, 
+                        size: 18
+                      ),
                       label: Text(
-                          request.isSatisfiable ? 'Complete' : 'Stock Locked'),
+                        request.unitType == 'loose' 
+                            ? 'Start Production' 
+                            : request.unitType == 'packet' 
+                                ? 'Go to Packing' 
+                                : 'Go to Bundling'
+                      ),
                       style: FilledButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: request.isSatisfiable
+                        ? () async {
+                            try {
+                              await ref
+                                  .read(productionRequestsProvider.notifier)
+                                  .updateStatus(request.id, 'prepared');
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Marked as prepared')),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('$e')),
+                                );
+                              }
+                            }
+                          }
+                        : null,
+                    icon: const Icon(Icons.check_circle_outline, size: 18),
+                    label: const Text('Mark as Prepared'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: request.isSatisfiable 
+                          ? Colors.green.shade700 
+                          : Colors.grey.shade200,
+                      foregroundColor: request.isSatisfiable 
+                          ? Colors.white 
+                          : Colors.grey.shade500,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
             ),
+
           ],
         ],
       ),
@@ -449,6 +491,7 @@ class _StatusChip extends StatelessWidget {
       case 'in_production':
         return Colors.blue.shade700;
       case 'completed':
+      case 'prepared':
         return Colors.green.shade700;
       case 'cancelled':
         return Colors.red.shade700;
@@ -458,149 +501,6 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _FlowGuide extends StatelessWidget {
-  final VoidCallback onDismiss;
-
-  const _FlowGuide({required this.onDismiss});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      decoration: BoxDecoration(
-        color: colorScheme.primaryContainer.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.primaryContainer.withOpacity(0.5)),
-      ),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.auto_awesome, color: colorScheme.primary, size: 20),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Tub Production Guide',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const _GuideStep(
-                  icon: Icons.shopping_cart_outlined,
-                  title: 'New Orders',
-                  description: 'Requests are created when stock is low.',
-                ),
-                const _GuideStep(
-                  icon: Icons.play_circle_outline,
-                  title: 'Start Work',
-                  description: 'Signal you have begun production.',
-                ),
-                const _GuideStep(
-                  icon: Icons.inventory_2_outlined,
-                  title: 'Log Entry',
-                  description: 'Increase stock in "Tub Production".',
-                ),
-                const _GuideStep(
-                  icon: Icons.check_circle_outline,
-                  title: 'Complete',
-                  description: 'Fulfill backorder and notify admin.',
-                  isLast: true,
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: IconButton(
-              icon: const Icon(Icons.close, size: 18),
-              onPressed: onDismiss,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GuideStep extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool isLast;
-
-  const _GuideStep({
-    required this.icon,
-    required this.title,
-    required this.description,
-    this.isLast = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: colorScheme.surface,
-                shape: BoxShape.circle,
-                border: Border.all(color: colorScheme.primaryContainer),
-              ),
-              child: Icon(icon, size: 14, color: colorScheme.primary),
-            ),
-            if (!isLast)
-              Container(
-                width: 1.5,
-                height: 20,
-                color: colorScheme.primaryContainer.withOpacity(0.5),
-              ),
-          ],
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                description,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  fontSize: 10,
-                ),
-              ),
-              if (!isLast) const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _StockDetailRow extends StatelessWidget {
   final String label;

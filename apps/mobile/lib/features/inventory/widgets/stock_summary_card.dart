@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
 import '../providers/inventory_provider.dart';
 import '../providers/cap_stock_model.dart';
+import '../providers/inner_stock_model.dart';
 
 /// Redesigned premium stock summary card for use across dashboard and operations screens
 class StockSummaryCard extends StatefulWidget {
   final List<InventoryStock> stocks;
   final List<CapStock> capStocks;
+  final List<InnerStock> innerStocks;
   final VoidCallback? onTap;
 
   const StockSummaryCard({
     super.key,
     required this.stocks,
     this.capStocks = const [],
+    this.innerStocks = const [],
     this.onTap,
   });
 
@@ -41,6 +44,12 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
     int totalCaps = 0;
     for (final cap in widget.capStocks) {
       totalCaps += cap.quantity;
+    }
+
+    // Aggregate totals for Inners
+    int totalInners = 0;
+    for (final inner in widget.innerStocks) {
+      totalInners += inner.quantity;
     }
 
     return Card(
@@ -75,28 +84,64 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
                 ],
               ),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+              Column(
                 children: [
-                  StockItem(
-                    label: 'Loose',
-                    value: totalSemiFinished,
-                    icon: Icons.grain_outlined,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Expanded(
+                        child: StockItem(
+                          label: 'Loose',
+                          value: totalSemiFinished,
+                          icon: Icons.grain_outlined,
+                        ),
+                      ),
+                      Expanded(
+                        child: StockItem(
+                          label: 'Packets',
+                          value: totalPacked,
+                          icon: Icons.inventory_2_outlined,
+                        ),
+                      ),
+                      Expanded(
+                        child: StockItem(
+                          label: 'Bundles',
+                          value: totalBundled,
+                          icon: Icons.layers_outlined,
+                        ),
+                      ),
+                    ],
                   ),
-                  StockItem(
-                    label: 'Packets',
-                    value: totalPacked,
-                    icon: Icons.inventory_2_outlined,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20.0),
+                    child: Divider(
+                      height: 1,
+                      color: colorScheme.outlineVariant.withValues(alpha: 0.3),
+                    ),
                   ),
-                  StockItem(
-                    label: 'Bundles',
-                    value: totalBundled,
-                    icon: Icons.layers_outlined,
-                  ),
-                  StockItem(
-                    label: 'Caps',
-                    value: totalCaps,
-                    icon: Icons.radio_button_checked,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      const Spacer(flex: 1),
+                      Expanded(
+                        flex: 2,
+                        child: StockItem(
+                          label: 'Caps',
+                          value: totalCaps,
+                          icon: Icons.radio_button_checked,
+                        ),
+                      ),
+                      const Spacer(flex: 1),
+                      Expanded(
+                        flex: 2,
+                        child: StockItem(
+                          label: 'Inners',
+                          value: totalInners,
+                          icon: Icons.album_outlined,
+                        ),
+                      ),
+                      const Spacer(flex: 1),
+                    ],
                   ),
                 ],
               ),

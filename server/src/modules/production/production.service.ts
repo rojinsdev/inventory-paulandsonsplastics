@@ -1,13 +1,13 @@
 import { supabase } from '../../config/supabase';
+import { getIsoLocalDate } from '../../utils/dateUtils';
 import { AppError } from '../../utils/AppError';
 import { SettingsService } from '../settings/settings.service';
-import { AuditService } from '../audit/audit.service';
 import { stockAllocationService } from '../inventory/stock-allocation.service';
 import { inventoryService } from '../inventory/inventory.service';
 import { getPagination } from '../../utils/supabase';
 import logger from '../../utils/logger';
-
-const auditService = new AuditService();
+import { eventBus } from '../../core/eventBus';
+import { SystemEvents } from '../../core/events';
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
 
 // Updated DTO for new session-based production
@@ -39,6 +39,7 @@ export interface SubmitProductionDTO {
 
 export interface SubmitCapProductionDTO {
     cap_id: string;
+    machine_id: string;
     factory_id?: string; // Optional: Server will default to MAIN_FACTORY_ID
     date: string;
     shift_number: number;
@@ -48,12 +49,15 @@ export interface SubmitCapProductionDTO {
     total_produced?: number; // Optional if total_weight_produced_kg is provided
     actual_cycle_time_seconds?: number; // Optional
     actual_weight_grams?: number; // Optional
+    downtime_minutes?: number; // NEW
+    downtime_reason?: string; // NEW
     remarks?: string;
     user_id: string;
 }
 
 export interface SubmitInnerProductionDTO {
     inner_id: string;
+    machine_id: string; // NEW
     factory_id?: string;
     date: string;
     shift_number: number;
@@ -63,6 +67,8 @@ export interface SubmitInnerProductionDTO {
     total_produced?: number;
     actual_weight_grams?: number;
     actual_cycle_time_seconds?: number;
+    downtime_minutes?: number; // NEW
+    downtime_reason?: string; // NEW
     remarks?: string;
     user_id: string;
 }
@@ -73,7 +79,7 @@ export class ProductionService {
      * Implements cycle time loss, weight wastage, and downtime tracking
      */
     async submitProduction(data: SubmitProductionDTO) {
-        const productionDate = data.date || new Date().toISOString().split('T')[0];
+        const productionDate = data.date || getIsoLocalDate();
 
         // ================== VALIDATION PHASE ==================
 
@@ -202,101 +208,67 @@ export class ProductionService {
             is_cost_recovered = cost_recovery_percentage >= threshold;
         }
 
-        // ================== PERSISTENCE PHASE ==================
-        logger.info('Inserting production log:', {
+        // ================== ATOMIC PERSISTENCE PHASE ==================
+        logger.info('Executing atomic production submission:', {
             machine_id: data.machine_id,
             product_id: data.product_id,
-            actual_quantity,
-            total_weight_kg: data.total_weight_kg
+            actual_quantity
         });
 
-        const { data: log, error } = await supabase
+        const { data: result, error: rpcError } = await supabase.rpc('submit_production_atomic', {
+            p_machine_id: data.machine_id,
+            p_product_id: data.product_id,
+            p_shift_number: data.shift_number,
+            p_start_time: data.start_time,
+            p_end_time: data.end_time,
+            p_total_produced: data.total_produced,
+            p_damaged_count: data.damaged_count || 0,
+            p_actual_cycle_time_seconds: data.actual_cycle_time_seconds ?? ideal_cycle_time,
+            p_actual_weight_grams: data.actual_weight_grams ?? product.weight_grams,
+            p_downtime_minutes: downtime_minutes,
+            p_downtime_reason: data.downtime_reason ?? null,
+            p_date: productionDate,
+            p_user_id: data.user_id,
+            p_factory_id: factoryId,
+            p_theoretical_quantity: theoretical_quantity,
+            p_efficiency_percentage: efficiency_percentage,
+            p_is_cost_recovered: is_cost_recovered,
+            p_shift_hours: shiftDuration / 60
+        });
+
+        if (rpcError) {
+            logger.error('submit_production_atomic failed:', rpcError);
+            throw new AppError(`Production submission failed: ${rpcError.message}`, 500);
+        }
+
+        const logId = result.log_id;
+
+        // ================== POST-TRANSACTION SIDE EFFECTS ==================
+        
+        // Finalize result for the caller
+        const { data: log } = await supabase
             .from('production_logs')
-            .insert({
-                date: productionDate,
-                machine_id: data.machine_id,
-                product_id: data.product_id,
-                user_id: data.user_id,
-                factory_id: factoryId,
-
-                // Session tracking
-                shift_number: data.shift_number,
-                start_time: data.start_time,
-                end_time: data.end_time,
-
-                // Production metrics
-                total_produced: data.total_produced,
-                damaged_count: data.damaged_count || 0,
-                actual_quantity,
-
-                // Weight-based (caps)
-                total_weight_kg: data.total_weight_kg,
-
-                // Cycle time analysis
-                actual_cycle_time_seconds: data.actual_cycle_time_seconds ?? ideal_cycle_time,
-                units_lost_to_cycle,
-                flagged_for_review,
-
-                // Weight analysis
-                actual_weight_grams: data.actual_weight_grams ?? product.weight_grams,
-                weight_wastage_kg,
-
-                // Downtime
-                downtime_minutes,
-                downtime_reason: data.downtime_reason,
-
-                // Legacy fields (for backward compatibility)
-                shift_hours: shiftDuration / 60,
-                theoretical_quantity,
-                efficiency_percentage,
-                is_cost_recovered,
-            })
-            .select()
+            .select('*')
+            .eq('id', logId)
             .single();
 
-        if (error) {
-            logger.error('Production log insertion failed:', error);
-            throw new AppError(`Production log insertion failed: ${error.message}`, 500);
-        }
+        if (!log) throw new AppError('Failed to retrieve created production log', 500);
 
-        // ================== INVENTORY IMPACT ==================
-        if (actual_quantity > 0) {
-            await this.updateInventory(data.product_id, 'semi_finished', actual_quantity, factoryId);
-            await inventoryService.logTransaction('production_output', data.product_id, actual_quantity, 'loose', null, 'semi_finished', factoryId, log.id);
-
-            await this.deductRawMaterial(product.weight_grams, actual_quantity, product.raw_material_id, factoryId);
-            await inventoryService.logTransaction('raw_material_consumption', product.raw_material_id, requiredMaterialKg, 'kg', 'raw_material', null, factoryId, log.id, undefined, true);
-
-            // ================== CAP CONSUMPTION ==================
-            const capTemplateId = (product as any).product_templates?.cap_template_id;
-            if (capTemplateId) {
-                await this.handleCapConsumption(capTemplateId, product.color, actual_quantity, factoryId, log.id, data.user_id);
-            }
-        }
 
         // ================== SMART QUEUE ALLOCATION ==================
         // Deprecated: Automated FIFO allocation is disabled.
         // Product Managers will manually fulfill from the mobile app.
         // await stockAllocationService.allocateStock(data.product_id, 'semi_finished', actual_quantity, factoryId);
 
-        // ================== AUDIT LOGGING ==================
-
-        await auditService.logAction(
-            data.user_id,
-            'production_entry',
-            'production_logs',
-            log.id,
-            {
-                machine_id: data.machine_id,
-                product_id: data.product_id,
-                shift_number: data.shift_number,
-                actual_quantity,
-                units_lost_to_cycle,
-                weight_wastage_kg,
-                downtime_minutes,
-                flagged_for_review,
-            }
-        );
+        // ================== SIDE EFFECTS: EMIT EVENT ==================
+        eventBus.emit(SystemEvents.PRODUCTION_SUBMITTED, {
+            production_id: log.id,
+            machine_id: data.machine_id,
+            product_id: data.product_id,
+            quantity: actual_quantity,
+            userId: data.user_id,
+            factory_id: factoryId
+        });
 
         return log;
     }
@@ -598,75 +570,101 @@ export class ProductionService {
         const stateMapping: Record<string, string> = {
             'loose': 'semi_finished',
             'packet': 'packed',
-            'bundle': 'finished'
+            'bundle': 'finished',
+            'bag': 'finished',
+            'box': 'finished'
         };
 
-        return rawData.map(req => {
-            const isInnerReq = !!req.inner_id;
 
-            if (isInnerReq) {
-                const innerStock = innerStockData?.filter(s => s.inner_id === req.inner_id) || [];
-                const matchingStock = innerStock.filter(s => s.factory_id === req.factory_id || !s.factory_id);
-                const availableStock = matchingStock.reduce((sum, s) => sum + Number(s.quantity), 0);
-                
-                // Override products field so the mobile app gets basic data correctly
-                const innerData = Array.isArray(req.inners) ? req.inners[0] : req.inners;
-                const templateData = innerData?.inner_templates;
-                const template = Array.isArray(templateData) ? templateData[0] : templateData;
-                
-                req.products = {
-                    name: `${template?.name || 'Inner'}`,
-                    color: innerData?.color || 'N/A',
-                    size: null
-                };
+        return rawData.map(req => this.enrichRequestWithStock(req, stockData, innerStockData, stateMapping));
+    }
 
-                return {
-                    ...req,
-                    is_inner: true,
-                    available_stock: availableStock,
-                    is_satisfiable: availableStock >= req.quantity,
-                    stock_summary: null
-                };
-            }
+    private enrichRequestWithStock(req: any, stockData: any[] | null, innerStockData: any[] | null, stateMapping: Record<string, string>) {
+        const isInnerReq = !!req.inner_id;
 
-            const requiredState = stateMapping[req.unit_type];
-            const productStock = stockData?.filter(s => s.product_id === req.product_id) || [];
-            
-            // Current satisfying stock
-            const matchingStock = productStock.filter(s =>
-                s.state === requiredState &&
-                s.factory_id === req.factory_id &&
-                (s.unit_type === (req.unit_type === 'loose' ? '' : req.unit_type))
-            );
-            
+        if (isInnerReq) {
+            const innerStock = innerStockData?.filter(s => s.inner_id === req.inner_id) || [];
+            const matchingStock = innerStock.filter(s => s.factory_id === req.factory_id || !s.factory_id);
             const availableStock = matchingStock.reduce((sum, s) => sum + Number(s.quantity), 0);
-
-            // Detailed Summary for UI context
-            const stockSummary = {
-                loose: productStock.filter(s => s.state === 'semi_finished').reduce((sum, s) => sum + Number(s.quantity), 0),
-                packed: productStock.filter(s => s.state === 'packed').reduce((sum, s) => sum + Number(s.quantity), 0),
-                finished: productStock.filter(s => s.state === 'finished').reduce((sum, s) => sum + Number(s.quantity), 0),
-                factory_specific: {
-                    loose: productStock.filter(s => s.state === 'semi_finished' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
-                    packed: productStock.filter(s => s.state === 'packed' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
-                    finished: productStock.filter(s => s.state === 'finished' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
-                }
+            
+            // Override products field so the mobile app gets basic data correctly
+            const innerData = Array.isArray(req.inners) ? req.inners[0] : req.inners;
+            const templateData = innerData?.inner_templates;
+            const template = Array.isArray(templateData) ? templateData[0] : templateData;
+            
+            req.products = {
+                name: `${template?.name || 'Inner'}`,
+                color: innerData?.color || 'N/A',
+                size: null
             };
 
             return {
                 ...req,
-                is_inner: false,
+                is_inner: true,
                 available_stock: availableStock,
                 is_satisfiable: availableStock >= req.quantity,
-                stock_summary: stockSummary
+                stock_summary: null
             };
-        });
+        }
+
+        const unitType = (req.unit_type || 'bundle').toLowerCase();
+        const requiredState = stateMapping[unitType];
+        const productStock = stockData?.filter(s => s.product_id === req.product_id) || [];
+        
+        // Current satisfying stock
+        const matchingStock = productStock.filter(s =>
+            s.state === requiredState &&
+            s.factory_id === req.factory_id &&
+            (s.unit_type === (unitType === 'loose' ? '' : unitType))
+        );
+
+        
+        const availableStock = matchingStock.reduce((sum, s) => sum + Number(s.quantity), 0);
+
+        // Detailed Summary for UI context
+        const stockSummary = {
+            loose: productStock.filter(s => s.state === 'semi_finished').reduce((sum, s) => sum + Number(s.quantity), 0),
+            packed: productStock.filter(s => s.state === 'packed').reduce((sum, s) => sum + Number(s.quantity), 0),
+            finished: productStock.filter(s => s.state === 'finished').reduce((sum, s) => sum + Number(s.quantity), 0),
+            factory_specific: {
+                loose: productStock.filter(s => s.state === 'semi_finished' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
+                packed: productStock.filter(s => s.state === 'packed' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
+                finished: productStock.filter(s => s.state === 'finished' && s.factory_id === req.factory_id).reduce((sum, s) => sum + Number(s.quantity), 0),
+            }
+        };
+
+        // For composite units (Product + Inner), extract the inner name for the UI
+        let requiredInnerName: string | null = null;
+        if (req.inner_id) {
+            const innerData = Array.isArray(req.inners) ? req.inners[0] : req.inners;
+            const templateData = innerData?.inner_templates;
+            const template = Array.isArray(templateData) ? templateData[0] : templateData;
+            requiredInnerName = template?.name || 'Inner';
+        }
+
+        return {
+            ...req,
+            is_inner: false,
+            available_stock: availableStock,
+            is_satisfiable: availableStock >= req.quantity,
+            stock_summary: stockSummary,
+            required_inner_name: requiredInnerName
+        };
     }
 
     async updateProductionRequestStatus(requestId: string, status: string, userId: string) {
-        if (status === 'completed') {
+        if (status === 'completed' || status === 'prepared') {
             // Use manual fulfillment logic
-            return await stockAllocationService.fulfillRequestManually(requestId, userId);
+            const result = await stockAllocationService.fulfillRequestManually(requestId, userId);
+            
+            // Side Effects: Emit Event (Crucial for audit/notifications in manual flow)
+            eventBus.emit(SystemEvents.PRODUCTION_REQUEST_STATUS_UPDATED, {
+                request_id: requestId,
+                userId: userId,
+                status: status
+            });
+
+            return result;
         }
 
         const { data, error } = await supabase
@@ -685,16 +683,31 @@ export class ProductionService {
             throw new AppError(error.message, 500);
         }
 
-        // Log other status changes in audit
-        await auditService.logAction(
-            userId,
-            'update_request_status',
-            'production_requests',
-            requestId,
-            { status }
-        );
+        // Side Effects: Emit Event
+        eventBus.emit(SystemEvents.PRODUCTION_REQUEST_STATUS_UPDATED, {
+            request_id: requestId,
+            userId: userId,
+            status: status
+        });
 
-        return data;
+        // Fetch current stock to return enriched object
+        const { data: stockData } = await supabase
+            .from('stock_balances')
+            .select('product_id, quantity, state, factory_id, unit_type')
+            .eq('product_id', data.product_id);
+
+        const { data: innerStockData } = await supabase
+            .from('inner_stock_balances')
+            .select('inner_id, quantity, factory_id')
+            .eq('inner_id', data.inner_id || '');
+
+        const stateMapping: Record<string, string> = {
+            'loose': 'semi_finished',
+            'packet': 'packed',
+            'bundle': 'finished'
+        };
+
+        return this.enrichRequestWithStock(data, stockData, innerStockData, stateMapping);
     }
 
     // ================== CAP PRODUCTION ==================
@@ -704,7 +717,13 @@ export class ProductionService {
         // 1. Get Cap Details
         const { data: cap, error: capError } = await supabase
             .from('caps')
-            .select('ideal_weight_grams, name, raw_material_id')
+            .select(`
+                id, 
+                name, 
+                template_id,
+                ideal_weight_grams, 
+                raw_material_id
+            `)
             .eq('id', data.cap_id)
             .single();
 
@@ -712,6 +731,20 @@ export class ProductionService {
             logger.error('Cap not found:', capError);
             throw new AppError(`Cap not found: ${capError?.message || 'Unknown error'}`, 404);
         }
+
+        // 1.5 Get Ideal Cycle Time from Mapping
+        const { data: machineCap, error: mcError } = await supabase
+            .from('machine_cap_templates')
+            .select('ideal_cycle_time_seconds')
+            .eq('machine_id', data.machine_id)
+            .eq('cap_template_id', cap.template_id)
+            .single();
+
+        if (mcError || !machineCap) {
+            throw new AppError('Machine is not configured for this cap template. Please link them in Master Data first.', 400);
+        }
+
+        const ideal_cycle_time = machineCap.ideal_cycle_time_seconds;
 
         // 2. Calculate Quantity & Deduction Weight
         let initial_quantity: number | undefined = data.total_produced;
@@ -733,6 +766,19 @@ export class ProductionService {
 
         if (final_quantity < 0) {
             throw new AppError('Produced quantity cannot be negative', 400);
+        }
+
+        // === DOWNTIME CALCULATION ===
+        const shiftDuration = this.calculateShiftDuration(data.start_time, data.end_time, data.shift_number as any);
+        const actual_cycle_time = data.actual_cycle_time_seconds ?? ideal_cycle_time;
+        const actual_production_time = final_quantity * actual_cycle_time;
+        const shift_duration_seconds = shiftDuration * 60;
+        const downtime_seconds = shift_duration_seconds - actual_production_time;
+        const downtime_minutes = data.downtime_minutes ?? Math.max(0, Math.floor(downtime_seconds / 60));
+
+        // Validate downtime reason if > 30 mins
+        if (downtime_minutes > 30 && !data.downtime_reason) {
+            throw new AppError(`${downtime_minutes} minutes unaccounted. Please provide downtime reason.`, 400);
         }
 
         // 3. Raw Material Check & Deduction
@@ -771,18 +817,23 @@ export class ProductionService {
             ...data,
             factory_id: factoryId,
             total_weight_produced_kg: final_weight_kg,
-            calculated_quantity: final_quantity
+            calculated_quantity: final_quantity,
+            weight_wastage_kg: Number((final_weight_kg - (final_quantity * cap.ideal_weight_grams) / 1000).toFixed(4))
         });
 
         const { data: log, error: logError } = await supabase
             .from('cap_production_logs')
             .insert([{
                 ...data,
+                machine_id: data.machine_id,
                 factory_id: factoryId,
                 total_weight_produced_kg: final_weight_kg,
                 calculated_quantity: final_quantity,
+                weight_wastage_kg: Number((final_weight_kg - (final_quantity * cap.ideal_weight_grams) / 1000).toFixed(4)),
                 actual_weight_grams: data.actual_weight_grams ?? cap.ideal_weight_grams,
-                actual_cycle_time_seconds: data.actual_cycle_time_seconds || 0
+                actual_cycle_time_seconds: data.actual_cycle_time_seconds || ideal_cycle_time,
+                downtime_minutes,
+                downtime_reason: data.downtime_reason
             }])
             .select()
             .single();
@@ -817,14 +868,14 @@ export class ProductionService {
             );
         }
 
-        // 7. Audit
-        await auditService.logAction(
-            data.user_id,
-            'submit_cap_production',
-            'cap_production_logs',
-            log.id,
-            { calculated_quantity: final_quantity, weight_kg: final_weight_kg }
-        );
+        // Side Effects: Emit Event
+        eventBus.emit(SystemEvents.CAP_PRODUCTION_SUBMITTED, {
+            production_id: log.id,
+            cap_id: data.cap_id,
+            quantity: final_quantity,
+            userId: data.user_id,
+            factory_id: factoryId
+        });
 
         return log;
     }
@@ -872,17 +923,20 @@ export class ProductionService {
             .from('inners')
             .select(`
                 id,
-                template:inner_templates(name, ideal_weight_grams, raw_material_id)
+                ideal_cycle_time_seconds,
+                template:inner_templates(name, ideal_weight_grams, raw_material_id, ideal_cycle_time_seconds)
             `)
             .eq('id', data.inner_id)
             .single();
 
         if (innerError || !inner) {
             logger.error('Inner not found:', innerError);
-            throw new AppError(`Inner not found: ${innerError?.message || 'Unknown error'}`, 404);
+            throw new AppError(`Inner find logic failed: ${innerError?.message || 'Unknown error'}`, 404);
         }
 
         const template = (inner as any).template;
+        const ideal_cycle_time = inner.ideal_cycle_time_seconds || template.ideal_cycle_time_seconds || 0;
+
 
         // 2. Calculate Quantity & Deduction Weight
         let initial_quantity: number | undefined = data.total_produced;
@@ -901,6 +955,19 @@ export class ProductionService {
 
         if (final_quantity < 0) {
             throw new AppError('Produced quantity cannot be negative', 400);
+        }
+
+        // === DOWNTIME CALCULATION ===
+        const shiftDuration = this.calculateShiftDuration(data.start_time, data.end_time, data.shift_number as any);
+        const actual_cycle_time = data.actual_cycle_time_seconds ?? ideal_cycle_time;
+        const actual_production_time = final_quantity * actual_cycle_time;
+        const shift_duration_seconds = shiftDuration * 60;
+        const downtime_seconds = shift_duration_seconds - actual_production_time;
+        const downtime_minutes = data.downtime_minutes ?? Math.max(0, Math.floor(downtime_seconds / 60));
+
+        // Validate downtime reason if > 30 mins
+        if (downtime_minutes > 30 && !data.downtime_reason) {
+            throw new AppError(`${downtime_minutes} minutes unaccounted. Please provide downtime reason.`, 400);
         }
 
         // 3. Raw Material Check & Deduction
@@ -938,7 +1005,8 @@ export class ProductionService {
             ...data,
             factory_id: factoryId,
             total_weight_produced_kg: final_weight_kg,
-            calculated_quantity: final_quantity
+            calculated_quantity: final_quantity,
+            weight_wastage_kg: Number((final_weight_kg - (final_quantity * template.ideal_weight_grams) / 1000).toFixed(4))
         });
 
         const { data: log, error: logError } = await supabase
@@ -948,8 +1016,11 @@ export class ProductionService {
                 factory_id: factoryId,
                 total_weight_produced_kg: final_weight_kg,
                 calculated_quantity: final_quantity,
+                weight_wastage_kg: Number((final_weight_kg - (final_quantity * template.ideal_weight_grams) / 1000).toFixed(4)),
                 actual_weight_grams: data.actual_weight_grams ?? template.ideal_weight_grams,
-                actual_cycle_time_seconds: data.actual_cycle_time_seconds || 0
+                actual_cycle_time_seconds: data.actual_cycle_time_seconds || ideal_cycle_time,
+                downtime_minutes,
+                downtime_reason: data.downtime_reason
             }])
             .select()
             .single();
@@ -980,14 +1051,14 @@ export class ProductionService {
             );
         }
 
-        // 7. Audit
-        await auditService.logAction(
-            data.user_id,
-            'submit_inner_production',
-            'inner_production_logs',
-            log.id,
-            { calculated_quantity: final_quantity, weight_kg: final_weight_kg }
-        );
+        // Side Effects: Emit Event
+        eventBus.emit(SystemEvents.INNER_PRODUCTION_SUBMITTED, {
+            production_id: log.id,
+            inner_id: data.inner_id,
+            quantity: final_quantity,
+            userId: data.user_id,
+            factory_id: factoryId
+        });
 
 
         return log;

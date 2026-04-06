@@ -177,6 +177,14 @@ export const dieMappingsAPI = {
     delete: (id) => fetchAPI(`/machine-products/${id}`, { method: 'DELETE' }),
 };
 
+// ============ MACHINE-CAPS (CAP MAPPINGS) ============
+export const capMappingsAPI = {
+    getAll: (params) => fetchAPI(`/machine-caps${params ? '?' + new URLSearchParams(params) : ''}`),
+    create: (data) => fetchAPI('/machine-caps', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/machine-caps/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => fetchAPI(`/machine-caps/${id}`, { method: 'DELETE' }),
+};
+
 // ============ PRODUCT TEMPLATES ============
 export const productTemplatesAPI = {
     getAll: (params) => fetchAPI(`/products/templates${params ? '?' + new URLSearchParams(params) : ''}`),
@@ -196,9 +204,12 @@ export const inventoryAPI = {
     updateRawMaterial: (id, data) => fetchAPI(`/inventory/raw-materials/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     adjustStock: (data) => fetchAPI('/inventory/adjust', { method: 'POST', body: JSON.stringify(data) }),
     adjustRawMaterial: (id, data) => fetchAPI(`/inventory/raw-materials/${id}/adjust`, { method: 'POST', body: JSON.stringify(data) }),
+    bulkInitialize: (data) => fetchAPI('/inventory/bulk-initialize', { method: 'POST', body: JSON.stringify(data) }),
     getTransactions: (params) => fetchAPI(`/inventory/transactions${params ? '?' + new URLSearchParams(params) : ''}`),
     pack: (data) => fetchAPI('/inventory/pack', { method: 'POST', body: JSON.stringify(data) }),
     bundle: (data) => fetchAPI('/inventory/bundle', { method: 'POST', body: JSON.stringify(data) }),
+    getProductionHistory: (params) => fetchAPI('/inventory/history', { params }),
+    quickDefine: (data) => fetchAPI('/inventory/quick-define', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 
@@ -236,6 +247,7 @@ export const ordersAPI = {
     deliver: (id) => fetchAPI(`/orders/${id}/deliver`, { method: 'PUT' }),
     cancel: (id) => fetchAPI(`/orders/${id}/cancel`, { method: 'PUT' }),
     processDelivery: (id, data) => fetchAPI(`/orders/${id}/process-delivery`, { method: 'POST', body: JSON.stringify(data) }),
+    prepareItems: (id, items) => fetchAPI(`/orders/${id}/prepare`, { method: 'POST', body: JSON.stringify({ items }) }),
     recordPayment: (id, data) => fetchAPI(`/orders/${id}/record-payment`, { method: 'POST', body: JSON.stringify(data) }),
     getCustomerPaymentHistory: (customerId) => fetchAPI(`/orders/customers/${customerId}/payment-history`),
     getPendingPayments: (params) => fetchAPI(`/orders/pending-payments${params ? '?' + new URLSearchParams(params) : ''}`),
@@ -266,6 +278,7 @@ export const analyticsAPI = {
     getDowntimeBreakdown: (params) => fetchAPI(`/analytics/downtime-breakdown${params ? '?' + new URLSearchParams(params) : ''}`),
     getMachineEfficiency: (params) => fetchAPI(`/analytics/machine-efficiency${params ? '?' + new URLSearchParams(params) : ''}`),
     getShiftComparison: (params) => fetchAPI(`/analytics/shift-comparison${params ? '?' + new URLSearchParams(params) : ''}`),
+    getActionRequired: (params) => fetchAPI(`/analytics/action-required${params ? '?' + new URLSearchParams(params) : ''}`),
 };
 
 // ============ REPORTS ============
@@ -387,4 +400,23 @@ export const packingRulesAPI = {
     create: (data) => fetchAPI('/packing-rules', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => fetchAPI(`/packing-rules/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id) => fetchAPI(`/packing-rules/${id}`, { method: 'DELETE' }),
+};
+// ============ SUPPLIERS ============
+export const suppliersAPI = {
+    getAll: (params) => fetchAPI('/suppliers', { params }),
+    getById: (id) => fetchAPI(`/suppliers/${id}`),
+    create: (data) => fetchAPI('/suppliers', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => fetchAPI(`/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => fetchAPI(`/suppliers/${id}`, { method: 'DELETE' }),
+    getPayments: (id, params) => fetchAPI(`/purchases/payments`, { params: { ...params, supplier_id: id } }),
+    recordPayment: (id, data) => fetchAPI(`/purchases/payments`, { method: 'POST', body: JSON.stringify({ ...data, supplier_id: id }) }),
+};
+
+// ============ PURCHASES ============
+export const purchasesAPI = {
+    getAll: (params) => fetchAPI('/purchases', { params }),
+    getById: (id) => fetchAPI(`/purchases/${id}`),
+    create: (data) => fetchAPI('/purchases', { method: 'POST', body: JSON.stringify(data) }),
+    getPayments: (params) => fetchAPI('/purchases/payments', { params }),
+    recordPayment: (data) => fetchAPI('/purchases/payments', { method: 'POST', body: JSON.stringify(data) }),
 };

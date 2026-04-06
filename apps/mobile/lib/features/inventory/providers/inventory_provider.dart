@@ -3,6 +3,7 @@ import '../../../features/auth/providers/auth_provider.dart';
 import '../data/inventory_repository.dart';
 import 'raw_material_model.dart';
 import 'cap_stock_model.dart';
+import 'inner_stock_model.dart';
 
 final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -12,7 +13,7 @@ final inventoryRepositoryProvider = Provider<InventoryRepository>((ref) {
 final inventoryOperationProvider =
     StateNotifierProvider<InventoryOperationNotifier, AsyncValue<void>>((ref) {
   final repository = ref.watch(inventoryRepositoryProvider);
-  return InventoryOperationNotifier(repository);
+  return InventoryOperationNotifier(repository, ref);
 });
 
 /// Provider for fetching inventory stock summary
@@ -34,12 +35,25 @@ final capStockProvider =
   return repository.getCapStockBalances();
 });
 
+final innerStockProvider =
+    FutureProvider.autoDispose<List<InnerStock>>((ref) async {
+  final repository = ref.watch(inventoryRepositoryProvider);
+  return repository.getInnerStockBalances();
+});
+
+final inventoryTransactionsProvider = 
+    FutureProvider.autoDispose.family<List<InventoryTransaction>, String?>((ref, productId) async {
+  final repository = ref.watch(inventoryRepositoryProvider);
+  return repository.getTransactions(productId: productId);
+});
+
 
 
 class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
   final InventoryRepository _repository;
+  final Ref _ref;
 
-  InventoryOperationNotifier(this._repository)
+  InventoryOperationNotifier(this._repository, this._ref)
       : super(const AsyncValue.data(null));
 
   Future<void> pack(String productId, int quantity,
@@ -51,6 +65,11 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
         packetsCreated: quantity,
         capId: capId,
       );
+
+      // AUTO-REFRESH: Invalidate relevant data providers
+      _ref.invalidate(inventoryStockProvider);
+      _ref.invalidate(capStockProvider);
+
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -68,6 +87,11 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
         source: source,
         capId: capId,
       );
+
+      // AUTO-REFRESH: Invalidate relevant data providers
+      _ref.invalidate(inventoryStockProvider);
+      _ref.invalidate(capStockProvider);
+
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -92,6 +116,11 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
         unitType: unitType,
         capId: capId,
       );
+
+      // AUTO-REFRESH: Invalidate relevant data providers
+      _ref.invalidate(inventoryStockProvider);
+      _ref.invalidate(capStockProvider);
+
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
@@ -104,10 +133,44 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
     try {
       await _repository.adjustRawMaterial(
           id: id, quantityKg: quantity, reason: reason);
+
+      // AUTO-REFRESH: Invalidate relevant data providers
+      _ref.invalidate(rawMaterialsProvider);
+
       state = const AsyncValue.data(null);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
+  }
+}
+
+/// Model for stock combination (Cap + Inner)
+class StockCombination {
+  final String? capId;
+  final String? capColor;
+  final String? capName;
+  final String? unitType;
+  final int packedQty;
+  final int bundledQty;
+
+  StockCombination({
+    this.capId,
+    this.capColor,
+    this.capName,
+    this.unitType,
+    required this.packedQty,
+    required this.bundledQty,
+  });
+
+  factory StockCombination.fromJson(Map<String, dynamic> json) {
+    return StockCombination(
+      capId: json['cap_id'] as String?,
+      capColor: json['cap_color'] as String?,
+      capName: json['cap_name'] as String?,
+      unitType: json['unit_type'] as String?,
+      packedQty: ((json['packed_qty'] ?? 0) as num).toInt(),
+      bundledQty: ((json['bundled_qty'] ?? 0) as num).toInt(),
+    );
   }
 }
 
@@ -117,9 +180,7 @@ class InventoryStock {
   final String productName; // template name
   final String? color;
   final String? size;
-  final String? capId;
-  final String? capName;
-  final String? capColor;
+  final List<StockCombination>? _combinations; // Nullable backing field for hot-reload safety
   final int semiFinishedQty;
   final int packedQty;
   final int bundledQty;
@@ -130,16 +191,15 @@ class InventoryStock {
   final int? itemsPerBag;
   final int? packetsPerBox;
   final int? itemsPerBox;
-  final String? unitType;
+
+  List<StockCombination> get combinations => _combinations ?? const [];
 
   InventoryStock({
     this.productId,
     required this.productName,
     this.color,
     this.size,
-    this.capId,
-    this.capName,
-    this.capColor,
+    List<StockCombination>? combinations,
     required this.semiFinishedQty,
     required this.packedQty,
     required this.bundledQty,
@@ -150,45 +210,48 @@ class InventoryStock {
     this.itemsPerBag,
     this.packetsPerBox,
     this.itemsPerBox,
-    this.unitType,
-  });
+  }) : _combinations = combinations;
+
+  /// Convenience getters for backward compatibility
+  String? get unitType => combinations.isNotEmpty ? combinations.first.unitType : null;
+  String? get capId => combinations.isNotEmpty ? combinations.first.capId : null;
+  String? get capName => combinations.isNotEmpty ? combinations.first.capName : null;
+  String? get capColor => combinations.isNotEmpty ? combinations.first.capColor : null;
 
   factory InventoryStock.fromJson(Map<String, dynamic> json) {
+    final List<StockCombination> combos = [];
     int totalPacked = 0;
     int totalBundled = 0;
-    String? firstUnitType;
-    String? firstCapId;
-    String? firstCapColor;
     
-    if (json['combinations'] != null && (json['combinations'] as List).isNotEmpty) {
-      for (var combo in (json['combinations'] as List)) {
-        totalPacked += ((combo['packed_qty'] ?? 0) as num).toInt();
-        totalBundled += ((combo['bundled_qty'] ?? 0) as num).toInt();
-        if (firstUnitType == null && combo['unit_type'] != null && combo['unit_type'] != '') {
-          firstUnitType = combo['unit_type'] as String?;
-        }
-        if (firstCapId == null && combo['cap_id'] != null) {
-          firstCapId = combo['cap_id'] as String?;
-        }
-        if (firstCapColor == null && combo['cap_color'] != null && combo['cap_color'] != 'N/A') {
-          firstCapColor = combo['cap_color'] as String?;
+    final rawCombinations = json['combinations'];
+    if (rawCombinations is List && rawCombinations.isNotEmpty) {
+      for (var combo in rawCombinations) {
+        if (combo is Map<String, dynamic>) {
+          final c = StockCombination.fromJson(combo);
+          combos.add(c);
+          totalPacked += c.packedQty;
+          totalBundled += c.bundledQty;
         }
       }
     } else {
       totalPacked = ((json['packed_qty'] ?? 0) as num).toInt();
       totalBundled = ((json['bundled_qty'] ?? 0) as num).toInt();
+      // Add a default combination representing the base stock
+      combos.add(StockCombination(
+        packedQty: totalPacked,
+        bundledQty: totalBundled,
+        unitType: json['unit_type'] as String?,
+      ));
     }
 
     return InventoryStock(
       productId: (json['variant_id'] ?? json['product_id'] ?? json['id'] ?? '')
-          as String?,
+          ?.toString(),
       productName:
-          (json['product_name'] ?? json['name'] ?? 'Unknown') as String,
+          (json['product_name'] ?? json['name'] ?? 'Unknown').toString(),
       color: json['color'] as String?,
       size: json['size'] as String?,
-      capId: firstCapId ?? json['cap_id'] as String?,
-      capName: json['cap_name'] as String?,
-      capColor: firstCapColor ?? json['cap_color'] as String?,
+      combinations: combos,
       semiFinishedQty:
           ((json['semi_finished_qty'] ?? json['semifinished_qty'] ?? 0) as num)
               .toInt(),
@@ -201,7 +264,6 @@ class InventoryStock {
       itemsPerBag: json['items_per_bag'] as int?,
       packetsPerBox: json['packets_per_box'] as int?,
       itemsPerBox: json['items_per_box'] as int?,
-      unitType: firstUnitType ?? (json['unit_type'] ?? json['unit']) as String?,
     );
   }
 
@@ -209,10 +271,6 @@ class InventoryStock {
     String name = productName;
     if (size != null) name += ' ($size)';
     if (color != null) name += ' - $color';
-    if (capName != null) {
-      name += ' + $capName';
-      if (capColor != null) name += ' ($capColor)';
-    }
     return name;
   }
 }

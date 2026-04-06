@@ -7,8 +7,10 @@ import {
     Loader2, Plus, Search, Filter, Trash2, Edit2,
     Check, X, HardHat, Package, Factory,
     Clock, Weight, Info, Settings,
-    TrendingUp, ArrowUpRight, AlertTriangle, Layers
+    TrendingUp, ArrowUpRight, AlertTriangle, Layers,
+    Link as LinkIcon
 } from 'lucide-react';
+import Link from 'next/link';
 import { capsAPI, productsAPI, inventoryAPI, productTemplatesAPI, machinesAPI } from '@/lib/api';
 import { formatNumber, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
@@ -35,9 +37,7 @@ export default function CapManagementPage() {
         name: '',
         colors: [], // Use array for template variants
         ideal_weight_grams: '',
-        ideal_cycle_time_seconds: '',
         factory_id: '',
-        machine_id: '',
         raw_material_id: '',
         tub_template_ids: [] // Mapping at template level
     });
@@ -76,7 +76,7 @@ export default function CapManagementPage() {
         const rawData = capsRes?.data || (Array.isArray(capsRes) ? capsRes : []);
         return rawData.map(cap => ({
             ...cap,
-            mapped_tub_templates: cap.mapped_product_templates || []
+            mapped_tub_templates: cap.mapped_tub_templates || cap.mapped_product_templates || []
         }));
     }, [capsRes]);
 
@@ -125,10 +125,6 @@ export default function CapManagementPage() {
                 {
                     title: 'Tub Mapping',
                     explanation: 'Map a cap to multiple tubs. When these tubs are packed in bundles, the corresponding cap stock is automatically deducted.'
-                },
-                {
-                    title: 'Ideal Cycle Time',
-                    explanation: 'Used for efficiency analytics. Comparing actual cycle time during production against this ideal value helps identify performance losses.'
                 }
             ],
             components: [
@@ -193,9 +189,7 @@ export default function CapManagementPage() {
                 name: cap.name,
                 colors: cap.variants?.map(v => v.color) || [],
                 ideal_weight_grams: cap.ideal_weight_grams || '',
-                ideal_cycle_time_seconds: cap.ideal_cycle_time_seconds || '',
                 factory_id: cap.factory_id || '',
-                machine_id: cap.machine_id || '',
                 raw_material_id: cap.raw_material_id || '',
                 tub_template_ids: cap.mapped_tub_templates?.map(p => p.id) || []
             });
@@ -205,9 +199,7 @@ export default function CapManagementPage() {
                 name: '',
                 colors: ['White'], // Default color
                 ideal_weight_grams: '',
-                ideal_cycle_time_seconds: '',
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
-                machine_id: '',
                 raw_material_id: '',
                 tub_template_ids: []
             });
@@ -227,8 +219,6 @@ export default function CapManagementPage() {
             ...formData,
             product_template_ids: formData.tub_template_ids, // Map back for API
             ideal_weight_grams: parseFloat(formData.ideal_weight_grams),
-            ideal_cycle_time_seconds: parseFloat(formData.ideal_cycle_time_seconds),
-            machine_id: formData.machine_id || null,
             raw_material_id: formData.raw_material_id || null
         };
 
@@ -284,8 +274,7 @@ export default function CapManagementPage() {
         return (
             formData.name.trim() !== '' &&
             formData.factory_id !== '' &&
-            parseFloat(formData.ideal_weight_grams) > 0 &&
-            parseFloat(formData.ideal_cycle_time_seconds) > 0
+            parseFloat(formData.ideal_weight_grams) > 0
         );
     }, [formData]);
 
@@ -295,36 +284,79 @@ export default function CapManagementPage() {
                 <div>
                     <h1 className={styles.pageTitle}>Cap Templates</h1>
                     <p className={styles.pageDescription}>Manage physical specifications and tub mappings.</p>
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <Link href="/cap-mappings" className={styles.secondaryButton} style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+                        <LinkIcon size={18} />
+                        Machine Mappings
+                    </Link>
+                    <button className={styles.primaryButton} onClick={() => openModal()}>
+                        <Plus size={20} style={{ marginRight: '8px' }} />
+                        Define New Cap
+                    </button>
+                </div>
+            </div>
 
-                    <div className={styles.metricChipsRow}>
-                        <div
-                            className={cn(styles.metricChip, !mappedOnly && styles.metricChipActive)}
-                            onClick={() => setMappedOnly(false)}
-                        >
-                            <span className={styles.chipValue}>{totalCaps}</span>
-                            <span className={styles.chipLabel}>Total Templates</span>
-                            {trends.newThisWeek > 0 && <span className={styles.chipTrend}>+{trends.newThisWeek}</span>}
+            {/* Stats */}
+            <div className={styles.statsRow}>
+                <div 
+                    className={cn(styles.statCard, !mappedOnly && styles.metricChipActive)} 
+                    onClick={() => setMappedOnly(false)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>
+                        <HardHat size={28} />
+                    </div>
+                    <div className={styles.statContent}>
+                        <div className={styles.statValue} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {totalCaps}
+                            {trends.newThisWeek > 0 && 
+                                <span style={{
+                                    fontSize: '0.8rem', 
+                                    color: '#10b981', 
+                                    background: 'rgba(16, 185, 129, 0.1)', 
+                                    padding: '2px 8px', 
+                                    borderRadius: '999px',
+                                    fontWeight: '600',
+                                    marginTop: '2px'
+                                }}>
+                                    +{trends.newThisWeek}
+                                </span>
+                            }
                         </div>
-
-                        <div
-                            className={cn(styles.metricChip, mappedOnly && styles.metricChipActive)}
-                            onClick={() => setMappedOnly(true)}
-                        >
-                            <span className={styles.chipValue}>{mappedCount}</span>
-                            <span className={styles.chipLabel}>Mapped</span>
-                        </div>
-
-                        <div className={styles.metricChip}>
-                            <span className={styles.chipValue}>3.2g</span>
-                            <span className={styles.chipLabel}>Trending Spec</span>
-                            <TrendingUp size={12} className={styles.trendingIcon} />
-                        </div>
+                        <div className={styles.statLabel}>Total Templates</div>
+                        <div className={styles.statSublabel}>Cap definitions</div>
                     </div>
                 </div>
-                <button className={styles.primaryButton} onClick={() => openModal()}>
-                    <Plus size={20} style={{ marginRight: '8px' }} />
-                    Define New Cap
-                </button>
+
+                <div 
+                    className={cn(styles.statCard, mappedOnly && styles.metricChipActive)} 
+                    onClick={() => setMappedOnly(true)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                        <Package size={28} />
+                    </div>
+                    <div className={styles.statContent}>
+                        <div className={styles.statValue}>{mappedCount}</div>
+                        <div className={styles.statLabel}>Mapped to Tubs</div>
+                        <div className={styles.statSublabel}>Active mappings</div>
+                    </div>
+                </div>
+
+                <div className={styles.statCard}>
+                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                        <Weight size={28} />
+                    </div>
+                    <div className={styles.statContent}>
+                        <div className={styles.statValue} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            3.2g
+                            <TrendingUp size={20} style={{ color: '#10b981' }} />
+                        </div>
+                        <div className={styles.statLabel}>Standard Weight</div>
+                        <div className={styles.statSublabel}>Trending Spec</div>
+                    </div>
+                </div>
             </div>
 
             <div className={styles.filterBar}>
@@ -389,12 +421,6 @@ export default function CapManagementPage() {
                                                     <Weight size={14} className={styles.textMuted} />
                                                     <span className={styles.specValue}>
                                                         {cap.ideal_weight_grams}g
-                                                    </span>
-                                                </div>
-                                                <div className={styles.specItem}>
-                                                    <Clock size={14} className={styles.textMuted} />
-                                                    <span className={styles.specValue}>
-                                                        {parseFloat(cap.ideal_cycle_time_seconds) || 0}s
                                                     </span>
                                                 </div>
                                             </div>
@@ -511,34 +537,9 @@ export default function CapManagementPage() {
                                                 <label className={styles.formLabel}>Select Factory *</label>
                                                 <FactorySelect
                                                     value={formData.factory_id}
-                                                    onChange={val => setFormData({ ...formData, factory_id: val, machine_id: '', tub_template_ids: [] })}
+                                                    onChange={val => setFormData({ ...formData, factory_id: val, tub_template_ids: [] })}
                                                     disabled={!!selectedCap} // Lock factory on edit
                                                 />
-                                            </div>
-
-                                            <div className={styles.formGroup}>
-                                                <label className={styles.formLabel}>Associated Machine</label>
-                                                <select
-                                                    className={styles.formInput}
-                                                    value={formData.machine_id || ''}
-                                                    onChange={e => setFormData({ ...formData, machine_id: e.target.value })}
-                                                    disabled={loadingMachines || !formData.factory_id}
-                                                >
-                                                    <option value="">
-                                                        {!formData.factory_id
-                                                            ? 'Select Factory First'
-                                                            : loadingMachines
-                                                                ? 'Loading...'
-                                                                : machines.length === 0
-                                                                    ? 'No Machines Found'
-                                                                    : '-- Select Machine (Optional) --'}
-                                                    </option>
-                                                    {machines.map(m => (
-                                                        <option key={m.id} value={m.id}>
-                                                            {m.name} {m.category ? `(${m.category})` : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
                                             </div>
                                         </div>
 
@@ -546,7 +547,7 @@ export default function CapManagementPage() {
                                             <h3 className={styles.sectionTitle}>
                                                 <Clock size={16} /> Physical Specifications
                                             </h3>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.5rem' }}>
                                                 <div className={styles.formGroup}>
                                                     <label className={styles.formLabel}>Ideal Weight *</label>
                                                     <div className={styles.inputWrapper}>
@@ -559,20 +560,6 @@ export default function CapManagementPage() {
                                                             required
                                                         />
                                                         <span className={styles.suffix}>grams</span>
-                                                    </div>
-                                                </div>
-                                                <div className={styles.formGroup}>
-                                                    <label className={styles.formLabel}>Cycle Time *</label>
-                                                    <div className={styles.inputWrapper}>
-                                                        <input
-                                                            type="number"
-                                                            step="any"
-                                                            className={styles.formInput}
-                                                            value={formData.ideal_cycle_time_seconds}
-                                                            onChange={e => setFormData({ ...formData, ideal_cycle_time_seconds: e.target.value })}
-                                                            required
-                                                        />
-                                                        <span className={styles.suffix}>seconds</span>
                                                     </div>
                                                 </div>
                                             </div>

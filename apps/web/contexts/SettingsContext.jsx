@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
     defaultView: '/',
     notifications: true,
     compactMode: false,
+    autoRefreshInterval: 0, // In milliseconds, 0 means disabled
     visibleMetrics: {
         // Production
         productionAchievement: true,

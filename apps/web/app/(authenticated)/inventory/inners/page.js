@@ -77,7 +77,7 @@ export default function InnerManagementPage() {
         const rawData = innersRes?.data || (Array.isArray(innersRes) ? innersRes : []);
         return rawData.map(inner => ({
             ...inner,
-            mapped_tub_templates: inner.mapped_product_templates || []
+            mapped_tub_templates: inner.mapped_tub_templates || inner.mapped_product_templates || []
         }));
     }, [innersRes]);
 
@@ -262,35 +262,58 @@ export default function InnerManagementPage() {
                 <div>
                     <h1 className={styles.pageTitle}>Inner Templates</h1>
                     <p className={styles.pageDescription}>Manage inner liners placed under caps.</p>
-
-                    <div className={styles.metricChipsRow}>
-                        <div
-                            className={cn(styles.metricChip, !mappedOnly && styles.metricChipActive)}
-                            onClick={() => setMappedOnly(false)}
-                        >
-                            <span className={styles.chipValue}>{totalInners}</span>
-                            <span className={styles.chipLabel}>Total Templates</span>
-                        </div>
-
-                        <div
-                            className={cn(styles.metricChip, mappedOnly && styles.metricChipActive)}
-                            onClick={() => setMappedOnly(true)}
-                        >
-                            <span className={styles.chipValue}>{mappedCount}</span>
-                            <span className={styles.chipLabel}>Mapped to Tubs</span>
-                        </div>
-
-                        <div className={styles.metricChip}>
-                            <span className={styles.chipValue}>0.8g</span>
-                            <span className={styles.chipLabel}>Standard Weight</span>
-                            <Weight size={12} className={styles.trendingIcon} />
-                        </div>
-                    </div>
                 </div>
                 <button className={styles.primaryButton} onClick={() => openModal()}>
                     <Plus size={20} style={{ marginRight: '8px' }} />
                     Define New Inner
                 </button>
+            </div>
+
+            {/* Stats */}
+            <div className={styles.statsRow}>
+                <div 
+                    className={cn(styles.statCard, !mappedOnly && styles.metricChipActive)} 
+                    onClick={() => setMappedOnly(false)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #8b5cf6, #7c3aed)' }}>
+                        <Layers size={28} />
+                    </div>
+                    <div className={styles.statContent}>
+                        <div className={styles.statValue}>{totalInners}</div>
+                        <div className={styles.statLabel}>Total Templates</div>
+                        <div className={styles.statSublabel}>Inner definitions</div>
+                    </div>
+                </div>
+
+                <div 
+                    className={cn(styles.statCard, mappedOnly && styles.metricChipActive)} 
+                    onClick={() => setMappedOnly(true)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}>
+                        <Package size={28} />
+                    </div>
+                    <div className={styles.statContent}>
+                        <div className={styles.statValue}>{mappedCount}</div>
+                        <div className={styles.statLabel}>Mapped to Tubs</div>
+                        <div className={styles.statSublabel}>Active mappings</div>
+                    </div>
+                </div>
+
+                <div className={styles.statCard}>
+                    <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                        <Weight size={28} />
+                    </div>
+                    <div className={styles.statContent}>
+                        <div className={styles.statValue} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            0.8g
+                            <TrendingUp size={20} style={{ color: '#10b981' }} />
+                        </div>
+                        <div className={styles.statLabel}>Standard Weight</div>
+                        <div className={styles.statSublabel}>Trending Spec</div>
+                    </div>
+                </div>
             </div>
 
             <div className={styles.filterBar}>

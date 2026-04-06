@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Sun, Moon, Monitor, Check, Factory, Activity, TrendingUp, DollarSign, Package, Boxes, AlertTriangle, ShoppingCart, Truck, Users, Zap } from 'lucide-react';
+import { X, Sun, Moon, Monitor, Check, Factory, Activity, TrendingUp, IndianRupee, Package, Boxes, AlertTriangle, ShoppingCart, Truck, Users, Zap } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { AVAILABLE_QUICK_ACTIONS } from '@/lib/constants';
@@ -18,10 +18,10 @@ const TABS = [
 const METRIC_DEFINITIONS = [
     // Graphs & Trends
     { id: 'productionAchievement', label: 'Production Chart', icon: TrendingUp, category: 'Graphs & Trends' },
-    { id: 'businessHealthCard', label: 'Financial Pulse', icon: DollarSign, category: 'Graphs & Trends' },
+    { id: 'businessHealthCard', label: 'Financial Pulse', icon: IndianRupee, category: 'Graphs & Trends' },
 
     // Dashboard Widgets
-    { id: 'revenuePerformance', label: 'Revenue Widget', icon: DollarSign, category: 'Dashboard Widgets' },
+    { id: 'revenuePerformance', label: 'Revenue Widget', icon: IndianRupee, category: 'Dashboard Widgets' },
     { id: 'overallEfficiency', label: 'Efficiency Widget', icon: Activity, category: 'Dashboard Widgets' },
     { id: 'ordersQueue', label: 'Orders Widget', icon: ShoppingCart, category: 'Dashboard Widgets' },
     { id: 'outputToday', label: 'Output Widget', icon: Package, category: 'Dashboard Widgets' },
@@ -29,12 +29,12 @@ const METRIC_DEFINITIONS = [
 
     // Production Metrics
     { id: 'activeMachines', label: 'Active Machines', icon: Activity, category: 'Production' },
-    { id: 'costRecovered', label: 'Cost Recovered', icon: DollarSign, category: 'Production' },
+    { id: 'costRecovered', label: 'Cost Recovered', icon: IndianRupee, category: 'Production' },
 
     // Inventory Metrics
     { id: 'finishedGoods', label: 'Finished Goods', icon: Package, category: 'Inventory' },
     { id: 'rawMaterial', label: 'Raw Material', icon: Boxes, category: 'Inventory' },
-    { id: 'stockValue', label: 'Stock Value', icon: DollarSign, category: 'Inventory' },
+    { id: 'stockValue', label: 'Stock Value', icon: IndianRupee, category: 'Inventory' },
 
     // Sales Metrics
     { id: 'todayDeliveries', label: 'Today\'s Deliveries', icon: Truck, category: 'Sales' },

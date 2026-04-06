@@ -10,8 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AVAILABLE_QUICK_ACTIONS } from '@/lib/constants';
 import { usePathname, useRouter } from 'next/navigation';
 import SettingsModal from '../ui/SettingsModal';
-import ScreenGuide from '../ui/ScreenGuide';
-import { useGuide } from '@/contexts/GuideContext';
+
 import DateTimeWidget from '../ui/DateTimeWidget';
 import FactoryFilter from '../ui/FactoryFilter';
 import OrderCalendarModal from '../ui/OrderCalendarModal';
@@ -26,7 +25,7 @@ export default function Header({ title }) {
     const [showSettings, setShowSettings] = useState(false);
     const [showQuickActions, setShowQuickActions] = useState(false);
     const [showCalendar, setShowCalendar] = useState(false);
-    const { guideContent, openGuide } = useGuide();
+
     const quickActionsRef = useRef(null);
     const router = useRouter();
     const pathname = usePathname();
@@ -134,15 +133,7 @@ export default function Header({ title }) {
                         </div>
                     )}
                 </div>
-                {guideContent && (
-                    <button
-                        className={styles.iconBtn}
-                        onClick={openGuide}
-                        title="Screen Guide"
-                    >
-                        <HelpCircle size={20} />
-                    </button>
-                )}
+
                 <div className={styles.userInfo}>
                     <button
                         className={styles.userAvatar}
@@ -163,7 +154,7 @@ export default function Header({ title }) {
             {/* Modals */}
             <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
             <OrderCalendarModal isOpen={showCalendar} onClose={() => setShowCalendar(false)} />
-            <ScreenGuide />
+
         </header>
     );
 }

@@ -2,18 +2,32 @@ import cron from 'node-cron';
 import { HealthUtility } from './health';
 import { config } from '../config/env';
 import logger from './logger';
+import { purchaseService } from '../modules/purchases/purchase.service';
+import { salesOrderService } from '../modules/sales-orders/sales-order.service';
 
 export class Scheduler {
     static init() {
         console.log('📅 Initializing background scheduler...');
 
-        // Hourly Health Status (0 * * * * = at the start of every hour)
-        cron.schedule('0 * * * *', async () => {
+        // 1. Daily Health Status (at 09:00 AM every day)
+        cron.schedule('0 9 * * *', async () => {
+            logger.info('🕒 Sending Daily Health Status...');
             await this.sendHealthStatus();
         });
 
-        // Log initialization
-        logger.info('📅 Scheduler initialized: Hourly health status active');
+        // 2. Daily Dues & Overdue Check (at 08:00 AM every day)
+        cron.schedule('0 8 * * *', async () => {
+            logger.info('🕒 Running Daily Dues & Overdue Check...');
+            try {
+                await purchaseService.checkAndUpdatePurchaseDues();
+                await salesOrderService.checkAndUpdateOverdueOrders();
+                logger.info('✅ Daily Dues & Overdue Check completed');
+            } catch (error) {
+                logger.error('❌ Failed to run Daily Dues & Overdue Check:', error);
+            }
+        });
+
+        logger.info('📅 Scheduler initialized: Daily health & Daily dues check active');
     }
 
     static async sendHealthStatus() {

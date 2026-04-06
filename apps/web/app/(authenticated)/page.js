@@ -250,7 +250,7 @@ export default function Home() {
                         </div>
                     </div>
                     <div className={styles.chartBody}>
-                        <ProductionChart data={productionTrends} timePeriod={timePeriod} compact={settings.compactMode} />
+                        <ProductionChart data={productionTrends} timePeriod={timePeriod} compact={settings.compactMode} height={400} />
                     </div>
                 </div>
 
@@ -265,7 +265,7 @@ export default function Home() {
                         </div>
                     </div>
                     <div className={styles.chartBody}>
-                        <SalesChart data={salesTrends} compact={settings.compactMode} />
+                        <SalesChart data={salesTrends} compact={settings.compactMode} height={400} />
                     </div>
                 </div>
             </div>

@@ -47,11 +47,16 @@ export default function ProductsPage() {
         raw_material_id: '',
         cap_template_id: '',
         inner_template_id: '',
+        items_per_packet: '100',
+        packets_per_bundle: '50',
+        items_per_bundle: '600',
         packets_per_bag: '',
         items_per_bag: '',
         packets_per_box: '',
         items_per_box: '',
-        items_per_bundle: '600',
+        bundle_enabled: true,
+        bag_enabled: false,
+        box_enabled: false,
     });
 
     const [initialColors, setInitialColors] = useState([]);
@@ -274,16 +279,16 @@ export default function ProductsPage() {
                 size: formData.size,
                 weight_grams: Number(formData.weight_grams) || 0,
                 items_per_packet: Number(formData.items_per_packet) || 0,
-                packets_per_bundle: Number(formData.packets_per_bundle) || 0,
-                items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
+                packets_per_bundle: formData.bundle_enabled ? Number(formData.packets_per_bundle) : null,
+                items_per_bundle: formData.bundle_enabled ? (formData.items_per_bundle ? Number(formData.items_per_bundle) : Number(formData.items_per_packet || 0) * Number(formData.packets_per_bundle || 0)) : null,
                 factory_id: formData.factory_id,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
                 inner_template_id: formData.inner_template_id || null,
-                packets_per_bag: formData.packets_per_bag ? Number(formData.packets_per_bag) : null,
-                items_per_bag: formData.items_per_bag ? Number(formData.items_per_bag) : null,
-                packets_per_box: formData.packets_per_box ? Number(formData.packets_per_box) : null,
-                items_per_box: formData.items_per_box ? Number(formData.items_per_box) : null,
+                packets_per_bag: formData.bag_enabled ? Number(formData.packets_per_bag) : null,
+                items_per_bag: formData.bag_enabled ? (formData.items_per_bag ? Number(formData.items_per_bag) : Number(formData.items_per_packet || 0) * Number(formData.packets_per_bag || 0)) : null,
+                packets_per_box: formData.box_enabled ? Number(formData.packets_per_box) : null,
+                items_per_box: formData.box_enabled ? (formData.items_per_box ? Number(formData.items_per_box) : Number(formData.items_per_packet || 0) * Number(formData.packets_per_box || 0)) : null,
                 bundle_enabled: formData.bundle_enabled,
                 bag_enabled: formData.bag_enabled,
                 box_enabled: formData.box_enabled,
@@ -303,15 +308,15 @@ export default function ProductsPage() {
                 sku: formData.sku?.trim() || null,
                 weight_grams: Number(formData.weight_grams) || 0,
                 items_per_packet: Number(formData.items_per_packet) || 0,
-                packets_per_bundle: Number(formData.packets_per_bundle) || 0,
-                items_per_bundle: formData.items_per_bundle ? Number(formData.items_per_bundle) : null,
+                packets_per_bundle: formData.bundle_enabled ? Number(formData.packets_per_bundle) : null,
+                items_per_bundle: formData.bundle_enabled ? (formData.items_per_bundle ? Number(formData.items_per_bundle) : Number(formData.items_per_packet || 0) * Number(formData.packets_per_bundle || 0)) : null,
                 raw_material_id: formData.raw_material_id || null,
                 cap_template_id: formData.cap_template_id || null,
                 inner_template_id: formData.inner_template_id || null,
-                packets_per_bag: formData.packets_per_bag ? Number(formData.packets_per_bag) : null,
-                items_per_bag: formData.items_per_bag ? Number(formData.items_per_bag) : null,
-                packets_per_box: formData.packets_per_box ? Number(formData.packets_per_box) : null,
-                items_per_box: formData.items_per_box ? Number(formData.items_per_box) : null,
+                packets_per_bag: formData.bag_enabled ? Number(formData.packets_per_bag) : null,
+                items_per_bag: formData.bag_enabled ? (formData.items_per_bag ? Number(formData.items_per_bag) : Number(formData.items_per_packet || 0) * Number(formData.packets_per_bag || 0)) : null,
+                packets_per_box: formData.box_enabled ? Number(formData.packets_per_box) : null,
+                items_per_box: formData.box_enabled ? (formData.items_per_box ? Number(formData.items_per_box) : Number(formData.items_per_packet || 0) * Number(formData.packets_per_box || 0)) : null,
                 bundle_enabled: formData.bundle_enabled,
                 bag_enabled: formData.bag_enabled,
                 box_enabled: formData.box_enabled,
@@ -433,8 +438,8 @@ export default function ProductsPage() {
                                     <th>Weight (g)</th>
                                     <th>Raw Material</th>
                                     <th>Items/Pkt</th>
-                                    <th>Pkts/Bundle</th>
-                                    <th>Items/Bundle</th>
+                                    <th>Packaging Units</th>
+                                    <th>Total/Unit</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -452,8 +457,20 @@ export default function ProductsPage() {
                                         <td className={styles.weightCell}>{product.weight_grams}</td>
                                         <td>{product.raw_materials?.name || '—'}</td>
                                         <td>{product.items_per_packet}</td>
-                                        <td>{product.packets_per_bundle}</td>
-                                        <td>{product.items_per_bundle || '—'}</td>
+                                        <td>
+                                            <div className={styles.unitList}>
+                                                {product.bundle_enabled && <span className={styles.unitBadge}>Bundle ({product.packets_per_bundle})</span>}
+                                                {product.bag_enabled && <span className={styles.unitBadge}>Bag ({product.packets_per_bag})</span>}
+                                                {product.box_enabled && <span className={styles.unitBadge}>Box ({product.packets_per_box})</span>}
+                                            </div>
+                                        </td>
+                                        <td>
+                                           <div className={styles.unitList}>
+                                                {product.bundle_enabled && <span className={styles.countBadge}>{Number(product.items_per_packet || 0) * Number(product.packets_per_bundle || 0)}</span>}
+                                                {product.bag_enabled && <span className={styles.countBadge}>{Number(product.items_per_packet || 0) * Number(product.packets_per_bag || 0)}</span>}
+                                                {product.box_enabled && <span className={styles.countBadge}>{Number(product.items_per_packet || 0) * Number(product.packets_per_box || 0)}</span>}
+                                           </div>
+                                        </td>
 
                                         <td>
                                             <div className={styles.actions}>
@@ -697,6 +714,17 @@ export default function ProductsPage() {
                                                         />
                                                         <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_bag || 0)} items</div>
                                                     </div>
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Items per Bag</label>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.items_per_bag}
+                                                            onChange={(e) => setFormData({ ...formData, items_per_bag: e.target.value })}
+                                                            placeholder="e.g. 600"
+                                                        />
+                                                        <div className={styles.inputHint}>Loose items if no packets</div>
+                                                    </div>
                                                 </div>
                                             )}
 
@@ -721,6 +749,17 @@ export default function ProductsPage() {
                                                             min="1"
                                                         />
                                                         <div className={styles.inputHint}>Total: {Number(formData.items_per_packet || 0) * Number(formData.packets_per_box || 0)} items</div>
+                                                    </div>
+                                                    <div className={styles.formGroup}>
+                                                        <label className={styles.formLabel}>Items per Box</label>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.items_per_box}
+                                                            onChange={(e) => setFormData({ ...formData, items_per_box: e.target.value })}
+                                                            placeholder="e.g. 600"
+                                                        />
+                                                        <div className={styles.inputHint}>Loose items if no packets</div>
                                                     </div>
                                                 </div>
                                             )}

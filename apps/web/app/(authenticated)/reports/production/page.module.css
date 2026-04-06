@@ -48,7 +48,7 @@
     gap: 0.25rem;
 }
 
-:root[class~="dark"] .categoryToggle {
+:global(.dark) .categoryToggle {
     background-color: var(--surface-elevated);
 }
 
@@ -74,8 +74,8 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
-:root[class~="dark"] .toggleActive {
-    background-color: var(--slate-800);
+:global(.dark) .toggleActive {
+    background-color: var(--surface-elevated);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
@@ -89,7 +89,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
-:root[class~="dark"] .filterBar {
+:global(.dark) .filterBar {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
@@ -122,8 +122,8 @@
     transition: all var(--transition-fast);
 }
 
-:root[class~="dark"] .filterSelect,
-:root[class~="dark"] .filterInput {
+:global(.dark) .filterSelect,
+:global(.dark) .filterInput {
     background-color: var(--surface-elevated);
 }
 
@@ -180,7 +180,7 @@
     transition: all var(--transition-fast);
 }
 
-:root[class~="dark"] .clearButton {
+:global(.dark) .clearButton {
     background-color: var(--surface-elevated);
 }
 
@@ -189,7 +189,7 @@
     color: var(--text-main);
 }
 
-:root[class~="dark"] .clearButton:hover {
+:global(.dark) .clearButton:hover {
     background-color: var(--surface-hover);
 }
 
@@ -213,7 +213,7 @@
     gap: 1.25rem;
 }
 
-:root[class~="dark"] .statCard {
+:global(.dark) .statCard {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
@@ -276,7 +276,7 @@
     overflow: hidden;
 }
 
-:root[class~="dark"] .tableCard {
+:global(.dark) .tableCard {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
@@ -295,7 +295,7 @@
     border-bottom: 1px solid var(--border);
 }
 
-:root[class~="dark"] .table thead {
+:global(.dark) .table thead {
     background-color: var(--surface-elevated);
 }
 
@@ -319,7 +319,7 @@
     background-color: var(--slate-50);
 }
 
-:root[class~="dark"] .table tbody tr:hover {
+:global(.dark) .table tbody tr:hover {
     background-color: var(--surface-elevated);
 }
 
@@ -358,6 +358,14 @@
 .efficiencyLow {
     background-color: var(--warning-bg);
     color: var(--warning-text);
+}
+
+.textMuted {
+    color: var(--text-muted);
+}
+
+.textXs {
+    font-size: 0.75rem;
 }
 
 /* Loading & Error States */
@@ -414,7 +422,7 @@
     border-color: var(--primary);
 }
 
-:root[class~="dark"] .retryButton:hover {
+:global(.dark) .retryButton:hover {
     background-color: var(--surface-hover);
 }
 

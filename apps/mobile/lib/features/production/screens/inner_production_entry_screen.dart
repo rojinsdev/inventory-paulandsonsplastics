@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/widgets/multi_select_downtime_reason.dart';
 import '../providers/master_data_provider.dart';
 import '../providers/production_provider.dart';
 
@@ -25,10 +26,12 @@ class _InnerProductionEntryScreenState
   TimeOfDay _endTime = const TimeOfDay(hour: 20, minute: 0);
 
   final _totalWeightController = TextEditingController();
-  final _totalProducedController = TextEditingController();
   final _actualCycleTimeController = TextEditingController();
   final _actualWeightController = TextEditingController();
   final _remarksController = TextEditingController();
+  final _downtimeReasonController = TextEditingController();
+
+  List<String> _selectedDowntimeReasons = [];
 
   @override
   void initState() {
@@ -52,21 +55,42 @@ class _InnerProductionEntryScreenState
     // Apply sticky logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final lastEntry = ref.read(lastEntryProvider);
-      if (lastEntry != null) {
+      
+      // Only apply sticky logic if it's the SAME shift and same date
+      // This prevents Shift 1 times from leaking into Shift 2 and vice versa
+      if (lastEntry != null && 
+          lastEntry.shiftNumber == _shiftNumber &&
+          lastEntry.date.day == _selectedDate.day &&
+          lastEntry.date.month == _selectedDate.month) {
+        
         setState(() {
-          _selectedDate = lastEntry.date;
           final parts = lastEntry.endTime.split(':');
           if (parts.length == 2) {
-            _startTime = TimeOfDay(
-              hour: int.parse(parts[0]),
-              minute: int.parse(parts[1]),
-            );
-            // Default end time logically (12 hours later or at shift boundary)
-            int endHour = (_startTime.hour + 12) % 24;
-            if (_shiftNumber == 1 && endHour > 20) endHour = 20;
-            if (_shiftNumber == 2 && endHour > 8 && endHour < 20) endHour = 8;
+            final hour = int.parse(parts[0]);
+            final minute = int.parse(parts[1]);
+            _startTime = TimeOfDay(hour: hour, minute: minute);
+            
+            // Default end time logically (e.g. 1 hour later, capped at shift boundary)
+            int nextHour = (hour + 1) % 24;
+            
+            if (_shiftNumber == 1) {
+              // Day Shift: Cap at 20:00
+              int endHour = nextHour > 20 ? 20 : nextHour;
+              _endTime = TimeOfDay(hour: endHour, minute: minute);
+            } else {
+              // Night Shift: 20:00 to 08:00
+              bool isPastBoundary = nextHour > 8 && nextHour < 20;
+              int endHour = isPastBoundary ? 8 : nextHour;
+              _endTime = TimeOfDay(hour: endHour, minute: minute);
+            }
 
-            _endTime = TimeOfDay(hour: endHour, minute: _startTime.minute);
+            // Final safety collision check
+            if (_startTime.hour == _endTime.hour && _startTime.minute == _endTime.minute) {
+              _endTime = TimeOfDay(
+                hour: _endTime.hour,
+                minute: (_endTime.minute + 15) % 60
+              );
+            }
           }
         });
       }
@@ -76,10 +100,10 @@ class _InnerProductionEntryScreenState
   @override
   void dispose() {
     _totalWeightController.dispose();
-    _totalProducedController.dispose();
     _actualCycleTimeController.dispose();
     _actualWeightController.dispose();
     _remarksController.dispose();
+    _downtimeReasonController.dispose();
     super.dispose();
   }
 
@@ -112,16 +136,16 @@ class _InnerProductionEntryScreenState
   }
 
   double _calculateShiftDuration() {
-    int startMinutes = _startTime.hour * 60 + _startTime.minute;
-    int endMinutes = _endTime.hour * 60 + _endTime.minute;
+    double startHours = _startTime.hour + (_startTime.minute / 60.0);
+    double endHours = _endTime.hour + (_endTime.minute / 60.0);
 
-    // Handle overnight shifts (Shift 2)
-    if (_shiftNumber == 2 && endMinutes < startMinutes) {
-      endMinutes += 24 * 60;
+    if (endHours <= startHours) {
+      // Overnight
+      return (24 - startHours) + endHours;
     }
-
-    return (endMinutes - startMinutes) / 60.0; // Return hours
+    return endHours - startHours;
   }
+
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
@@ -154,14 +178,25 @@ class _InnerProductionEntryScreenState
             totalWeightKg: _totalWeightController.text.isNotEmpty
                 ? double.parse(_totalWeightController.text)
                 : null,
-            totalProduced: _totalProducedController.text.isNotEmpty
-                ? int.parse(_totalProducedController.text)
-                : null,
+            totalProduced: null,
             actualCycleTimeSeconds:
                 double.parse(_actualCycleTimeController.text),
             actualWeightGrams: double.parse(_actualWeightController.text),
             remarks: _remarksController.text.isNotEmpty
                 ? _remarksController.text
+                : null,
+            downtimeMinutes: () {
+              final shiftHours = _calculateShiftDuration();
+              final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
+              final totalWeight = double.tryParse(_totalWeightController.text) ?? 0;
+              final unitWeight = double.tryParse(_actualWeightController.text) ?? 1;
+              int actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
+              final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+              final shiftDurationSeconds = shiftHours * 3600;
+              return ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440);
+            }(),
+            downtimeReason: _selectedDowntimeReasons.isNotEmpty
+                ? _selectedDowntimeReasons.join(', ')
                 : null,
             date: _selectedDate,
           );
@@ -430,7 +465,9 @@ class _InnerProductionEntryScreenState
                                       fontSize: 12,
                                       color: colorScheme.onSurfaceVariant)),
                               const SizedBox(height: 4),
-                              Text(_startTime.format(context),
+                              Text(
+                                  DateFormat.jm().format(DateTime(0, 0, 0,
+                                      _startTime.hour, _startTime.minute)),
                                   style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
@@ -457,7 +494,9 @@ class _InnerProductionEntryScreenState
                                       fontSize: 12,
                                       color: colorScheme.onSurfaceVariant)),
                               const SizedBox(height: 4),
-                              Text(_endTime.format(context),
+                              Text(
+                                  DateFormat.jm().format(DateTime(0, 0, 0,
+                                      _endTime.hour, _endTime.minute)),
                                   style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
@@ -522,17 +561,13 @@ class _InnerProductionEntryScreenState
                             onChanged: (value) {
                               setState(() {
                                 _selectedInnerId = value;
-                                // Pre-fill ideal values
+                                // Pre-fill ideal values (default)
                                 final variant =
                                     variants.firstWhere((v) => v.id == value);
-                                if (_actualCycleTimeController.text.isEmpty) {
-                                  _actualCycleTimeController.text =
-                                      variant.idealCycleTimeSeconds.toString();
-                                }
-                                if (_actualWeightController.text.isEmpty) {
-                                  _actualWeightController.text =
-                                      variant.idealWeightGrams.toString();
-                                }
+                                _actualCycleTimeController.text =
+                                    variant.idealCycleTimeSeconds.toString();
+                                _actualWeightController.text =
+                                    variant.idealWeightGrams.toString();
                               });
                             },
                             validator: (value) =>
@@ -558,38 +593,19 @@ class _InnerProductionEntryScreenState
                     labelText: 'Total Weight (kg)',
                     prefixIcon: Icon(Icons.scale),
                     suffixText: 'kg',
-                    helperText: 'Optional if Total Produced is provided',
                   ),
+                  onChanged: (value) => setState(() {}),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   validator: (val) {
-                    if ((val == null || val.isEmpty) &&
-                        _totalProducedController.text.isEmpty) {
-                      return 'Enter Weight or Total Produced';
+                    if (val == null || val.isEmpty) {
+                      return 'Required';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 24),
 
-                // Total Produced (Units)
-                TextFormField(
-                  controller: _totalProducedController,
-                  decoration: const InputDecoration(
-                    labelText: 'Total Produced (Units)',
-                    prefixIcon: Icon(Icons.pin_outlined),
-                    suffixText: 'units',
-                    helperText: 'Optional if Total Weight is provided',
-                  ),
-                  keyboardType: TextInputType.number,
-                  validator: (val) {
-                    if ((val == null || val.isEmpty) &&
-                        _totalWeightController.text.isEmpty) {
-                      return 'Enter Weight or Total Produced';
-                    }
-                    return null;
-                  },
-                ),
                 const SizedBox(height: 24),
 
                 // Cycle Time & Unit Weight Row
@@ -604,6 +620,7 @@ class _InnerProductionEntryScreenState
                           suffixText: 'seconds',
                           helperText: 'From machine display',
                         ),
+                        onChanged: (value) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         validator: (val) =>
@@ -620,6 +637,7 @@ class _InnerProductionEntryScreenState
                           suffixText: 'grams',
                           helperText: 'Measured weight',
                         ),
+                        onChanged: (value) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         validator: (val) =>
@@ -627,6 +645,66 @@ class _InnerProductionEntryScreenState
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 24),
+                
+                // Downtime System
+                Builder(
+                  builder: (context) {
+                    final hasInput = _totalWeightController.text.isNotEmpty;
+                    final hasProduct = _selectedInnerId != null;
+                    final shouldCalculate = hasProduct && hasInput;
+
+                    final shiftHours = _calculateShiftDuration();
+                    final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
+                    
+                    final totalWeight = double.tryParse(_totalWeightController.text) ?? 0;
+                    final unitWeight = double.tryParse(_actualWeightController.text) ?? 1;
+                    int actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
+                    
+                    final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+                    final shiftDurationSeconds = shiftHours * 3600;
+                    
+                    final downtimeMinutes = shouldCalculate 
+                        ? ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440)
+                        : 0;
+                    
+                    final isRequired = shouldCalculate && downtimeMinutes > 30;
+
+                    return Column(
+                      children: [
+                        MultiSelectDowntimeReason(
+                          initialValues: _selectedDowntimeReasons,
+                          labelText: isRequired ? 'Downtime Reasons (Required: ${downtimeMinutes}m)' : 'Downtime Reasons (Optional: ${downtimeMinutes}m)',
+                          helperText: isRequired ? 'Reason required for downtime > 30 mins' : null,
+                          helperStyle: TextStyle(color: isRequired ? Theme.of(context).colorScheme.error : null),
+                          onSelectionChanged: (selected) {
+                            setState(() {
+                              _selectedDowntimeReasons = selected;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                        if (_selectedDowntimeReasons.contains('Other')) ...[
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _downtimeReasonController,
+                            decoration: const InputDecoration(
+                              labelText: 'Specify Other Reason',
+                              prefixIcon: Icon(Icons.edit_note),
+                            ),
+                            maxLines: 2,
+                            validator: (val) {
+                              if (isRequired && (val == null || val.trim().isEmpty)) {
+                                return 'Please specify the reason';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 24),
 

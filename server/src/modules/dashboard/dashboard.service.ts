@@ -1,4 +1,5 @@
 import { supabase } from '../../config/supabase';
+import { getIsoLocalDate, getStartOfLocalWeek } from '../../utils/dateUtils';
 
 export interface DashboardStats {
     todaysProduction: number;
@@ -88,7 +89,7 @@ export interface ComprehensiveDashboardData {
 
 export class DashboardService {
     async getStats(factoryId?: string): Promise<DashboardStats> {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getIsoLocalDate();
 
         // 1. Today's Production: Sum of actual_quantity from production_logs for today
         let productionQuery = supabase
@@ -156,8 +157,8 @@ export class DashboardService {
     }
 
     async getComprehensiveData(startDate?: string, endDate?: string): Promise<ComprehensiveDashboardData> {
-        const today = new Date().toISOString().split('T')[0];
-        const start = startDate || this.getStartOfWeek();
+        const today = getIsoLocalDate();
+        const start = startDate || getStartOfLocalWeek();
         const end = endDate || today;
 
         // Production Metrics
@@ -318,7 +319,7 @@ export class DashboardService {
         const { data: recentOrders } = await supabase
             .from('sales_orders')
             .select('customer_id')
-            .gte('order_date', thirtyDaysAgo.toISOString().split('T')[0]);
+            .gte('order_date', getIsoLocalDate(thirtyDaysAgo));
 
         const activeCustomers = new Set(recentOrders?.map(o => o.customer_id) || []).size;
 
@@ -595,7 +596,7 @@ export class DashboardService {
         // Upcoming deliveries (next 7 days)
         const nextWeek = new Date(todayDate);
         nextWeek.setDate(todayDate.getDate() + 7);
-        const nextWeekStr = nextWeek.toISOString().split('T')[0];
+        const nextWeekStr = getIsoLocalDate(nextWeek);
 
         const { data: upcomingDeliveries } = await supabase
             .from('sales_orders')

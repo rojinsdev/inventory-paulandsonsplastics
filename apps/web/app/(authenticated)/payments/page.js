@@ -4,9 +4,10 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ordersAPI, customersAPI } from '@/lib/api';
 import {
-    DollarSign, Search, Filter, Calendar, X,
+    IndianRupee, Search, Filter, Calendar, X,
     AlertCircle, CheckCircle2, Clock, TrendingUp
 } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
 import styles from './page.module.css';
 
@@ -129,7 +130,7 @@ export default function PaymentsPage() {
             {/* Header */}
             <div className={styles.header}>
                 <div className={styles.headerLeft}>
-                    <DollarSign className={styles.headerIcon} size={32} />
+                    <IndianRupee className={styles.headerIcon} size={32} />
                     <div>
                         <h1 className={styles.title}>Payments</h1>
                         <p className={styles.subtitle}>Manage pending payments and credit tracking</p>
@@ -145,7 +146,7 @@ export default function PaymentsPage() {
                     </div>
                     <div className={styles.statContent}>
                         <p className={styles.statLabel}>Total Outstanding</p>
-                        <p className={styles.statValue}>₹{stats.totalOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+                        <p className={styles.statValue}>{formatCurrency(stats.totalOutstanding)}</p>
                         <p className={styles.statDescription}>Combined balance due from all orders</p>
                     </div>
                 </div>
@@ -255,10 +256,10 @@ export default function PaymentsPage() {
                                     <td className={styles.orderNumber} data-label="Order #">#{order.id?.slice(-6).toUpperCase()}</td>
                                     <td data-label="Customer">{order.customer?.name || 'N/A'}</td>
                                     <td data-label="Order Date">{new Date(order.order_date).toLocaleDateString('en-IN')}</td>
-                                    <td data-label="Total Amount">₹{parseFloat(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                    <td data-label="Amount Paid">₹{parseFloat(order.amount_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                    <td data-label="Total Amount">{formatCurrency(order.total_amount)}</td>
+                                    <td data-label="Amount Paid">{formatCurrency(order.amount_paid)}</td>
                                     <td className={styles.balanceDue} data-label="Balance Due">
-                                        ₹{parseFloat(order.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        {formatCurrency(order.balance_due)}
                                     </td>
                                     <td data-label="Credit Deadline">
                                         {order.credit_deadline
@@ -290,7 +291,7 @@ export default function PaymentsPage() {
                                             className={styles.recordButton}
                                             disabled={order.balance_due <= 0}
                                         >
-                                            <DollarSign size={16} />
+                                            <IndianRupee size={16} />
                                             Record Payment
                                         </button>
                                     </td>
@@ -324,15 +325,15 @@ export default function PaymentsPage() {
                             <div className={styles.summarySection}>
                                 <div className={styles.summaryRow}>
                                     <span>Total Amount:</span>
-                                    <span>₹{parseFloat(selectedOrder.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                    <span>{formatCurrency(selectedOrder.total_amount)}</span>
                                 </div>
                                 <div className={styles.summaryRow}>
                                     <span>Already Paid:</span>
-                                    <span>₹{parseFloat(selectedOrder.amount_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                    <span>{formatCurrency(selectedOrder.amount_paid)}</span>
                                 </div>
                                 <div className={`${styles.summaryRow} ${styles.balanceRow}`}>
                                     <span>Balance Due:</span>
-                                    <span>₹{parseFloat(selectedOrder.balance_due || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                    <span>{formatCurrency(selectedOrder.balance_due)}</span>
                                 </div>
                             </div>
 
@@ -347,7 +348,7 @@ export default function PaymentsPage() {
                                                     <span className={styles.historyDate}>{new Date(p.created_at).toLocaleDateString('en-IN')}</span>
                                                     <span className={styles.historyMethod}>{p.payment_method}</span>
                                                 </div>
-                                                <div className={styles.historyAmount}>₹{parseFloat(p.amount).toLocaleString('en-IN')}</div>
+                                                <div className={styles.historyAmount}>{formatCurrency(p.amount)}</div>
                                             </div>
                                         ))}
                                     </div>
@@ -410,7 +411,7 @@ export default function PaymentsPage() {
                                     className={styles.submitButton}
                                     disabled={recordPaymentMutation.isPending}
                                 >
-                                    <DollarSign size={18} />
+                                    <IndianRupee size={18} />
                                     {recordPaymentMutation.isPending ? 'Recording...' : 'Record Payment'}
                                 </button>
                             </div>

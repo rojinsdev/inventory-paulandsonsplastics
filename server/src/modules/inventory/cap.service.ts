@@ -4,7 +4,6 @@ export interface CreateCapDTO {
     name: string;
     color?: string;
     ideal_weight_grams: number;
-    ideal_cycle_time_seconds: number;
     factory_id: string;
     raw_material_id?: string;
 }
@@ -16,9 +15,7 @@ export interface UpdateCapDTO extends Partial<CreateCapDTO> {
 export interface CreateCapTemplateDTO {
     name: string;
     ideal_weight_grams: number;
-    ideal_cycle_time_seconds?: number;
     raw_material_id?: string;
-    machine_id?: string;
     factory_id: string;
     colors: string[];
 }
@@ -70,7 +67,6 @@ export class CapService {
         const { data: cap, error } = await supabase
             .from('caps')
             .select(`
-                *,
                 *,
                 mapped_products:products(id, name, size, color),
                 raw_material:raw_materials(id, name)
@@ -169,8 +165,8 @@ export class CapService {
         // 1. Create Template (Sanitize data)
         const {
             product_template_ids,
+            tub_template_ids, // Extra frontend field
             colors: _colors, // Double safety
-            machine_id,
             ...templateData
         } = payload;
 
@@ -187,11 +183,9 @@ export class CapService {
             name: template.name,
             color: color,
             ideal_weight_grams: template.ideal_weight_grams,
-            ideal_cycle_time_seconds: template.ideal_cycle_time_seconds || 0.0,
             raw_material_id: template.raw_material_id,
             factory_id: template.factory_id,
-            template_id: template.id,
-            machine_id: machine_id || null
+            template_id: template.id
         }));
 
         const { data: createdVariants, error: vError } = await supabase
@@ -223,7 +217,7 @@ export class CapService {
                     *,
                     stock:cap_stock_balances(quantity)
                 ),
-                mapped_product_templates:product_templates(id, name, size)
+                mapped_tub_templates:product_templates(id, name, size)
             `);
 
         if (factoryId) {
@@ -244,7 +238,7 @@ export class CapService {
                     *,
                     stock:cap_stock_balances(quantity)
                 ),
-                mapped_product_templates:product_templates(id, name, size)
+                mapped_tub_templates:product_templates(id, name, size)
             `)
             .eq('id', id)
             .single();
@@ -254,7 +248,7 @@ export class CapService {
     }
 
     async updateTemplate(id: string, data: any) {
-        const { product_template_ids, colors, machine_id, ...templateData } = data;
+        const { product_template_ids, tub_template_ids, colors, ...templateData } = data;
 
         // 1. Update Cap Template metadata
         const { data: template, error } = await supabase
@@ -266,20 +260,84 @@ export class CapService {
 
         if (error) throw new Error(error.message);
 
-        // 1.5 Update associated variants (caps)
-        const { error: variantError } = await supabase
+        // 2. Sync Variations (Caps)
+        // 2.1 Fetch existing variants
+        const { data: existingVariants, error: fetchError } = await supabase
             .from('caps')
-            .update({
-                ideal_weight_grams: template.ideal_weight_grams,
-                ideal_cycle_time_seconds: template.ideal_cycle_time_seconds,
-                raw_material_id: template.raw_material_id,
-                machine_id: machine_id || null
-            })
+            .select('*')
             .eq('template_id', id);
 
-        if (variantError) throw new Error(variantError.message);
+        if (fetchError) throw new Error(fetchError.message);
 
-        // 2. Handle Product Template Mapping
+        const existingColors = existingVariants?.map(v => v.color) || [];
+
+        // 2.2 Identify operations
+        const colorsToAdd = colors.filter((c: string) => !existingColors.includes(c));
+        const variantsToRemove = (existingVariants || []).filter(v => !colors.includes(v.color));
+        const variantsToKeep = (existingVariants || []).filter(v => colors.includes(v.color));
+
+        // 2.3 Update existing variants (Propagate name, weight, material)
+        if (variantsToKeep.length > 0) {
+            const { error: updateError } = await supabase
+                .from('caps')
+                .update({
+                    name: template.name,
+                    ideal_weight_grams: template.ideal_weight_grams,
+                    raw_material_id: template.raw_material_id
+                })
+                .eq('template_id', id)
+                .in('color', colors); // Only those we keep
+
+            if (updateError) throw new Error(updateError.message);
+        }
+
+        // 2.4 Add new variants
+        if (colorsToAdd.length > 0) {
+            const newVariants = colorsToAdd.map((color: string) => ({
+                name: template.name,
+                color: color,
+                ideal_weight_grams: template.ideal_weight_grams,
+                raw_material_id: template.raw_material_id,
+                factory_id: template.factory_id,
+                template_id: template.id
+            }));
+
+            const { error: insertError } = await supabase
+                .from('caps')
+                .insert(newVariants);
+
+            if (insertError) throw new Error(insertError.message);
+        }
+
+        // 2.5 Remove deleted variants (Safety check for stock)
+        if (variantsToRemove.length > 0) {
+            for (const variant of variantsToRemove) {
+                // Check stock before deletion
+                const { data: stock } = await supabase
+                    .from('cap_stock_balances')
+                    .select('quantity')
+                    .eq('cap_id', variant.id)
+                    .gt('quantity', 0);
+
+                if (stock && stock.length > 0) {
+                    // Variant has stock - we skip deletion to prevent data loss
+                    // In a more advanced UI we'd return a warning, but for now we just skip
+                    continue;
+                }
+
+                // No stock? Safe to delete
+                const { error: deleteError } = await supabase
+                    .from('caps')
+                    .delete()
+                    .eq('id', variant.id);
+
+                if (deleteError) {
+                    console.error(`Failed to delete variant ${variant.id}: ${deleteError.message}`);
+                }
+            }
+        }
+
+        // 3. Handle Product Template Mapping
         if (product_template_ids) {
             // First, clear existing mappings for this cap template
             const { error: clearError } = await supabase
@@ -348,6 +406,45 @@ export class CapService {
 
         if (error) throw new Error(error.message);
         return { success: true };
+    }
+
+    async quickDefineVariant(templateId: string, color: string, factoryId: string, rawMaterialId?: string) {
+        const template = await this.getTemplateById(templateId);
+
+        const variant = {
+            name: template.name,
+            color: color,
+            ideal_weight_grams: template.ideal_weight_grams || 0,
+            raw_material_id: rawMaterialId || template.raw_material_id,
+            factory_id: factoryId,
+            template_id: template.id
+        };
+
+        const { data: created, error } = await supabase
+            .from('caps')
+            .insert(variant)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Failed to quick define cap variant: ${error.message}`);
+        return created;
+    }
+
+    async quickDefineTemplate(name: string, factoryId: string) {
+        const templateData = {
+            name,
+            ideal_weight_grams: 0,
+            factory_id: factoryId
+        };
+
+        const { data: template, error } = await supabase
+            .from('cap_templates')
+            .insert(templateData)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Failed to quick define cap template: ${error.message}`);
+        return template;
     }
 }
 

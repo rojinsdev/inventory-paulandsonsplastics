@@ -17,8 +17,10 @@ async function applyMigration() {
         console.log('Connected to database.');
 
         const query = `
-      ALTER TABLE cap_production_logs ADD COLUMN IF NOT EXISTS total_produced INTEGER;
-      COMMENT ON COLUMN cap_production_logs.total_produced IS 'Manual unit count entered by user. If null, use calculated_quantity.';
+      ALTER TABLE cap_production_logs ADD COLUMN IF NOT EXISTS downtime_minutes INTEGER DEFAULT 0;
+      ALTER TABLE cap_production_logs ADD COLUMN IF NOT EXISTS downtime_reason TEXT;
+      ALTER TABLE inner_production_logs ADD COLUMN IF NOT EXISTS downtime_minutes INTEGER DEFAULT 0;
+      ALTER TABLE inner_production_logs ADD COLUMN IF NOT EXISTS downtime_reason TEXT;
     `;
 
         await client.query(query);

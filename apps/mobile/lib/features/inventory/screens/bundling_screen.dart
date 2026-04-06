@@ -36,7 +36,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
             int.parse(_quantityController.text),
             unitType: _unitType,
             source: _source,
-            capId: _source == 'semi_finished' ? _selectedCapVariantId : null,
+            capId: _selectedCapVariantId,
           );
     }
   }
@@ -77,6 +77,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
 
     final productTemplatesAsync = ref.watch(productTemplatesProvider);
     final capTemplatesAsync = ref.watch(capTemplatesProvider);
+    final stockAsync = ref.watch(inventoryStockProvider);
     final isSubmitting = ref.watch(inventoryOperationProvider).isLoading;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -165,7 +166,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                   if (template == null || template.bundleEnabled) {
                     segments.add(const ButtonSegment(
                       value: 'bundle',
-                      label: Text('Tub'),
+                      label: Text('Bundle'),
                       icon: Icon(Icons.inventory_2),
                     ));
                   }
@@ -266,8 +267,8 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Conditional Cap Selector
-              if (_source == 'semi_finished') ...[
+              // Cap Selector Section (Explicit variant selection)
+              ...[
                 // Cap Template Selector
                 capTemplatesAsync.when(
                   data: (templates) => DropdownButtonFormField<String>(
@@ -382,6 +383,98 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
               ),
               const SizedBox(height: 24),
 
+              // Stock Preview Card (The "Small Preview")
+              if (_selectedProductVariantId != null && _source == 'packed')
+                stockAsync.when(
+                  data: (stockRecords) {
+                    final item = stockRecords.firstWhereOrNull(
+                      (s) => s.productId == _selectedProductVariantId,
+                    );
+                    
+                    if (item == null) return const SizedBox.shrink();
+
+                    // Find the specific combination for the selected cap
+                    final combination = item.combinations.firstWhereOrNull(
+                      (c) => c.capId == _selectedCapVariantId,
+                    ) ?? item.combinations.firstWhereOrNull((c) => c.capId == null);
+
+                    final availablePackets = combination?.packedQty ?? 0;
+                    
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: availablePackets > 0 
+                            ? Colors.blue.withOpacity(0.1) 
+                            : Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: availablePackets > 0 
+                              ? Colors.blue.withOpacity(0.3) 
+                              : Colors.red.withOpacity(0.3),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.inventory_2,
+                                size: 16,
+                                color: availablePackets > 0 ? Colors.blue : Colors.red,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Current Selection Stock',
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: availablePackets > 0 ? Colors.blue : Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Available Packets:',
+                                style: theme.textTheme.bodySmall,
+                              ),
+                              Text(
+                                '$availablePackets',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: availablePackets > 0 ? Colors.blue[900] : Colors.red[900],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (item.combinations.length > 1) ...[
+                            const Divider(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Total (All Caps):',
+                                  style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                                ),
+                                Text(
+                                  '${item.packedQty}',
+                                  style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+
               TextFormField(
                 controller: _quantityController,
                 decoration: InputDecoration(
@@ -400,6 +493,47 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                   }
                   final n = int.tryParse(value);
                   if (n == null || n <= 0) return 'Must be greater than 0';
+ 
+                  // Stock Validation
+                  final stockRecords = stockAsync.value;
+                  if (stockRecords != null && _selectedProductVariantId != null) {
+                    final item = stockRecords.firstWhereOrNull(
+                      (s) => s.productId == _selectedProductVariantId,
+                    );
+ 
+                    if (item != null) {
+                      if (_source == 'packed') {
+                        // RESOLVE SPECIFIC COMBINATION STOCK
+                        final combination = item.combinations.firstWhereOrNull(
+                          (c) => c.capId == _selectedCapVariantId,
+                        ) ?? item.combinations.firstWhereOrNull((c) => c.capId == null);
+
+                        final specificPackedQty = combination?.packedQty ?? 0;
+
+                        final packetsPerUnit = _unitType == 'box'
+                            ? item.packetsPerBox
+                            : (_unitType == 'bag'
+                                ? item.packetsPerBag
+                                : item.packetsPerBundle);
+                        
+                        final requiredPackets = n * (packetsPerUnit ?? 50);
+                        if (specificPackedQty < requiredPackets) {
+                          return 'Insufficient packets for this cap. Have: $specificPackedQty, Need: $requiredPackets';
+                        }
+                      } else {
+                        final itemsPerUnit = _unitType == 'box'
+                            ? item.itemsPerBox
+                            : (_unitType == 'bag'
+                                ? item.itemsPerBag
+                                : item.itemsPerBundle);
+                        
+                        final requiredItems = n * (itemsPerUnit ?? 600);
+                        if (item.semiFinishedQty < requiredItems) {
+                          return 'Insufficient loose stock. Have: ${item.semiFinishedQty}, Need: $requiredItems';
+                        }
+                      }
+                    }
+                  }
                   return null;
                 },
               ),

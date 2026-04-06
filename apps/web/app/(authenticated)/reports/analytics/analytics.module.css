@@ -164,7 +164,7 @@
 /* Metrics Grid */
 .metricsGrid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(3, 1fr);
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
@@ -199,7 +199,6 @@
     border: 1px solid var(--border);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     padding: 1.5rem;
-    transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .chartCard.fullWidth {
@@ -211,7 +210,6 @@
 }
 
 .chartCard:hover {
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
@@ -348,10 +346,6 @@
     color: var(--text-main);
 }
 
-.dataTable tbody tr:hover {
-    background: var(--slate-50);
-}
-
 :root[class~="dark"] .dataTable tbody tr:hover {
     background: var(--surface-elevated);
 }
@@ -387,6 +381,108 @@
     background: var(--surface-elevated);
 }
 
+/* Action Items */
+.actionItems {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.actionItem {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--slate-50);
+    border-radius: 0.75rem;
+    border: 1px solid var(--border);
+}
+
+:root[class~="dark"] .actionItem {
+    background: var(--surface-elevated);
+}
+
+.actionItem:hover {
+    border-color: var(--primary);
+}
+
+.actionIcon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    flex-shrink: 0;
+}
+
+.actionItem.high .actionIcon {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+.actionItem.medium .actionIcon {
+    background: #fef3c7;
+    color: #f59e0b;
+}
+
+.actionContent {
+    flex: 1;
+}
+
+.actionReason {
+    font-weight: 600;
+    color: var(--text-main);
+    margin: 0 0 0.25rem 0;
+    font-size: 0.875rem;
+}
+
+.actionDetail {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0;
+}
+
+/* Downtime Diagnostics */
+.downtimeRow {
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+}
+
+.pieContainer {
+    flex: 1;
+    min-width: 250px;
+}
+
+.downtimeList {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-width: 200px;
+}
+
+.downtimeItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.reasonLabel {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.reasonValue {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
 /* Responsive Design */
 @media (max-width: 1200px) {
     .machineCharts {
@@ -395,6 +491,15 @@
 }
 
 @media (max-width: 768px) {
+    .chartsGrid {
+        grid-template-columns: 1fr;
+    }
+
+    .downtimeRow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
     .tableContainer {
         border-radius: 0.5rem;
     }

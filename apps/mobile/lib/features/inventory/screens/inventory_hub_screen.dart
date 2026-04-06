@@ -19,6 +19,7 @@ class InventoryHubScreen extends ConsumerWidget {
         onRefresh: () async {
           ref.invalidate(inventoryStockProvider);
           ref.invalidate(capStockProvider);
+          ref.invalidate(innerStockProvider);
           ref.invalidate(productionRequestsProvider);
           ref.invalidate(pendingOrdersProvider);
         },
@@ -54,34 +55,45 @@ class InventoryHubScreen extends ConsumerWidget {
                       builder: (context, ref, child) {
                         final stockAsync = ref.watch(inventoryStockProvider);
                         final capStockAsync = ref.watch(capStockProvider);
+                        final innerStockAsync = ref.watch(innerStockProvider);
 
-                        if (stockAsync.isLoading || capStockAsync.isLoading) {
+                        if (stockAsync.isLoading ||
+                            capStockAsync.isLoading ||
+                            innerStockAsync.isLoading) {
                           return const StockLoadingCard();
                         }
 
-                        if (stockAsync.hasError || capStockAsync.hasError) {
+                        if (stockAsync.hasError ||
+                            capStockAsync.hasError ||
+                            innerStockAsync.hasError) {
                           return StockErrorCard(
                             error: (stockAsync.error ??
                                     capStockAsync.error ??
+                                    innerStockAsync.error ??
                                     'Unknown error')
                                 .toString(),
                             onRetry: () {
                               ref.invalidate(inventoryStockProvider);
                               ref.invalidate(capStockProvider);
+                              ref.invalidate(innerStockProvider);
                             },
                           );
                         }
 
                         final stocks = stockAsync.valueOrNull ?? [];
                         final capStocks = capStockAsync.valueOrNull ?? [];
+                        final innerStocks = innerStockAsync.valueOrNull ?? [];
 
-                        if (stocks.isEmpty && capStocks.isEmpty) {
+                        if (stocks.isEmpty &&
+                            capStocks.isEmpty &&
+                            innerStocks.isEmpty) {
                           return const StockEmptyCard();
                         }
 
                         return StockSummaryCard(
                           stocks: stocks,
                           capStocks: capStocks,
+                          innerStocks: innerStocks,
                           onTap: () => context.push('/stock-details'),
                         );
                       },

@@ -17,6 +17,7 @@ import '../../features/inventory/screens/raw_materials_screen.dart';
 import '../../features/inventory/screens/stock_detail_screen.dart';
 import '../../features/production/screens/production_requests_screen.dart';
 import '../../features/production/screens/order_preparation_screen.dart';
+import '../../features/production/screens/production_history_screen.dart';
 import '../../core/navigation/main_navigation.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -136,6 +137,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootNavigatorKey,
         path: '/production/preparation',
         builder: (context, state) => const OrderPreparationScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootNavigatorKey,
+        path: '/production/history',
+        builder: (context, state) => const ProductionHistoryScreen(),
       ),
     ],
   );

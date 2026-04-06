@@ -66,12 +66,16 @@ export class CashFlowService {
                 throw new Error("No factories found to allocate shared cost.");
             }
 
-            const splitAmount = Number((data.amount / factories.length).toFixed(2));
-            const logs = factories.map(f => ({
+            // Handle rounding: split equally but adjust the first factory for the remainder
+            const baseAmount = Math.floor((data.amount / factories.length) * 100) / 100;
+            const totalBase = Number((baseAmount * factories.length).toFixed(2));
+            const remainder = Number((data.amount - totalBase).toFixed(2));
+
+            const logs = factories.map((f, index) => ({
                 date: data.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
                 category_id: data.category_id,
                 factory_id: f.id,
-                amount: splitAmount,
+                amount: index === 0 ? Number((baseAmount + remainder).toFixed(2)) : baseAmount,
                 payment_mode: data.payment_mode,
                 reference_id: data.reference_id,
                 notes: `${data.notes || ''} (Shared Cost Split)`.trim(),

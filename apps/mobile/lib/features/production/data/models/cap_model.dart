@@ -29,13 +29,20 @@ class Cap {
       }
     }
 
+    // Helper for robust double parsing
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
     return Cap(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? 'Unknown',
       color: json['color'] as String?,
-      idealWeightGrams: (json['ideal_weight_grams'] as num?)?.toDouble() ?? 0.0,
-      idealCycleTimeSeconds:
-          (json['ideal_cycle_time_seconds'] as num?)?.toDouble() ?? 0.0,
+      idealWeightGrams: parseDouble(json['ideal_weight_grams']),
+      idealCycleTimeSeconds: parseDouble(json['ideal_cycle_time_seconds']),
       stockQuantity: stock,
       templateId: json['template_id'] as String?,
     );

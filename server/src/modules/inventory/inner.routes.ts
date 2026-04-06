@@ -10,7 +10,10 @@ const router = Router();
 router.get('/templates', authenticate, asyncHandler(innerController.listTemplates));
 router.post('/templates', authenticate, asyncHandler(innerController.createTemplate));
 router.get('/templates/:id', authenticate, asyncHandler(innerController.getTemplate));
-router.patch('/templates/:id', authenticate, asyncHandler(innerController.updateTemplate));
+router.put('/templates/:id', authenticate, asyncHandler((req: any, res: any) => {
+    console.log('HIT: PUT /api/inners/templates/:id', req.params.id);
+    return innerController.updateTemplate(req, res);
+}));
 router.delete('/templates/:id', authenticate, asyncHandler(innerController.deleteTemplate));
 
 // --- Inner Variant Routes ---
@@ -18,7 +21,7 @@ router.get('/balances', authenticate, asyncHandler(innerController.getBalances))
 router.get('/', authenticate, asyncHandler(innerController.list));
 router.post('/', authenticate, asyncHandler(innerController.create));
 router.get('/:id', authenticate, asyncHandler(innerController.getOne));
-router.patch('/:id', authenticate, asyncHandler(innerController.update));
+router.put('/:id', authenticate, asyncHandler(innerController.update));
 router.delete('/:id', authenticate, asyncHandler(innerController.delete));
 
 export default router;

@@ -3,10 +3,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
-import { Loader2, Truck, CheckCircle, Clock, Package, X, DollarSign, Percent, Calendar } from 'lucide-react';
+import { Loader2, Truck, CheckCircle, Clock, Package, X, IndianRupee, Percent, Calendar } from 'lucide-react';
 import { ordersAPI, customersAPI, productsAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate, cn, formatCurrency } from '@/lib/utils';
 import styles from './page.module.css';
 
 export default function DeliveriesPage() {
@@ -30,8 +30,8 @@ export default function DeliveriesPage() {
 
     // Queries
     const { data: orders = [], isLoading: ordersLoading, error: ordersError } = useQuery({
-        queryKey: ['orders', { status: 'reserved' }],
-        queryFn: () => ordersAPI.getAll({ status: 'reserved' }).then(res => res?.orders || res?.data || (Array.isArray(res) ? res : [])),
+        queryKey: ['orders', { status: 'reserved,partially_delivered' }],
+        queryFn: () => ordersAPI.getAll({ status: 'reserved,partially_delivered' }).then(res => res?.orders || res?.data || (Array.isArray(res) ? res : [])),
     });
 
     const { data: customers = [], isLoading: customersLoading } = useQuery({
@@ -101,6 +101,9 @@ export default function DeliveriesPage() {
             item_id: item.id,
             product_id: item.product_id,
             quantity: item.quantity,
+            quantity_prepared: item.quantity_prepared || 0,
+            quantity_shipped: item.quantity_shipped || 0,
+            dispatch_quantity: (item.quantity_prepared || 0) - (item.quantity_shipped || 0),
             unit_type: item.unit_type,
             unit_price: item.unit_price || getProductPrice(item.product_id)
         }));
@@ -126,9 +129,33 @@ export default function DeliveriesPage() {
         }));
     };
 
+    const handleItemDispatchQuantityChange = (itemId, newQty) => {
+        setDeliveryForm(prev => ({
+            ...prev,
+            items: prev.items.map(item => {
+                if (item.item_id === itemId) {
+                    const qty = parseInt(newQty) || 0;
+                    const max = item.quantity_prepared - item.quantity_shipped;
+                    return { ...item, dispatch_quantity: Math.min(qty, max) };
+                }
+                return item;
+            })
+        }));
+    };
+
+    // Filter orders to only show those with pending (prepared but not shipped) items
+    const displayOrders = useMemo(() => {
+        if (!orders) return [];
+        return orders.filter(order => {
+            return order.sales_order_items?.some(item => 
+                (item.quantity_prepared || 0) > (item.quantity_shipped || 0)
+            );
+        });
+    }, [orders]);
+
     // Calculate totals
     const calculations = useMemo(() => {
-        const subtotal = deliveryForm.items.reduce((sum, item) => sum + (item.unit_price * item.quantity), 0);
+        const subtotal = deliveryForm.items.reduce((sum, item) => sum + (item.unit_price * (item.dispatch_quantity || 0)), 0);
         let discountAmount = 0;
         if (deliveryForm.discount_value > 0) {
             if (deliveryForm.discount_type === 'percentage') {
@@ -138,7 +165,7 @@ export default function DeliveriesPage() {
             }
         }
         const total = subtotal - discountAmount;
-        const balance = total - (deliveryForm.initial_payment || 0);
+        const balance = total - (Number(deliveryForm.initial_payment) || 0);
 
         return { subtotal, discountAmount, total, balance };
     }, [deliveryForm]);
@@ -150,8 +177,9 @@ export default function DeliveriesPage() {
         }
 
         const payload = {
-            items: deliveryForm.items.map(item => ({
+            items: deliveryForm.items.filter(item => (item.dispatch_quantity || 0) > 0).map(item => ({
                 item_id: item.item_id,
+                quantity: item.dispatch_quantity,
                 unit_price: item.unit_price
             })),
             discount_type: deliveryForm.discount_value > 0 ? deliveryForm.discount_type : undefined,
@@ -163,11 +191,16 @@ export default function DeliveriesPage() {
             notes: deliveryForm.notes
         };
 
+        if (payload.items.length === 0) {
+            alert('Please specify at least one item to dispatch');
+            return;
+        }
+
         deliveryMutation.mutate({ orderId: selectedOrder.id, data: payload });
     };
 
-    const pendingCount = orders.length;
-    const totalItems = orders.reduce(
+    const pendingCount = displayOrders.length;
+    const totalItems = displayOrders.reduce(
         (sum, order) => sum + (order.sales_order_items?.reduce((s, i) => s + (i.quantity || 0), 0) || 0),
         0
     );
@@ -221,7 +254,7 @@ export default function DeliveriesPage() {
                             Retry
                         </button>
                     </div>
-                ) : orders.length === 0 ? (
+                ) : displayOrders.length === 0 ? (
                     <div className="empty-state">
                         <Truck size={48} />
                         <p>No pending deliveries</p>
@@ -229,12 +262,17 @@ export default function DeliveriesPage() {
                     </div>
                 ) : (
                     <div className={styles.deliveryList}>
-                        {orders.map((order) => (
+                        {displayOrders.map((order) => (
                             <div key={order.id} className={styles.deliveryCard}>
                                 <div className={styles.cardHeader}>
                                     <div>
-                                        <div className={styles.orderId}>
-                                            Order #{order.id?.slice(-6).toUpperCase()}
+                                        <div className={styles.orderIdRow}>
+                                            <span className={styles.orderId}>
+                                                Order #{order.id?.slice(-6).toUpperCase()}
+                                            </span>
+                                            <span className={cn(styles.statusBadge, styles[order.status])}>
+                                                {order.status === 'partially_delivered' ? 'Partial' : order.status}
+                                            </span>
                                         </div>
                                         <div className={styles.customerName}>
                                             {getCustomerName(order.customer_id)}
@@ -246,10 +284,16 @@ export default function DeliveriesPage() {
                                 <div className={styles.itemsList}>
                                     {order.sales_order_items?.map((item, idx) => (
                                         <div key={idx} className={styles.itemRow}>
-                                            <span className={styles.itemProduct}>
-                                                {getProductName(item.product_id)}
-                                            </span>
-                                            <span className={styles.itemQty}>{item.quantity} {item.unit_type === 'bundle' ? 'Bundle' : item.unit_type}{item.quantity > 1 ? 's' : ''}</span>
+                                            <div className={styles.itemMain}>
+                                                <span className={styles.itemProduct}>
+                                                    {getProductName(item.product_id)}
+                                                </span>
+                                                <span className={styles.itemQty}>{item.quantity} {item.unit_type}</span>
+                                            </div>
+                                            <div className={styles.itemStatus}>
+                                                <span className={styles.shippedQty}>Shipped: {item.quantity_shipped || 0}</span>
+                                                <span className={styles.prepQty}>Prep: {item.quantity_prepared || 0}</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -297,14 +341,31 @@ export default function DeliveriesPage() {
                                     <div className={styles.pricingTable}>
                                         <div className={styles.pricingHeader}>
                                             <span>Product</span>
-                                            <span>Quantity</span>
+                                            <span>Order/Prep</span>
+                                            <span>Dispatch</span>
                                             <span>Unit Price</span>
                                             <span>Total</span>
                                         </div>
                                         {deliveryForm.items.map((item) => (
                                             <div key={item.item_id} className={styles.pricingRow}>
-                                                <span className={styles.productName}>{getProductName(item.product_id)}</span>
-                                                <span className={styles.quantity}>{item.quantity} {item.unit_type === 'bundle' ? 'Bundle' : item.unit_type}{item.quantity > 1 ? 's' : ''}</span>
+                                                <div className={styles.productInfo}>
+                                                    <span className={styles.productName}>{getProductName(item.product_id)}</span>
+                                                    <span className={styles.productMeta}>{item.unit_type}</span>
+                                                </div>
+                                                <div className={styles.qtyStats}>
+                                                    <span className={styles.orderQty}>Ord: {item.quantity}</span>
+                                                    <span className={styles.prepQty}>Prep: {item.quantity_prepared}</span>
+                                                </div>
+                                                <div className={styles.dispatchQty}>
+                                                    <input
+                                                        type="number"
+                                                        className={styles.qtyInput}
+                                                        value={item.dispatch_quantity}
+                                                        onChange={(e) => handleItemDispatchQuantityChange(item.item_id, e.target.value)}
+                                                        min="0"
+                                                        max={item.quantity_prepared - item.quantity_shipped}
+                                                    />
+                                                </div>
                                                 <div className={styles.prefixWrapper}>
                                                     <input
                                                         type="number"
@@ -315,7 +376,7 @@ export default function DeliveriesPage() {
                                                         min="0"
                                                     />
                                                 </div>
-                                                <span className={styles.itemTotal}>₹{(item.unit_price * item.quantity).toFixed(2)}</span>
+                                                <span className={styles.itemTotal}>{formatCurrency(item.unit_price * item.dispatch_quantity)}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -337,7 +398,7 @@ export default function DeliveriesPage() {
                                                 className={cn(styles.toggleButton, deliveryForm.discount_type === 'fixed' && styles.active)}
                                                 onClick={() => setDeliveryForm(prev => ({ ...prev, discount_type: 'fixed' }))}
                                             >
-                                                <DollarSign size={16} />
+                                                <IndianRupee size={16} />
                                                 Fixed Amount
                                             </button>
                                         </div>
@@ -450,27 +511,27 @@ export default function DeliveriesPage() {
                                     <h3 className={styles.summaryTitle}>Order Summary</h3>
                                     <div className={styles.summaryRow}>
                                         <span>Subtotal</span>
-                                        <span>₹{calculations.subtotal.toFixed(2)}</span>
+                                        <span>{formatCurrency(calculations.subtotal)}</span>
                                     </div>
                                     {calculations.discountAmount > 0 && (
                                         <div className={cn(styles.summaryRow, styles.discount)}>
                                             <span>Discount ({deliveryForm.discount_type === 'percentage' ? `${deliveryForm.discount_value}%` : 'Fixed'})</span>
-                                            <span>-₹{calculations.discountAmount.toFixed(2)}</span>
+                                            <span>-{formatCurrency(calculations.discountAmount)}</span>
                                         </div>
                                     )}
                                     <div className={cn(styles.summaryRow, styles.total)}>
                                         <span>Total Amount</span>
-                                        <span>₹{calculations.total.toFixed(2)}</span>
+                                        <span>{formatCurrency(calculations.total)}</span>
                                     </div>
                                     {deliveryForm.initial_payment > 0 && (
                                         <>
                                             <div className={styles.summaryRow}>
                                                 <span>Amount Paid</span>
-                                                <span>₹{deliveryForm.initial_payment.toFixed(2)}</span>
+                                                <span>{formatCurrency(deliveryForm.initial_payment)}</span>
                                             </div>
                                             <div className={cn(styles.summaryRow, styles.balance)}>
                                                 <span>Balance Due</span>
-                                                <span>₹{calculations.balance.toFixed(2)}</span>
+                                                <span>{formatCurrency(calculations.balance)}</span>
                                             </div>
                                         </>
                                     )}

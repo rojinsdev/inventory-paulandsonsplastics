@@ -10,16 +10,20 @@ const createOrderSchema = z.object({
     customer_id: z.string().uuid(),
     delivery_date: z.string().optional(), // Added: Delivery date
     items: z.array(z.object({
-        product_id: z.string().uuid(),
+        product_id: z.string().uuid().optional(),
+        cap_id: z.string().uuid().optional(),
         quantity: z.number().int().positive(),
         unit_type: z.enum(['bundle', 'packet', 'loose']).optional(),
         unit_price: z.number().positive().optional(),
-    })).min(1),
+    })).min(1).refine(items => items.every(item => item.product_id || item.cap_id), {
+        message: "Every item must have either a product_id or a cap_id",
+        path: ["items"]
+    }),
     notes: z.string().optional(),
 });
 
 const updateStatusSchema = z.object({
-    status: z.enum(['reserved', 'delivered', 'cancelled', 'pending']),
+    status: z.enum(['reserved', 'delivered', 'cancelled', 'pending', 'partially_delivered']),
 });
 
 export class SalesOrderController {

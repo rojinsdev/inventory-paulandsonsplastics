@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Plus, Loader2, ShoppingCart, Eye, Trash2, Edit, Filter, Clock, AlertCircle, CheckCircle2, X, User, Calendar, ClipboardList, Package } from 'lucide-react';
-import { ordersAPI, customersAPI, productsAPI, inventoryAPI } from '@/lib/api';
+import { ordersAPI, customersAPI, productsAPI, inventoryAPI, capsAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
 import { formatDate, cn } from '@/lib/utils';
 import { useFactory } from '@/contexts/FactoryContext';
@@ -35,6 +35,8 @@ export default function OrdersPage() {
     const [modalOpen, setModalOpen] = useState(false);
     const [viewOrder, setViewOrder] = useState(null);
     const [statusFilter, setStatusFilter] = useState('');
+    const [page, setPage] = useState(1);
+    const pageSize = 15;
 
     const [formData, setFormData] = useState({
         customer_id: '',
@@ -44,20 +46,28 @@ export default function OrdersPage() {
     });
     const [isEditing, setIsEditing] = useState(false);
     const [editOrderId, setEditOrderId] = useState(null);
+    const [isPreparing, setIsPreparing] = useState(false);
+    const [selectedPrepItems, setSelectedPrepItems] = useState([]);
 
 
 
     // Queries
-    const { data: orders = [], isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery({
-        queryKey: ['orders', statusFilter, selectedFactory],
+    const { data, isLoading: ordersLoading, error: ordersError, refetch: refetchOrders } = useQuery({
+        queryKey: ['orders', statusFilter, selectedFactory, page],
         queryFn: () => {
             const params = {
                 ...(statusFilter ? { status: statusFilter } : {}),
                 ...(selectedFactory ? { factory_id: selectedFactory } : {}),
+                page,
+                size: pageSize,
             };
-            return ordersAPI.getAll(Object.keys(params).length > 0 ? params : undefined).then(res => res?.orders || res?.data || (Array.isArray(res) ? res : []));
+            return ordersAPI.getAll(params);
         },
     });
+
+    const orders = data?.orders || [];
+    const pagination = data?.pagination || { total: 0, page: 1, size: pageSize };
+    const totalPages = Math.ceil((pagination.total || 0) / pageSize);
 
     const { data: customers = [] } = useQuery({
         queryKey: ['customers'],
@@ -67,6 +77,11 @@ export default function OrdersPage() {
     const { data: tubs = [] } = useQuery({
         queryKey: ['tubs'], // Fetch all tubs for multi-factory support
         queryFn: () => productsAPI.getAll().then(res => res?.products || res?.data || (Array.isArray(res) ? res : [])),
+    });
+
+    const { data: caps = [] } = useQuery({
+        queryKey: ['caps'],
+        queryFn: () => capsAPI.getAll().then(res => res?.caps || res?.data || (Array.isArray(res) ? res : [])),
     });
 
     const { data: availableStock = [] } = useQuery({
@@ -107,6 +122,18 @@ export default function OrdersPage() {
             queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         },
         onError: (err) => alert('Error: ' + err.message)
+    });
+
+    const prepareMutation = useMutation({
+        mutationFn: ({ id, items }) => ordersAPI.prepareItems(id, items),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['availableStock'] });
+            setIsPreparing(false);
+            setViewOrder(null);
+            alert('Stock reserved and order items prepared successfully!');
+        },
+        onError: (err) => alert('Reservation failed: ' + err.message)
     });
 
     const saving = createMutation.isPending;
@@ -153,6 +180,17 @@ export default function OrdersPage() {
         const p = tubs.find((p) => p.id === id);
         return p ? `${p.name} (${p.size})` : 'Unknown';
     };
+    const getCapName = (id) => {
+        const c = caps.find((c) => c.id === id);
+        return c ? c.name : 'Unknown';
+    };
+    const getItemName = (item) => {
+        if (item.product_id) return getTubName(item.product_id);
+        if (item.cap_id) return getCapName(item.cap_id);
+        if (item.products) return `${item.products.name} (${item.products.size})`;
+        if (item.caps) return item.caps.name;
+        return 'Unknown Item';
+    };
 
     const handleCreate = () => {
         setIsEditing(false);
@@ -182,11 +220,14 @@ export default function OrdersPage() {
             customer_id: order.customer_id,
             items: items.map(item => {
                 const p = tubs.find(prod => prod.id === item.product_id);
+                const c = caps.find(cp => cp.id === item.cap_id);
                 return {
-                    factory_id: p?.factory_id || '',
-                    product_id: item.product_id,
+                    factory_id: (p?.factory_id || c?.factory_id || ''),
+                    product_id: item.product_id || '',
+                    cap_id: item.cap_id || '',
+                    item_type: item.cap_id ? 'cap' : 'product',
                     quantity: item.quantity,
-                    unit_type: item.unit_type || 'bundle',
+                    unit_type: item.unit_type || (item.cap_id ? 'loose' : 'bundle'),
                     unit_price: item.unit_price || '',
                     include_inner: item.include_inner || false
                 };
@@ -203,6 +244,8 @@ export default function OrdersPage() {
             items: [...formData.items, {
                 factory_id: factories[0]?.id || '',
                 product_id: '',
+                cap_id: '',
+                item_type: 'product',
                 quantity: 1,
                 unit_type: 'bundle',
                 unit_price: '',
@@ -221,8 +264,17 @@ export default function OrdersPage() {
     const handleItemChange = (index, field, value) => {
         const newItems = [...formData.items];
         if (field === 'factory_id') {
-            // Reset product when factory changes
-            newItems[index] = { ...newItems[index], [field]: value, product_id: '' };
+            // Reset product/cap when factory changes
+            newItems[index] = { ...newItems[index], [field]: value, product_id: '', cap_id: '' };
+        } else if (field === 'item_type') {
+            // Reset selection when switching types
+            newItems[index] = { 
+                ...newItems[index], 
+                [field]: value, 
+                product_id: '', 
+                cap_id: '',
+                unit_type: value === 'cap' ? 'loose' : 'bundle'
+            };
         } else {
             newItems[index] = { ...newItems[index], [field]: value };
         }
@@ -240,7 +292,8 @@ export default function OrdersPage() {
             customer_id: formData.customer_id,
             delivery_date: formData.order_date || new Date().toISOString().split('T')[0],
             items: formData.items.map((item) => ({
-                product_id: item.product_id,
+                product_id: item.product_id || undefined,
+                cap_id: item.cap_id || undefined,
                 quantity: Number(item.quantity),
                 unit_type: item.unit_type,
                 unit_price: item.unit_price ? Number(item.unit_price) : undefined,
@@ -300,12 +353,22 @@ export default function OrdersPage() {
         };
     }), [tubs, factories]);
 
-    const getStockForProduct = (productId, unitType) => {
-        const stockItems = availableStock.filter(s => s.product_id === productId);
+    const capOptions = useMemo(() => caps.map(c => {
+        const factory = factories.find(f => f.id === c.factory_id);
+        return {
+            value: c.id,
+            label: c.color ? `${c.name} (${c.color})` : c.name,
+            factory_id: c.factory_id,
+            factoryName: factory ? factory.name : 'Unknown Factory'
+        };
+    }), [caps, factories]);
+
+    const getStockForProduct = (productId, unitType, capId) => {
+        const stockItems = availableStock.filter(s => (capId ? s.cap_id === capId : s.product_id === productId));
         
         // Map unit types to inventory states
         const stateMapping = {
-            'loose': 'semi_finished',
+            'loose': capId ? 'finished' : 'semi_finished', // Caps are finished goods even when loose
             'packet': 'packed',
             'bundle': 'finished'
         };
@@ -319,6 +382,10 @@ export default function OrdersPage() {
             // For finished goods, if unit_type is specified in stock, it must match
             // If stock has no unit_type, we assume it's the requested type if requested type is the default (bundle)
             if (targetState === 'finished' && s.unit_type && s.unit_type !== unitType) {
+                // Special case for loose caps which are stored with unit_type 'loose' in state 'finished'
+                if (capId && unitType === 'loose' && s.unit_type === 'loose') {
+                    return true;
+                }
                 return false;
             }
             return true;
@@ -327,9 +394,55 @@ export default function OrdersPage() {
         return filtered.reduce((sum, s) => sum + Number(s.quantity || 0), 0);
     };
 
+    const getEligiblePrepItems = (order) => {
+        if (!order) return [];
+        const items = order.sales_order_items || [];
+        const requests = order.production_requests || [];
+        
+        return items.filter(item => {
+            // Already fully reserved/prepared?
+            if (item.is_prepared) return false;
+            
+            // If not backordered, it's immediately available to reserve
+            if (!item.is_backordered) return true;
+            
+            // If backordered, it must have been marked as 'prepared' in production_requests
+            const req = requests.find(r => 
+                (r.product_id === item.product_id || (r.product_id === null && item.product_id === null)) && 
+                (r.cap_id === item.cap_id || (r.cap_id === null && item.cap_id === null))
+            );
+            return req?.status === 'prepared';
+        });
+    };
+
+    const handleStartPreparation = () => {
+        const eligible = getEligiblePrepItems(viewOrder);
+        setSelectedPrepItems(eligible.map(item => ({
+            itemId: item.id,
+            quantity: item.quantity - (item.quantity_reserved || 0), // Remaining to reserve
+            originalItem: item
+        })));
+        setIsPreparing(true);
+    };
+
+    const handleExecutePreparation = () => {
+        const itemsToPrepare = selectedPrepItems.filter(i => i.quantity > 0);
+        if (itemsToPrepare.length === 0) {
+            alert('No items selected for reservation');
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to reserve stock for ${itemsToPrepare.length} items? This will forward the order to Dispatch.`)) return;
+        
+        prepareMutation.mutate({
+            id: viewOrder.id,
+            items: itemsToPrepare.map(i => ({ itemId: i.itemId, quantity: i.quantity }))
+        });
+    };
+
     const orderSummary = useMemo(() => {
         const totals = {
-            unique_tubs: formData.items.filter(i => i.product_id).length,
+            unique_items: formData.items.length,
             total_quantity: formData.items.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0),
             units: {}
         };
@@ -446,7 +559,7 @@ export default function OrdersPage() {
                                         <tr>
                                             <th>Order ID</th>
                                             <th>Customer</th>
-                                            <th>Tubs</th>
+                                            <th>Items</th>
                                             <th>Delivery Date</th>
                                             <th>Status</th>
                                             <th>Date Created</th>
@@ -465,7 +578,7 @@ export default function OrdersPage() {
                                                     <td>{getCustomerName(order.customer_id)}</td>
                                                     <td>
                                                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                            <span>{items.length} tubs</span>
+                                                            <span>{items.length} items</span>
                                                             {items.length > 0 && (
                                                                 <span style={{ fontSize: '0.75rem', color: allPrepared ? 'var(--success)' : 'var(--warning)' }}>
                                                                     {prepCount}/{items.length} Prepared
@@ -514,6 +627,28 @@ export default function OrdersPage() {
                                         })}
                                     </tbody>
                                 </table>
+                                
+                                {totalPages > 1 && (
+                                    <div className={styles.pagination}>
+                                        <button 
+                                            className={styles.pageButton} 
+                                            disabled={page === 1}
+                                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                                        >
+                                            Previous
+                                        </button>
+                                        <span className={styles.pageInfo}>
+                                            Page {page} of {totalPages}
+                                        </span>
+                                        <button 
+                                            className={styles.pageButton} 
+                                            disabled={page >= totalPages}
+                                            onClick={() => setPage(p => p + 1)}
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -595,7 +730,7 @@ export default function OrdersPage() {
                                         onClick={handleAddItem}
                                     >
                                         <Plus size={18} />
-                                        <span>Add Tub</span>
+                                        <span>Add Item</span>
                                     </button>
                                 </div>
 
@@ -610,8 +745,7 @@ export default function OrdersPage() {
                                         </div>
                                     ) : (
                                         formData.items.map((item, index) => {
-                                            const filteredTubs = tubOptions.filter(p => !item.factory_id || p.factory_id === item.factory_id);
-                                            const currentStock = getStockForProduct(item.product_id, item.unit_type);
+                                            const currentStock = getStockForProduct(item.product_id, item.unit_type, item.cap_id);
 
                                             return (
                                                 <div key={index} className={styles.itemCard}>
@@ -627,6 +761,26 @@ export default function OrdersPage() {
                                                     </div>
 
                                                     <div className={styles.productSelectGrid}>
+                                                        {/* Item Type Toggle */}
+                                                        <div className={styles.formItem}>
+                                                            <div className={styles.typeToggle}>
+                                                                <button
+                                                                    type="button"
+                                                                    className={cn(styles.toggleBtn, item.item_type === 'product' && styles.toggleActive)}
+                                                                    onClick={() => handleItemChange(index, 'item_type', 'product')}
+                                                                >
+                                                                    Tub
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    className={cn(styles.toggleBtn, item.item_type === 'cap' && styles.toggleActive)}
+                                                                    onClick={() => handleItemChange(index, 'item_type', 'cap')}
+                                                                >
+                                                                    Cap
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
                                                         {/* Factory Select */}
                                                         <div className={styles.formItem}>
                                                             <CustomSelect
@@ -637,17 +791,20 @@ export default function OrdersPage() {
                                                                 searchable={false}
                                                             />
                                                         </div>
-
-                                                        {/* Tub Select */}
+ 
+                                                        {/* Item Select */}
                                                         <div className={styles.formItem}>
                                                             <CustomSelect
-                                                                options={filteredTubs}
-                                                                value={item.product_id}
-                                                                onChange={(val) => handleItemChange(index, 'product_id', val)}
-                                                                placeholder="Choose Tub..."
+                                                                options={item.item_type === 'cap' 
+                                                                    ? capOptions.filter(c => !item.factory_id || c.factory_id === item.factory_id)
+                                                                    : tubOptions.filter(p => !item.factory_id || p.factory_id === item.factory_id)
+                                                                }
+                                                                value={item.item_type === 'cap' ? item.cap_id : item.product_id}
+                                                                onChange={(val) => handleItemChange(index, item.item_type === 'cap' ? 'cap_id' : 'product_id', val)}
+                                                                placeholder={item.item_type === 'cap' ? "Choose Cap..." : "Choose Tub..."}
                                                                 searchable={true}
                                                             />
-                                                            {item.product_id && (
+                                                            {(item.product_id || item.cap_id) && (
                                                                 <div className={styles.stockIndicator}>
                                                                     <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: currentStock > 0 ? '#10b981' : '#f43f5e' }}></div>
                                                                     <span>Available Stock: <span className={styles.stockValue}>{currentStock}</span></span>
@@ -670,7 +827,7 @@ export default function OrdersPage() {
                                                         {/* Unit */}
                                                         <div className={styles.formItem}>
                                                             <CustomSelect
-                                                                options={UNIT_OPTIONS}
+                                                                options={item.item_type === 'cap' ? [{ value: 'loose', label: 'Loose Caps' }] : UNIT_OPTIONS}
                                                                 value={item.unit_type}
                                                                 onChange={(val) => handleItemChange(index, 'unit_type', val)}
                                                                 placeholder="Unit"
@@ -692,7 +849,7 @@ export default function OrdersPage() {
                                                         </div>
 
                                                         {/* Include Inner Toggle */}
-                                                        {filteredTubs.find(op => op.value === item.product_id)?.hasInner && (
+                                                        {tubOptions.find(op => op.value === item.product_id)?.hasInner && (
                                                             <div className={styles.innerToggleContainer}>
                                                                 <div className={styles.innerToggle}>
                                                                     <input
@@ -722,8 +879,8 @@ export default function OrdersPage() {
                             <div className={styles.formFooter}>
                                 <div className={styles.footerSummary}>
                                     <div className={styles.summaryItem}>
-                                        <div className={styles.summaryLabel}>Tubs</div>
-                                        <div className={styles.summaryValue}>{orderSummary.unique_tubs}</div>
+                                        <div className={styles.summaryLabel}>Total Items</div>
+                                        <div className={styles.summaryValue}>{orderSummary.unique_items}</div>
                                     </div>
                                     <div className={styles.summaryItem}>
                                         <div className={styles.summaryLabel}>Bundles</div>
@@ -774,101 +931,217 @@ export default function OrdersPage() {
                             <h2 className={styles.modalTitle}>
                                 Order Details <span className={styles.orderIdEmphasis}>#{viewOrder.id?.slice(-6).toUpperCase()}</span>
                             </h2>
-                            <button onClick={() => setViewOrder(null)} className={styles.closeBtn}>
+                            <button onClick={() => {
+                                setViewOrder(null);
+                                setIsPreparing(false);
+                            }} className={styles.closeBtn}>
                                 <X size={20} />
                             </button>
                         </div>
                         <div className={styles.modalBody}>
-                            <div className={styles.orderDetailsGrid}>
-                                <div className={styles.orderDetailColumn}>
-                                    <div className={styles.orderDetail}>
-                                        <span className={styles.detailLabel}>Customer</span>
-                                        <span className={styles.detailValue}>{getCustomerName(viewOrder.customer_id)}</span>
+                            {isPreparing ? (
+                                <div className={styles.preparationContainer}>
+                                    <div className={styles.prepHeader}>
+                                        <div className={styles.prepStepInfo}>
+                                            <Package size={24} className={styles.prepIcon} />
+                                            <div>
+                                                <h3 className={styles.prepStepTitle}>Order Preparation & Stock Reservation</h3>
+                                                <p className={styles.prepStepDescription}>Select available items to reserve stock and mark them ready for dispatch.</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className={styles.orderDetail}>
-                                        <span className={styles.detailLabel}>Status</span>
-                                        <span className={cn(styles.badge, styles[getStatusBadge(viewOrder.status)])}>
-                                            {viewOrder.status}
-                                        </span>
-                                    </div>
-                                </div>
-                                <div className={styles.verticalSeparator}></div>
-                                <div className={styles.orderDetailColumn}>
-                                    <div className={styles.orderDetail}>
-                                        <span className={styles.detailLabel}>Order Date</span>
-                                        <span className={styles.detailValue}>{formatDate(viewOrder.created_at)}</span>
-                                    </div>
-                                    <div className={styles.orderDetail}>
-                                        <span className={styles.detailLabel}>Delivery Goal</span>
-                                        <span className={styles.detailValue}>{viewOrder.delivery_date ? formatDate(viewOrder.delivery_date) : 'ASAP'}</span>
-                                    </div>
-                                </div>
-                            </div>
 
-                            {viewOrder.notes && (
-                                <div className={styles.orderDetail}>
-                                    <strong>Notes:</strong> {viewOrder.notes}
-                                </div>
-                            )}
-
-                            <h4 style={{ marginTop: '1.5rem', marginBottom: '1rem', fontWeight: 600 }}>Involved Factory Preparation</h4>
-                            <div className={styles.tableWrapper}>
-                                <table className={styles.table}>
-                                    <thead>
-                                        <tr>
-                                            <th className={styles.colProduct}>Tub</th>
-                                            <th className={styles.colFactory}>Factory</th>
-                                            <th className={styles.colQuantity}>Quantity</th>
-                                            <th className={styles.colUnit}>Unit</th>
-                                            <th className={styles.colRate}>Rate</th>
-                                            <th className={styles.colStatus}>Preparation Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {(viewOrder.sales_order_items || viewOrder.items || []).map((item, idx) => {
-                                            const p = tubs.find(prod => prod.id === item.product_id);
-                                            const f = factories.find(fac => fac.id === p?.factory_id);
-
-                                            return (
-                                                <tr key={idx}>
-                                                    <td className={styles.colProduct}>{p?.name || 'Unknown'}</td>
-                                                    <td className={styles.colFactory}>{f?.name || 'Unknown'}</td>
-                                                    <td className={styles.colQuantity}>{item.quantity}</td>
-                                                    <td className={styles.colUnit}>{item.unit_type || 'bundle'}</td>
-                                                    <td className={styles.colRate}>₹{item.unit_price || '0'}</td>
-                                                    <td className={styles.colStatus}>
-                                                        <div className={styles.prepStatusWrapper}>
-                                                            <div className={cn(styles.badge, item.is_prepared ? styles.badgeSuccess : styles.badgeWarning)}>
-                                                                {item.is_prepared ? (
-                                                                    <>
-                                                                        <CheckCircle2 size={14} />
-                                                                        <span>Done</span>
-                                                                    </>
-                                                                ) : (
-                                                                    <>
-                                                                        <Clock size={14} className={styles.cautionIcon} />
-                                                                        <span>Pending</span>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        {item.is_prepared && item.prepared_at && (
-                                                            <div className={styles.prepInfo}>
-                                                                Ready on {formatDate(item.prepared_at)}
-                                                            </div>
-                                                        )}
-                                                    </td>
+                                    <div className={styles.tableWrapper}>
+                                        <table className={styles.table}>
+                                            <thead>
+                                                <tr>
+                                                    <th>Item</th>
+                                                    <th>Unit</th>
+                                                    <th>In Stock</th>
+                                                    <th>Needed</th>
+                                                    <th>To Reserve</th>
                                                 </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
+                                            </thead>
+                                            <tbody>
+                                                {selectedPrepItems.map((item, idx) => {
+                                                    const stockValue = getStockForProduct(
+                                                        item.originalItem.product_id, 
+                                                        item.originalItem.unit_type, 
+                                                        item.originalItem.cap_id
+                                                    );
+                                                    const needed = item.originalItem.quantity - (item.originalItem.quantity_reserved || 0);
+                                                    
+                                                    return (
+                                                        <tr key={idx}>
+                                                            <td>{getItemName(item.originalItem)}</td>
+                                                            <td>{item.originalItem.unit_type}</td>
+                                                            <td>
+                                                                <span className={stockValue >= needed ? styles.stockOk : styles.stockShort}>
+                                                                    {stockValue}
+                                                                </span>
+                                                            </td>
+                                                            <td>{needed}</td>
+                                                            <td>
+                                                                <input 
+                                                                    type="number" 
+                                                                    className={styles.inputModern}
+                                                                    style={{ width: '80px' }}
+                                                                    value={item.quantity}
+                                                                    onChange={(e) => {
+                                                                        const val = parseInt(e.target.value);
+                                                                        const updated = [...selectedPrepItems];
+                                                                        updated[idx].quantity = isNaN(val) ? 0 : Math.min(val, needed);
+                                                                        setSelectedPrepItems(updated);
+                                                                    }}
+                                                                    max={needed}
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                                {selectedPrepItems.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="5" className={styles.emptyItemsText}>
+                                                            <div className={styles.emptyStateContainer}>
+                                                                <Clock size={40} opacity={0.5} />
+                                                                <p>No items are currently eligible for reservation.</p>
+                                                                <small>Backordered items must be marked as "Prepared" in Production first.</small>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <div className={styles.orderDetailsGrid}>
+                                        <div className={styles.orderDetailColumn}>
+                                            <div className={styles.orderDetail}>
+                                                <span className={styles.detailLabel}>Customer</span>
+                                                <span className={styles.detailValue}>{getCustomerName(viewOrder.customer_id)}</span>
+                                            </div>
+                                            <div className={styles.orderDetail}>
+                                                <span className={styles.detailLabel}>Status</span>
+                                                <span className={cn(styles.badge, styles[getStatusBadge(viewOrder.status)])}>
+                                                    {viewOrder.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className={styles.verticalSeparator}></div>
+                                        <div className={styles.orderDetailColumn}>
+                                            <div className={styles.orderDetail}>
+                                                <span className={styles.detailLabel}>Order Date</span>
+                                                <span className={styles.detailValue}>{formatDate(viewOrder.created_at)}</span>
+                                            </div>
+                                            <div className={styles.orderDetail}>
+                                                <span className={styles.detailLabel}>Delivery Goal</span>
+                                                <span className={styles.detailValue}>{viewOrder.delivery_date ? formatDate(viewOrder.delivery_date) : 'ASAP'}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {viewOrder.notes && (
+                                        <div className={styles.orderDetail} style={{ marginTop: '1rem' }}>
+                                            <strong>Notes:</strong> {viewOrder.notes}
+                                        </div>
+                                    )}
+
+                                    <h4 style={{ marginTop: '1.5rem', marginBottom: '1rem', fontWeight: 600 }}>Involved Factory Preparation</h4>
+                                    <div className={styles.tableWrapper}>
+                                        <table className={styles.table}>
+                                            <thead>
+                                                <tr>
+                                                    <th className={styles.colProduct}>Item</th>
+                                                    <th className={styles.colFactory}>Factory</th>
+                                                    <th className={styles.colQuantity}>Needed</th>
+                                                    <th className={styles.colUnit}>Reserved</th>
+                                                    <th className={styles.colStatus}>Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(viewOrder.sales_order_items || viewOrder.items || []).map((item, idx) => {
+                                                    const p = tubs.find(prod => prod.id === item.product_id);
+                                                    const c = caps.find(cp => cp.id === item.cap_id);
+                                                    const f = factories.find(fac => fac.id === (p?.factory_id || c?.factory_id));
+
+                                                    return (
+                                                        <tr key={idx}>
+                                                            <td className={styles.colProduct}>{getItemName(item)}</td>
+                                                            <td className={styles.colFactory}>{f?.name || 'Unknown'}</td>
+                                                            <td className={styles.colQuantity}>{item.quantity}</td>
+                                                            <td className={styles.colUnit}>{item.quantity_reserved || 0}</td>
+                                                            <td className={styles.colStatus}>
+                                                                <div className={styles.prepStatusWrapper}>
+                                                                    <div className={cn(styles.badge, item.is_prepared ? styles.badgeSuccess : (item.is_backordered ? styles.badgeError : styles.badgeWarning))}>
+                                                                        {item.is_prepared ? (
+                                                                            <>
+                                                                                <CheckCircle2 size={14} />
+                                                                                <span>Done</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                {item.is_backordered ? <AlertCircle size={14} className={styles.errorIcon} /> : <Clock size={14} className={styles.cautionIcon} />}
+                                                                                <span>{item.is_backordered ? 'Awaiting Production' : 'Pending Manual Reservation'}</span>
+                                                                            </>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
                         </div>
                         <div className={styles.modalFooter}>
-                            <button className={styles.secondaryButton} onClick={() => setViewOrder(null)}>
-                                Close
-                            </button>
+                            {isPreparing ? (
+                                <>
+                                    <button 
+                                        className={styles.secondaryButton} 
+                                        onClick={() => setIsPreparing(false)}
+                                    >
+                                        Back to Details
+                                    </button>
+                                    <button 
+                                        className={styles.primaryButton} 
+                                        onClick={handleExecutePreparation}
+                                        disabled={prepareMutation.isPending || selectedPrepItems.every(i => i.quantity <= 0)}
+                                    >
+                                        {prepareMutation.isPending ? (
+                                            <>
+                                                <Loader2 size={18} className={styles.spinner} />
+                                                <span>Reserving...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Package size={16} />
+                                                <span>Reserve & Forward to Dispatch</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <button className={styles.secondaryButton} onClick={() => setViewOrder(null)}>
+                                        Close
+                                    </button>
+                                    {(viewOrder.status === 'pending' || viewOrder.status === 'reserved') && (
+                                        <button 
+                                            className={styles.primaryButton} 
+                                            onClick={handleStartPreparation}
+                                            disabled={getEligiblePrepItems(viewOrder).length === 0}
+                                        >
+                                            <ClipboardList size={16} />
+                                            <span>Start Order Preparation</span>
+                                        </button>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>

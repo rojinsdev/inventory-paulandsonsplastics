@@ -817,3 +817,33 @@
     height: 16px;
     cursor: pointer;
 }
+
+.unitList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.unitBadge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    background-color: var(--slate-100);
+    border: 1px solid var(--border);
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.countBadge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    background-color: var(--info-bg);
+    color: var(--info-text);
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+:root[class~="dark"] .unitBadge {
+    background-color: var(--surface-elevated);
+}

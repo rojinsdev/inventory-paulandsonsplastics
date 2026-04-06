@@ -39,6 +39,7 @@ async function runTest() {
         console.log('\n--- TEST 1: Weight-only Mode ---');
         const res1 = await productionService.submitCapProduction({
             cap_id: cap!.id,
+            machine_id: '9c171193-d1b6-4a7d-9819-0ef73c11aed3',
             factory_id: TEST_FACTORY_ID,
             date: new Date().toISOString().split('T')[0],
             shift_number: 1,
@@ -55,6 +56,7 @@ async function runTest() {
         console.log('\n--- TEST 2: Unit-only Mode (Option B) ---');
         const res2 = await productionService.submitCapProduction({
             cap_id: cap!.id,
+            machine_id: '9c171193-d1b6-4a7d-9819-0ef73c11aed3',
             factory_id: TEST_FACTORY_ID,
             date: new Date().toISOString().split('T')[0],
             shift_number: 1,
@@ -71,6 +73,7 @@ async function runTest() {
         console.log('\n--- TEST 3: Mixed Mode ---');
         const res3 = await productionService.submitCapProduction({
             cap_id: cap!.id,
+            machine_id: '9c171193-d1b6-4a7d-9819-0ef73c11aed3',
             factory_id: TEST_FACTORY_ID,
             date: new Date().toISOString().split('T')[0],
             shift_number: 1,

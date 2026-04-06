@@ -455,7 +455,7 @@ export default function ProductionReportsPage() {
                                         <tr key={log.production_log_id || log.id}>
                                             <td className={styles.dateCell}>{formatDate(log.date || log.created_at)}</td>
                                             <td className={styles.machineCell}>{getMachineName(log.machine_id)}</td>
-                                            <td>{displayName} {category === 'inners' && <span className="text-muted text-xs">({log.inners?.color})</span>}</td>
+                                            <td>{displayName} {category === 'inners' && <span className={cn(styles.textMuted, styles.textXs)}>({log.inners?.color})</span>}</td>
                                             <td style={{ textAlign: 'right' }} className={styles.numberCell}>
                                                 {formatNumber(actualQty)}
                                             </td>

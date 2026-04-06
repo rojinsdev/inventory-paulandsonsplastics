@@ -6,47 +6,68 @@ import {
     X,
     Plus,
     Trash2,
-    Edit2,
     Save,
     RefreshCw,
-    ArrowUpCircle,
-    ArrowDownCircle,
     Settings,
-    Tag
+    ChevronRight,
+    Search
 } from 'lucide-react';
 import { cashFlowAPI } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import styles from './page.module.css';
 
 export default function CategoryManager({ onClose }) {
     const queryClient = useQueryClient();
-    const [activeTab, setActiveTab] = useState('expense');
+    const [context, setContext] = useState('expense');
+    const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(false);
-    const [editingId, setEditingId] = useState(null);
-    const [editData, setEditData] = useState({ name: '', default_amount: '', is_shared: false });
-
-    // Form for new category
-    const [newCat, setNewCat] = useState({ name: '', default_amount: '', is_shared: false });
+    const [selectedId, setSelectedId] = useState(null);
+    const [formData, setFormData] = useState({ name: '', default_amount: '', is_shared: false });
 
     const { data: categories, isLoading } = useQuery({
         queryKey: ['cash-flow-categories'],
         queryFn: () => cashFlowAPI.getCategories()
     });
 
-    const filteredCategories = categories?.filter(c => c.type === activeTab) || [];
+    const filteredCategories = categories?.filter(c => 
+        c.type === context && 
+        c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || [];
 
-    const handleAdd = async (e) => {
+    const handleSelect = (cat) => {
+        if (cat) {
+            setSelectedId(cat.id);
+            setFormData({
+                name: cat.name,
+                default_amount: cat.default_amount || '',
+                is_shared: cat.is_shared || false
+            });
+        } else {
+            setSelectedId('new');
+            setFormData({ name: '', default_amount: '', is_shared: false });
+        }
+    };
+
+    const handleSave = async (e) => {
         e.preventDefault();
-        if (!newCat.name) return;
+        if (!formData.name) return;
         setLoading(true);
         try {
-            await cashFlowAPI.createCategory({
-                name: newCat.name,
-                type: activeTab,
-                default_amount: Number(newCat.default_amount) || 0,
-                is_shared: newCat.is_shared
-            });
-            setNewCat({ name: '', default_amount: '', is_shared: false });
+            if (selectedId && selectedId !== 'new') {
+                await cashFlowAPI.updateCategory(selectedId, {
+                    name: formData.name,
+                    default_amount: Number(formData.default_amount) || 0,
+                    is_shared: formData.is_shared
+                });
+            } else {
+                await cashFlowAPI.createCategory({
+                    name: formData.name,
+                    type: context,
+                    default_amount: Number(formData.default_amount) || 0,
+                    is_shared: formData.is_shared
+                });
+            }
+            setSelectedId(null);
             queryClient.invalidateQueries(['cash-flow-categories']);
         } catch (error) {
             alert(error.message);
@@ -55,183 +76,174 @@ export default function CategoryManager({ onClose }) {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!confirm('Are you sure you want to delete this category? Past logs will remain but the category label will be lost.')) return;
+    const handleDelete = async () => {
+        if (!selectedId || selectedId === 'new') return;
+        if (!confirm('Are you sure? Past logs will remain but the category label will be lost.')) return;
+        setLoading(true);
         try {
-            await cashFlowAPI.deleteCategory(id);
+            await cashFlowAPI.deleteCategory(selectedId);
+            setSelectedId(null);
             queryClient.invalidateQueries(['cash-flow-categories']);
         } catch (error) {
             alert(error.message);
-        }
-    };
-
-    const handleUpdate = async (id) => {
-        try {
-            await cashFlowAPI.updateCategory(id, {
-                name: editData.name,
-                default_amount: Number(editData.default_amount) || 0,
-                is_shared: editData.is_shared
-            });
-            setEditingId(null);
-            queryClient.invalidateQueries(['cash-flow-categories']);
-        } catch (error) {
-            alert(error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
     return (
         <div className={styles.modalOverlay}>
-            <div className={cn(styles.modal, styles.managerModal)}>
+            <div className={cn(styles.modal, styles.modalLandscape, styles.managerModalRefined)}>
                 <div className={styles.modalHeader}>
                     <div className={styles.modalTitleIcon}>
-                        <Settings className="text-primary" />
-                        <h2 className={styles.modalTitle}>Category Manager</h2>
+                        <Settings color="var(--primary)" />
+                        <h2 className={styles.modalTitle}>Category Management</h2>
                     </div>
                     <button onClick={onClose} className={styles.closeBtn}><X size={20} /></button>
                 </div>
 
-                <div className={styles.typeTabs}>
-                    <button
-                        className={cn(styles.tab, activeTab === 'income' && styles.active)}
-                        onClick={() => setActiveTab('income')}
-                    >
-                        <ArrowUpCircle size={16} />
-                        Inflow
-                    </button>
-                    <button
-                        className={cn(styles.tab, activeTab === 'expense' && styles.active)}
-                        onClick={() => setActiveTab('expense')}
-                    >
-                        <ArrowDownCircle size={16} />
-                        Expense
-                    </button>
-                </div>
+                <div className={styles.modalColumns}>
+                    {/* Left: Category List */}
+                    <div className={styles.categoryNav}>
+                        <div className={styles.navControls}>
+                            <div className={styles.periodToggle}>
+                                <button 
+                                    className={cn(styles.periodBtn, context === 'income' && styles.active)}
+                                    onClick={() => { setContext('income'); setSelectedId(null); }}
+                                >
+                                    Inflow
+                                </button>
+                                <button 
+                                    className={cn(styles.periodBtn, context === 'expense' && styles.active)}
+                                    onClick={() => { setContext('expense'); setSelectedId(null); }}
+                                >
+                                    Expense
+                                </button>
+                            </div>
+                            <div className={styles.searchWrapper}>
+                                <Search size={14} className={styles.searchIcon} />
+                                <input 
+                                    className={styles.searchInput}
+                                    placeholder="Search..."
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        </div>
 
-                <form onSubmit={handleAdd} className={styles.categoryFormInline}>
-                    <div className={styles.formGroup}>
-                        <label className={styles.label}>Category Name</label>
-                        <input
-                            className={styles.input}
-                            placeholder="e.g. Electricity Bill"
-                            value={newCat.name}
-                            onChange={e => setNewCat({ ...newCat, name: e.target.value })}
-                            required
-                        />
-                    </div>
-                    <div className={styles.formGroup} style={{ maxWidth: '140px' }}>
-                        <label className={styles.label}>Shared Cost?</label>
-                        <div className={styles.checkboxWrapper}>
-                            <input
-                                type="checkbox"
-                                checked={newCat.is_shared}
-                                onChange={e => setNewCat({ ...newCat, is_shared: e.target.checked })}
-                                className={styles.checkbox}
-                            />
-                            <span className={styles.checkboxLabel}>Split</span>
+                        <div className={styles.categoryItemsList}>
+                            <button 
+                                className={cn(styles.newItemBtn, selectedId === 'new' && styles.activeItem)}
+                                onClick={() => handleSelect(null)}
+                            >
+                                <Plus size={16} />
+                                <span>Create New Category</span>
+                            </button>
+
+                            {isLoading ? (
+                                <div className={styles.loadingCenter}><RefreshCw className={styles.spin} /></div>
+                            ) : filteredCategories.map(cat => (
+                                <div 
+                                    key={cat.id}
+                                    className={cn(styles.categoryListItem, selectedId === cat.id && styles.activeItem)}
+                                    onClick={() => handleSelect(cat)}
+                                >
+                                    <div className={styles.catInfo}>
+                                        <span className={styles.catNameText}>{cat.name}</span>
+                                        <span className={styles.catAmountText}>Def: {formatCurrency(cat.default_amount || 0)}</span>
+                                    </div>
+                                    <ChevronRight size={14} className={styles.chevron} />
+                                </div>
+                            ))}
                         </div>
                     </div>
-                    <button type="submit" className={styles.addCatBtn} disabled={loading}>
-                        {loading ? <RefreshCw className={styles.spin} size={16} /> : <Plus size={20} />}
-                    </button>
-                </form>
 
-                <div className={styles.categoryList}>
-                    {isLoading ? (
-                        <div className="flex justify-center p-8"><RefreshCw className={styles.spin} /></div>
-                    ) : filteredCategories.length === 0 ? (
-                        <div className={styles.emptyState}>No {activeTab} categories yet</div>
-                    ) : (
-                        filteredCategories.map(cat => (
-                            <div key={cat.id} className={styles.categoryItem}>
-                                {editingId === cat.id ? (
-                                    <div className={styles.editingCard}>
-                                        <div className={styles.editGroup}>
-                                            <label className={styles.editLabel}>Update Name</label>
-                                            <input
-                                                className={styles.editInput}
-                                                value={editData.name}
-                                                onChange={e => setEditData({ ...editData, name: e.target.value })}
-                                                autoFocus
-                                            />
-                                        </div>
+                    {/* Right: Editor */}
+                    <div className={styles.editorPane}>
+                        {!selectedId ? (
+                            <div className={styles.emptyEditor}>
+                                <Settings size={48} strokeWidth={1} />
+                                <p>Select a category to modify its properties or create a new one.</p>
+                            </div>
+                        ) : (
+                            <form onSubmit={handleSave} className={styles.form}>
+                                <div className={styles.formGroup}>
+                                    <label className={styles.label}>Category Name</label>
+                                    <input 
+                                        className={styles.input}
+                                        placeholder="e.g. Electricity Bill"
+                                        value={formData.name}
+                                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
 
-                                        <div className={styles.editGroup}>
-                                            <label className={styles.editLabel}>Price</label>
-                                            <input
+                                <div className={styles.formGrid}>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.label}>Default Amount</label>
+                                        <div className={styles.currencyWrapper}>
+                                            <span className={styles.currencyPrefix}>₹</span>
+                                            <input 
                                                 type="number"
-                                                className={cn(styles.editInput, styles.priceInput)}
-                                                value={editData.default_amount}
-                                                onChange={e => setEditData({ ...editData, default_amount: e.target.value })}
+                                                className={cn(styles.input, styles.currencyInput)}
+                                                placeholder="0.00"
+                                                value={formData.default_amount}
+                                                onChange={e => setFormData({ ...formData, default_amount: e.target.value })}
                                             />
-                                        </div>
-
-                                        <div className={styles.editGroup}>
-                                            <label className={styles.editLabel}>Shared Cost</label>
-                                            <div className={styles.checkboxWrapper}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={editData.is_shared}
-                                                    onChange={e => setEditData({ ...editData, is_shared: e.target.checked })}
-                                                    className={styles.checkbox}
-                                                />
-                                                <span className={styles.checkboxLabel}>Split across all factories</span>
-                                            </div>
-                                        </div>
-
-                                        <div className={styles.editActions}>
-                                            <button className={styles.cancelAction} onClick={() => setEditingId(null)} title="Cancel">
-                                                Cancel
-                                            </button>
-                                            <button className={styles.saveAction} onClick={() => handleUpdate(cat.id)} title="Save Changes">
-                                                <Save size={18} />
-                                                <span>Save Changes</span>
-                                            </button>
                                         </div>
                                     </div>
-                                ) : (
-                                    <>
-                                        <div className={styles.catMainInfo}>
-                                            <div className="flex items-center gap-2">
-                                                <div className={styles.catName}>{cat.name}</div>
-                                                {cat.is_system ? (
-                                                    <span className={styles.systemBadge}>System</span>
-                                                ) : (
-                                                    <span className={styles.customBadge}>Custom</span>
-                                                )}
-                                                {cat.is_shared && (
-                                                    <span className={styles.sharedBadge}>Shared</span>
-                                                )}
+                                    
+                                    <div 
+                                        className={cn(styles.checkboxCard, formData.is_shared && styles.checked)}
+                                        onClick={() => setFormData({ ...formData, is_shared: !formData.is_shared })}
+                                    >
+                                        <div className={styles.checkboxGroup}>
+                                            <div className={cn(styles.customCheckbox, formData.is_shared && styles.checked)}>
+                                                {formData.is_shared && <div className={styles.checkMark} />}
                                             </div>
-                                            <div className={styles.catMeta}>
-                                                Default Suggestion: <span className="text-main font-semibold">{cat.default_amount ? `₹${cat.default_amount}` : 'None'}</span>
+                                            <div className={styles.checkboxInfo}>
+                                                <span className={styles.checkTitle}>Shared Category</span>
+                                                <span className={styles.checkDesc}>Split across all factories</span>
                                             </div>
                                         </div>
-                                        <div className={styles.catActions}>
-                                            <button className={styles.catActionBtn} onClick={() => {
-                                                setEditingId(cat.id);
-                                                setEditData({
-                                                    name: cat.name,
-                                                    default_amount: cat.default_amount || '',
-                                                    is_shared: cat.is_shared || false
-                                                });
-                                            }}>
-                                                <Edit2 size={14} />
-                                            </button>
-                                            {!cat.is_system && (
-                                                <button className={cn(styles.catActionBtn, styles.deleteBtn)} onClick={() => handleDelete(cat.id)}>
-                                                    <Trash2 size={14} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </div>
+                                    </div>
+                                </div>
 
-                <div className={styles.modalActions}>
-                    <button onClick={onClose} className={styles.cancelLink}>Done</button>
+                                <div className={styles.editorActions}>
+                                    {selectedId && selectedId !== 'new' && (
+                                        <button 
+                                            type="button" 
+                                            className={styles.deleteLink}
+                                            onClick={handleDelete}
+                                            disabled={loading}
+                                        >
+                                            <Trash2 size={16} />
+                                            <span>Delete</span>
+                                        </button>
+                                    )}
+                                    
+                                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem' }}>
+                                        <button 
+                                            type="button"
+                                            className={styles.cancelLink}
+                                            onClick={() => setSelectedId(null)}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button 
+                                            type="submit" 
+                                            className={cn(styles.actionBtn, styles.submitBtn, context === 'income' ? styles.submitIncome : styles.submitExpense)}
+                                            disabled={loading}
+                                        >
+                                            {loading ? <RefreshCw className={styles.spin} size={18} /> : <Save size={18} />}
+                                            <span>Save Category</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>

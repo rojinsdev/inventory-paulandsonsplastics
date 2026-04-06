@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/widgets/multi_select_downtime_reason.dart';
 import '../../production/providers/master_data_provider.dart';
 import '../../production/providers/production_provider.dart';
 import '../data/models/machine_model.dart';
@@ -30,6 +31,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
   String? _selectedMachineId;
   String? _selectedTemplateId;
   String? _selectedProductId; // Represents the specific variant (Color)
+  List<String> _selectedDowntimeReasons = [];
   int _shiftNumber = 1; // 1 = Day (8AM-8PM), 2 = Night (8PM-8AM)
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
@@ -101,14 +103,26 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                       : startMinutes;
 
               if (effectiveStartMinutes >= endMinutes) {
-                // Move end time to 1 hour after start, or shift end
-                int newEndHour = (_startTime.hour + 1) % 24;
-                if (_shiftNumber == 1 && newEndHour > 20) newEndHour = 20;
-                if (_shiftNumber == 2 && newEndHour > 8 && newEndHour < 20) {
-                  newEndHour = 8;
+                // Move end time to at least 1 hour after start, or shift end
+                int nextHour = (_startTime.hour + 1) % 24;
+                
+                // If adding 1 hour crosses the boundary, use the boundary
+                // BUT if we are already AT the boundary, this is a problematic session
+                if (_shiftNumber == 1) {
+                  _endTime = TimeOfDay(hour: nextHour > 20 ? 20 : nextHour, minute: _startTime.minute);
+                } else {
+                  // Shift 2: 20:00 to 08:00
+                  bool isPastBoundary = nextHour > 8 && nextHour < 20;
+                  _endTime = TimeOfDay(hour: isPastBoundary ? 8 : nextHour, minute: _startTime.minute);
                 }
-
-                _endTime = TimeOfDay(hour: newEndHour, minute: _startTime.minute);
+                
+                // Final safety: if they are still same, add 1 minute for UI clarity
+                if (_startTime.hour == _endTime.hour && _startTime.minute == _endTime.minute) {
+                   _endTime = TimeOfDay(
+                     hour: _endTime.hour, 
+                     minute: (_endTime.minute + 15) % 60
+                   );
+                }
               }
             });
           }
@@ -209,12 +223,17 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
       }
 
       final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0.0;
-      final totalProduced =
-          _isWeightBased ? null : (int.tryParse(_totalProducedController.text) ?? 0);
-      final damagedCount =
-          _isWeightBased ? 0 : (int.tryParse(_damagedCountController.text) ?? 0);
-      final actualQuantity =
-          totalProduced != null ? totalProduced - damagedCount : 0;
+      
+      int actualQuantity = 0;
+      if (_isWeightBased) {
+        final totalWeight = double.tryParse(_totalWeightController.text) ?? 0.0;
+        final unitWeight = double.tryParse(_actualWeightController.text) ?? 1.0;
+        actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
+      } else {
+        final totalProduced = int.tryParse(_totalProducedController.text) ?? 0;
+        final damagedCount = int.tryParse(_damagedCountController.text) ?? 0;
+        actualQuantity = totalProduced - damagedCount;
+      }
 
       final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
       final shiftDurationSeconds = shiftDuration * 3600;
@@ -244,8 +263,9 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 double.tryParse(_actualCycleTimeController.text) ?? 0.0,
             actualWeightGrams: (double.tryParse(_actualWeightController.text) ?? 0.0),
             downtimeMinutes: downtimeMinutes,
-            downtimeReason:
-                downtimeMinutes > 30 ? _downtimeReasonController.text : null,
+            downtimeReason: _selectedDowntimeReasons.isNotEmpty
+                ? _selectedDowntimeReasons.join(', ')
+                : null,
             date: _selectedDate,
             saveAndAddAnother: saveAndAddAnother,
           );
@@ -546,7 +566,9 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                                     fontSize: 12,
                                     color: colorScheme.onSurfaceVariant)),
                             const SizedBox(height: 4),
-                            Text(_startTime.format(context),
+                            Text(
+                                DateFormat.jm().format(DateTime(0, 0, 0,
+                                    _startTime.hour, _startTime.minute)),
                                 style: const TextStyle(
                                     fontSize: 18, fontWeight: FontWeight.bold)),
                           ],
@@ -575,7 +597,9 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                                     fontSize: 12,
                                     color: colorScheme.onSurfaceVariant)),
                             const SizedBox(height: 4),
-                            Text(_endTime.format(context),
+                            Text(
+                                DateFormat.jm().format(DateTime(0, 0, 0,
+                                    _endTime.hour, _endTime.minute)),
                                 style: const TextStyle(
                                     fontSize: 18, fontWeight: FontWeight.bold)),
                           ],
@@ -597,6 +621,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                       : null;
 
                   return DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: safeMachineId,
                     decoration: const InputDecoration(
                       labelText: 'Machine',
@@ -657,6 +682,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: filteredTemplates.any((t) => t.id == _selectedTemplateId) 
                             ? _selectedTemplateId 
                             : null,
@@ -755,6 +781,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                             : null;
 
                         return DropdownButtonFormField<String>(
+                          isExpanded: true,
                           initialValue: safeProductId,
                           decoration: const InputDecoration(
                             labelText: 'Color Variant',
@@ -801,6 +828,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                     prefixIcon: Icon(Icons.scale),
                     suffixText: 'kg',
                   ),
+                  onChanged: (value) => setState(() {}),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   validator: (value) =>
@@ -814,6 +842,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                     prefixIcon: Icon(Icons.production_quantity_limits),
                     suffixText: 'units',
                   ),
+                  onChanged: (value) => setState(() {}),
                   keyboardType: TextInputType.number,
                   validator: (value) =>
                       value == null || value.isEmpty ? 'Required' : null,
@@ -827,6 +856,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                     suffixText: 'units',
                     hintText: '0',
                   ),
+                  onChanged: (value) => setState(() {}),
                   keyboardType: TextInputType.number,
                 ),
               ],
@@ -841,6 +871,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                   suffixText: 'seconds',
                   helperText: 'From machine display',
                 ),
+                onChanged: (value) => setState(() {}),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 validator: (value) =>
@@ -857,6 +888,7 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                   suffixText: 'grams',
                   helperText: 'Measured weight',
                 ),
+                onChanged: (value) => setState(() {}),
                 keyboardType:
                     const TextInputType.numberWithOptions(decimal: true),
                 validator: (value) =>
@@ -867,36 +899,67 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
               // Downtime Reason (conditional)
               Builder(
                 builder: (context) {
-                  // Calculate downtime for local UI state
+                  final hasProduct = _selectedProductId != null;
+                  final hasInput = _isWeightBased 
+                      ? _totalWeightController.text.isNotEmpty 
+                      : _totalProducedController.text.isNotEmpty;
+                  final shouldCalculate = hasProduct && hasInput;
+
                   final shiftHours = _calculateShiftDuration();
                   final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
-                  final totalProduced = int.tryParse(_totalProducedController.text) ?? 0;
-                  final damagedCount = int.tryParse(_damagedCountController.text) ?? 0;
-                  final actualQuantity = totalProduced - damagedCount;
+                  
+                  int actualQuantity = 0;
+                  if (_isWeightBased) {
+                    final totalWeight = double.tryParse(_totalWeightController.text) ?? 0;
+                    final unitWeight = double.tryParse(_actualWeightController.text) ?? 1;
+                    actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
+                  } else {
+                    final totalProduced = int.tryParse(_totalProducedController.text) ?? 0;
+                    final damagedCount = int.tryParse(_damagedCountController.text) ?? 0;
+                    actualQuantity = totalProduced - damagedCount;
+                  }
                   
                   final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
                   final shiftDurationSeconds = shiftHours * 3600;
-                  final downtimeMinutes = ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440);
                   
-                  final isRequired = downtimeMinutes > 30;
+                  final downtimeMinutes = shouldCalculate 
+                      ? ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440)
+                      : 0;
+                  
+                  final isRequired = shouldCalculate && downtimeMinutes > 30;
 
-                  return TextFormField(
-                    controller: _downtimeReasonController,
-                    enabled: isRequired || _downtimeReasonController.text.isNotEmpty,
-                    decoration: InputDecoration(
-                      labelText: isRequired ? 'Downtime Reason (Required: ${downtimeMinutes}m)' : 'Downtime Reason (Optional: ${downtimeMinutes}m)',
-                      prefixIcon: const Icon(Icons.report_problem_outlined),
-                      hintText: 'Die Change, Power Cut, Maintenance, Other',
-                      helperText: isRequired ? 'Submission requires a reason for downtime > 30 mins' : null,
-                      helperStyle: TextStyle(color: isRequired ? Theme.of(context).colorScheme.error : null),
-                    ),
-                    maxLines: 2,
-                    validator: (value) {
-                      if (isRequired && (value == null || value.trim().isEmpty)) {
-                        return 'Downtime is ${downtimeMinutes}m. Reason is required.';
-                      }
-                      return null;
-                    },
+                  return Column(
+                    children: [
+                      MultiSelectDowntimeReason(
+                        initialValues: _selectedDowntimeReasons,
+                        labelText: isRequired ? 'Downtime Reasons (Required: ${downtimeMinutes}m)' : 'Downtime Reasons (Optional: ${downtimeMinutes}m)',
+                        helperText: isRequired ? 'Reason required for downtime > 30 mins' : null,
+                        helperStyle: TextStyle(color: isRequired ? Theme.of(context).colorScheme.error : null),
+                        onSelectionChanged: (selected) {
+                          setState(() {
+                            _selectedDowntimeReasons = selected;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                      if (_selectedDowntimeReasons.contains('Other')) ...[
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _downtimeReasonController,
+                          decoration: const InputDecoration(
+                            labelText: 'Specify Other Reason',
+                            prefixIcon: Icon(Icons.edit_note),
+                          ),
+                          maxLines: 2,
+                          validator: (val) {
+                            if (isRequired && (val == null || val.trim().isEmpty)) {
+                              return 'Please specify the reason';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ],
                   );
                 },
               ),

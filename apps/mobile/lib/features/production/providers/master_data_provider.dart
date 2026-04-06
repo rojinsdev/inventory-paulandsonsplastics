@@ -9,10 +9,17 @@ import '../data/models/cap_template_model.dart';
 
 import '../data/models/inner_model.dart';
 import '../data/models/inner_template_model.dart';
+import '../data/models/cap_mapping_model.dart';
 
 final masterDataRepositoryProvider = Provider<MasterDataRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
   return MasterDataRepository(apiClient);
+});
+
+final capMappingsProvider =
+    FutureProvider.autoDispose<List<CapMapping>>((ref) async {
+  final repo = ref.watch(masterDataRepositoryProvider);
+  return repo.getCapMappings();
 });
 
 final machinesProvider = FutureProvider.autoDispose<List<Machine>>((ref) async {

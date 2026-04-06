@@ -14,6 +14,7 @@ class ProductionRequest {
   final bool isSatisfiable;
   final StockSummary? stockSummary;
   final bool isInner;
+  final String? requiredInnerName;
 
   ProductionRequest({
     required this.id,
@@ -31,6 +32,7 @@ class ProductionRequest {
     this.isSatisfiable = false,
     this.stockSummary,
     this.isInner = false,
+    this.requiredInnerName,
   });
 
   factory ProductionRequest.fromJson(Map<String, dynamic> json) {
@@ -61,6 +63,7 @@ class ProductionRequest {
           ? StockSummary.fromJson(json['stock_summary']) 
           : null,
       isInner: json['is_inner'] ?? false,
+      requiredInnerName: json['required_inner_name'] as String?,
     );
   }
 
@@ -76,6 +79,7 @@ class ProductionRequest {
         'available_stock': availableStock,
         'is_satisfiable': isSatisfiable,
         'is_inner': isInner,
+        'required_inner_name': requiredInnerName,
       };
 }
 

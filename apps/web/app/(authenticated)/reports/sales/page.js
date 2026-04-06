@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
-import { Loader2, ShoppingCart, Users, DollarSign, TrendingUp, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
+import { Loader2, ShoppingCart, Users, IndianRupee, TrendingUp, Download, Calendar, Filter, X, RefreshCw } from 'lucide-react';
 import { reportsAPI, customersAPI, productsAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
@@ -318,7 +318,7 @@ export default function SalesReportsPage() {
                 </div>
                 <div className={`${styles.statCard} ${styles.statCardRevenue}`}>
                     <div className={styles.statIcon}>
-                        <DollarSign size={28} />
+                        <IndianRupee size={28} />
                     </div>
                     <div className={styles.statContent}>
                         <div className={styles.statValue}>{formatCurrency(report?.total_revenue || 0)}</div>

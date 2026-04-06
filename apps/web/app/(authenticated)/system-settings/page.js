@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUI } from '@/contexts/UIContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { Save, Loader2, Settings as SettingsIcon, Info, CheckCircle, XCircle, Search } from 'lucide-react';
 import { settingsAPI } from '@/lib/api';
 import { useGuide } from '@/contexts/GuideContext';
@@ -10,6 +11,7 @@ import styles from './page.module.css';
 
 export default function SystemSettingsPage() {
     const { setPageTitle } = useUI();
+    const { settings, updateSetting } = useSettings();
     const { registerGuide } = useGuide();
     const { user } = useAuth();
     const [loading, setLoading] = useState(true);
@@ -190,16 +192,71 @@ export default function SystemSettingsPage() {
                         Retry
                     </button>
                 </div>
-            ) : filteredCategories.length === 0 ? (
-                <div className={styles.emptyState}>
-                    <SettingsIcon size={48} />
-                    <p>No settings found</p>
-                    <p className="text-muted">Try adjusting your search query</p>
-                </div>
             ) : (
                 <>
-                    {/* Category Cards */}
-                    <div className={styles.categoriesContainer}>
+                    {/* UI Preferences (Stored Locally) */}
+                    {(!searchQuery || 
+                      'ui preferences auto-refresh dashboard compact mode'.toLowerCase().includes(searchQuery.toLowerCase())) && (
+                        <div className={styles.categoryCard} style={{ marginBottom: '2rem' }}>
+                            <div className={styles.categoryHeader}>
+                                <span className={styles.categoryIcon}>🖥️</span>
+                                <h2 className={styles.categoryTitle}>UI Preferences</h2>
+                            </div>
+                            <div className={styles.settingsGrid}>
+                                <div className={styles.settingItem}>
+                                    <div className={styles.settingContent}>
+                                        <div className={styles.settingHeader}>
+                                            <label className={styles.settingLabel}>Dashboard Auto-Refresh</label>
+                                        </div>
+                                        <p className={styles.settingDescription}>
+                                            Automatically refresh the dashboard main content to keep data up-to-date.
+                                        </p>
+                                        <div className={styles.inputWrapper}>
+                                            <select 
+                                                className={styles.input}
+                                                value={settings.autoRefreshInterval || 0}
+                                                onChange={(e) => updateSetting('autoRefreshInterval', Number(e.target.value))}
+                                            >
+                                                <option value={0}>Disabled</option>
+                                                <option value={30000}>Every 30 Seconds</option>
+                                                <option value={60000}>Every 1 Minute</option>
+                                                <option value={300000}>Every 5 Minutes</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className={styles.settingItem}>
+                                    <div className={styles.settingContent}>
+                                        <div className={styles.settingHeader}>
+                                            <label className={styles.settingLabel}>Compact Mode</label>
+                                        </div>
+                                        <p className={styles.settingDescription}>
+                                            Use a more compact layout for the sidebar and content.
+                                        </p>
+                                        <div className={styles.inputWrapper}>
+                                            <label className={styles.toggle}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={settings.compactMode}
+                                                    onChange={(e) => updateSetting('compactMode', e.target.checked)}
+                                                />
+                                                <span className={styles.toggleSlider}></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {filteredCategories.length === 0 ? (
+                        <div className={styles.emptyState}>
+                            <SettingsIcon size={48} />
+                            <p>No system settings found</p>
+                            <p className="text-muted">Try adjusting your search query</p>
+                        </div>
+                    ) : (
+                        <div className={styles.categoriesContainer}>
                         {filteredCategories.map(([category, settings]) => (
                             <div key={category} className={styles.categoryCard}>
                                 <div className={styles.categoryHeader}>
@@ -267,7 +324,8 @@ export default function SystemSettingsPage() {
                                 </div>
                             </div>
                         ))}
-                    </div>
+                        </div>
+                    )}
 
                     {/* Save Actions Bar */}
                     {hasChanges && (

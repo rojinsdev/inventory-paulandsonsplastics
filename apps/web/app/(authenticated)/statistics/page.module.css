@@ -1,0 +1,321 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-bottom: 40px;
+    color: var(--text-main);
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.titleSection h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.titleSection p {
+    color: var(--text-muted);
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.pageBtn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-main);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pageBtn:hover:not(:disabled) {
+    background: var(--surface-elevated);
+    border-color: var(--slate-300);
+}
+
+:global(.dark) .pageBtn:hover:not(:disabled) {
+    border-color: var(--slate-700);
+}
+
+/* Filters */
+.filtersCard {
+    background: var(--surface);
+    padding: 20px;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-end;
+    box-shadow: var(--shadow-sm);
+}
+
+.filterGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 180px;
+}
+
+.filterGroup label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.select, .input {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    color: var(--text-main);
+    background: var(--surface-elevated);
+    outline: none;
+    transition: all 0.2s;
+}
+
+.select:focus, .input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* KPI Grid */
+.kpiGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 20px;
+}
+
+.kpiCard {
+    background: var(--surface);
+    padding: 24px;
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s;
+}
+
+.kpiCard:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.kpiTop {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.kpiIconBox {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon_blue { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
+.icon_green { background: rgba(22, 163, 74, 0.1); color: #16a34a; }
+.icon_purple { background: rgba(124, 58, 237, 0.1); color: #7c3aed; }
+.icon_orange { background: rgba(234, 88, 12, 0.1); color: #ea580c; }
+
+.kpiValue {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.kpiLabel {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+/* Table Section */
+.tableContainer {
+    background: var(--surface);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+}
+
+.tableHeader {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tableHeader h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.tableWrapper {
+    overflow-x: auto;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.table th {
+    padding: 16px 24px;
+    background: var(--surface-elevated);
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.table td {
+    padding: 16px 24px;
+    font-size: 14px;
+    color: var(--text-main);
+    border-bottom: 1px solid var(--border);
+}
+
+.table tr:hover td {
+    background: var(--surface-elevated);
+}
+
+.table tr:last-child td {
+    border-bottom: none;
+}
+
+.userCell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: var(--slate-100);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--slate-600);
+    flex-shrink: 0;
+}
+
+:global(.dark) .avatar {
+    background: var(--slate-800);
+    color: var(--slate-400);
+}
+
+.badge {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: capitalize;
+    display: inline-block;
+}
+
+.textMuted {
+    color: var(--text-muted);
+}
+
+.textXs {
+    font-size: 11px;
+}
+
+.textSm {
+    font-size: 13px;
+}
+
+.textBold {
+    font-weight: 600;
+}
+
+.textMain {
+    color: var(--text-main);
+}
+
+.badge_production { 
+    background: rgba(37, 99, 235, 0.1); 
+    color: #3b82f6; 
+}
+
+.badge_inventory { 
+    background: rgba(124, 58, 237, 0.1); 
+    color: #8b5cf6; 
+}
+
+/* Pagination */
+.pagination {
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+}
+
+.pageInfo {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.pageControls {
+    display: flex;
+    gap: 8px;
+}
+
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 0;
+    gap: 16px;
+    color: var(--text-muted);
+}
+
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@media (max-width: 768px) {
+    .filtersCard {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .filterGroup {
+        min-width: 0;
+    }
+}

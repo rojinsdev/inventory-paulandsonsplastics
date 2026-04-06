@@ -37,8 +37,10 @@ export class InnerService {
     async getAllInners(factoryId?: string) {
         let selectStr = `
             *,
-            template:inner_templates(*),
-            raw_material:raw_materials(id, name)
+            template:inner_templates(
+                *,
+                raw_material:raw_materials(id, name)
+            )
         `;
 
         if (factoryId) {
@@ -68,9 +70,11 @@ export class InnerService {
             .from('inners')
             .select(`
                 *,
-                template:inner_templates(*),
-                mapped_caps:caps(id, name, color),
-                raw_material:raw_materials(id, name)
+                template:inner_templates(
+                    *,
+                    raw_material:raw_materials(id, name)
+                ),
+                mapped_caps:caps(id, name, color)
             `)
             .eq('id', id)
             .single();
@@ -163,6 +167,7 @@ export class InnerService {
     async createTemplateWithVariants(payload: any, colors: string[]) {
         const {
             product_template_ids,
+            tub_template_ids,
             colors: _colors,
             ...templateData
         } = payload;
@@ -179,7 +184,9 @@ export class InnerService {
         const variants = colors.map(color => ({
             template_id: template.id,
             color: color,
-            factory_id: template.factory_id
+            factory_id: template.factory_id,
+            ideal_weight_grams: template.ideal_weight_grams,
+            ideal_cycle_time_seconds: template.ideal_cycle_time_seconds
         }));
 
         const { data: createdVariants, error: vError } = await supabase
@@ -211,7 +218,7 @@ export class InnerService {
                     *,
                     stock:inner_stock_balances(quantity)
                 ),
-                mapped_product_templates:product_templates(id, name)
+                mapped_tub_templates:product_templates(id, name)
             `);
 
         if (factoryId) {
@@ -232,7 +239,7 @@ export class InnerService {
                     *,
                     stock:inner_stock_balances(quantity)
                 ),
-                mapped_product_templates:product_templates(id, name)
+                mapped_tub_templates:product_templates(id, name)
             `)
             .eq('id', id)
             .single();
@@ -242,7 +249,7 @@ export class InnerService {
     }
 
     async updateTemplate(id: string, data: any) {
-        const { product_template_ids, colors, machine_id, ...templateData } = data;
+        const { product_template_ids, tub_template_ids, colors, machine_id, ...templateData } = data;
 
         const { data: template, error } = await supabase
             .from('inner_templates')
@@ -318,6 +325,45 @@ export class InnerService {
 
         if (error) throw new Error(error.message);
         return { success: true };
+    }
+
+    async quickDefineVariant(templateId: string, color: string, factoryId: string) {
+        const template = await this.getTemplateById(templateId);
+
+        const variant = {
+            template_id: template.id,
+            color: color,
+            factory_id: factoryId,
+            ideal_weight_grams: template.ideal_weight_grams || 0,
+            ideal_cycle_time_seconds: template.ideal_cycle_time_seconds || 0
+        };
+
+        const { data: created, error } = await supabase
+            .from('inners')
+            .insert(variant)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Failed to quick define inner variant: ${error.message}`);
+        return created;
+    }
+
+    async quickDefineTemplate(name: string, factoryId: string) {
+        const templateData = {
+            name,
+            ideal_weight_grams: 0,
+            ideal_cycle_time_seconds: 0,
+            factory_id: factoryId
+        };
+
+        const { data: template, error } = await supabase
+            .from('inner_templates')
+            .insert(templateData)
+            .select()
+            .single();
+
+        if (error) throw new Error(`Failed to quick define inner template: ${error.message}`);
+        return template;
     }
 }
 

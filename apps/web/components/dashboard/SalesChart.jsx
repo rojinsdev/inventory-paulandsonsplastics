@@ -5,7 +5,7 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import { formatNumber, formatCurrency } from '@/lib/utils';
 import styles from './Chart.module.css';
 
-export default function SalesChart({ data, compact }) {
+export default function SalesChart({ data, compact, height }) {
     const chartData = useMemo(() => {
         if (!data || !Array.isArray(data)) return [];
         return data.map(item => ({
@@ -56,7 +56,7 @@ export default function SalesChart({ data, compact }) {
                         valueFormatter: (value) => formatCurrency(value),
                     },
                 ]}
-                height={compact ? 220 : 300}
+                height={height || (compact ? 220 : 300)}
                 margin={{ left: 50, right: 70, top: compact ? 20 : 40, bottom: compact ? 30 : 40 }}
                 slotProps={{
                     legend: {

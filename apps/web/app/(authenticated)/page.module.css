@@ -146,16 +146,13 @@
     padding: 1.5rem;
     text-align: left;
     cursor: pointer;
-    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
-        box-shadow 0.2s ease,
-        border-color 0.2s ease;
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
 .kpiCard:hover {
-    transform: translateY(-3px);
     box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.12);
     border-color: var(--primary);
 }
@@ -265,7 +262,7 @@
 /* ── CHARTS ─────────────────────────────────────────────────────────── */
 .chartGrid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 1.25rem;
 }
 
@@ -315,8 +312,7 @@
 }
 
 .chartBody {
-    height: 300px;
-    overflow: hidden;
+    min-height: 400px;
 }
 
 /* ── BOTTOM PANELS ────────────────────────────────────────────────── */

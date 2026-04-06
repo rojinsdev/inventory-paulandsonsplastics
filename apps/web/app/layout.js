@@ -21,6 +21,14 @@ const inter = Inter({
 export const metadata = {
   title: 'Paul & Sons Plastics - Admin Portal',
   description: 'Inventory & Production Management System',
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/logo.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/favicon.ico',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({ children }) {

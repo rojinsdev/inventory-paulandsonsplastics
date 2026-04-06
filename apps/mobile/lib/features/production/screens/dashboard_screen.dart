@@ -98,6 +98,15 @@ class DashboardScreen extends ConsumerWidget {
                       containerColor: colorScheme.tertiaryContainer,
                       onTap: () => context.push('/inventory/bundle'),
                     ),
+                    const SizedBox(height: 16),
+
+                    _ExpressiveCard(
+                      title: 'My History',
+                      subtitle: 'View your production logs',
+                      icon: Icons.history,
+                      containerColor: colorScheme.surfaceContainerHigh,
+                      onTap: () => context.push('/production/history'),
+                    ),
 
                     // Extra bottom spacing for FAB and Navigation Bar
                     const SizedBox(height: 120),
@@ -210,7 +219,7 @@ class _ShiftStatusCard extends StatelessWidget {
       builder: (context, snapshot) {
         final now = snapshot.data!;
         final dateStr = DateFormat('EEEE, d MMMM yyyy').format(now);
-        final timeStr = DateFormat('HH:mm:ss').format(now);
+        final timeStr = DateFormat('hh:mm:ss a').format(now);
         
         final hour = now.hour;
         int shiftNumber;
@@ -220,10 +229,10 @@ class _ShiftStatusCard extends StatelessWidget {
         // Shift 2: 20:00 to 07:59 (8 PM to 7:59 AM)
         if (hour >= 8 && hour < 20) {
           shiftNumber = 1;
-          shiftTimeRange = '08:00 - 20:00';
+          shiftTimeRange = '08:00 AM - 08:00 PM';
         } else {
           shiftNumber = 2;
-          shiftTimeRange = '20:00 - 08:00';
+          shiftTimeRange = '08:00 PM - 08:00 AM';
         }
 
         return Container(

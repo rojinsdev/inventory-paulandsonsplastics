@@ -120,11 +120,40 @@
     border-bottom: 1px solid var(--border);
 }
 
+.orderIdRow {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
 .orderId {
     font-size: 1rem;
     font-weight: 600;
     color: var(--text-main);
-    margin-bottom: 0.25rem;
+}
+
+.statusBadge {
+    padding: 0.25rem 0.625rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+}
+
+.statusBadge.pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.statusBadge.reserved {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.statusBadge.partially_delivered {
+    background: #ecfdf5;
+    color: #065f46;
 }
 
 .customerName {
@@ -159,16 +188,39 @@
     background-color: var(--surface-elevated);
 }
 
+.itemMain {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
 .itemProduct {
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-main);
     font-size: 0.875rem;
 }
 
 .itemQty {
     color: var(--text-muted);
-    font-size: 0.875rem;
-    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.itemStatus {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.125rem;
+    font-size: 0.75rem;
+}
+
+.shippedQty {
+    color: var(--indigo-600);
+    font-weight: 600;
+}
+
+.prepQty {
+    color: var(--success);
+    font-weight: 600;
 }
 
 .cardFooter {
@@ -387,8 +439,8 @@
 
 .pricingHeader {
     display: grid;
-    grid-template-columns: 2fr 1fr 1.2fr 1fr;
-    gap: 1rem;
+    grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr;
+    gap: 1.5rem;
     padding: 0.75rem 1rem;
     background: var(--surface);
     border-radius: 0.5rem;
@@ -401,27 +453,69 @@
 
 .pricingRow {
     display: grid;
-    grid-template-columns: 2fr 1fr 1.2fr 1fr;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
+    grid-template-columns: 2fr 1.2fr 1fr 1fr 1fr;
+    gap: 1.5rem;
+    padding: 1rem;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 0.5rem;
     align-items: center;
 }
 
-.productName {
-    font-weight: 500;
-    color: var(--text-main);
-    font-size: 0.875rem;
+.productInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
 }
 
-.quantity {
+.productName {
+    font-weight: 600;
+    color: var(--text-main);
+    font-size: 0.9375rem;
+}
+
+.productMeta {
+    font-size: 0.75rem;
     color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.qtyStats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.8125rem;
+}
+
+.orderQty {
+    color: var(--text-muted);
+}
+
+.prepQty {
+    color: var(--success);
+    font-weight: 600;
+}
+
+.qtyInput {
+    width: 80px;
+    padding: 0.5rem 0.75rem;
+    border: 2px solid var(--indigo-100);
+    border-radius: 0.5rem;
+    background: var(--surface-elevated);
+    color: var(--text-main);
     font-size: 0.875rem;
+    font-weight: 600;
+    transition: all var(--transition-base);
+}
+
+.qtyInput:focus {
+    outline: none;
+    border-color: var(--indigo-500);
+    background: var(--surface);
 }
 
 .priceInput {
+    width: 100px;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--border);
     border-radius: 0.5rem;
@@ -724,9 +818,8 @@
 
     .pricingHeader,
     .pricingRow {
-        grid-template-columns: 1.5fr 0.8fr 1fr 0.8fr;
-        gap: 0.5rem;
-        font-size: 0.75rem;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
     }
 
     .paymentFields {

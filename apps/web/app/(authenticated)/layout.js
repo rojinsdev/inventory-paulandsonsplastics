@@ -26,6 +26,18 @@ export default function AuthenticatedLayout({ children }) {
         }
     }, [pathname, settings.defaultView, router]);
 
+    // Handle Auto-Refresh
+    useEffect(() => {
+        if (!settings.autoRefreshInterval || settings.autoRefreshInterval <= 0) return;
+
+        const interval = setInterval(() => {
+            console.log(`[AutoRefresh] Refreshing at ${new Date().toLocaleTimeString()}`);
+            router.refresh();
+        }, settings.autoRefreshInterval);
+
+        return () => clearInterval(interval);
+    }, [settings.autoRefreshInterval, router]);
+
     return (
         <ProtectedRoute>
             <FactoryProvider>

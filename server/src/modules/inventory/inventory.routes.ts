@@ -22,6 +22,12 @@ router.post('/unpack',
     asyncHandler(inventoryController.unpack)
 );
 
+router.post('/quick-define',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    asyncHandler(inventoryController.quickDefine)
+);
+
 
 // GET routes - Both roles can view
 router.get('/stock/:id',
@@ -45,6 +51,18 @@ router.get('/available',
     asyncHandler(inventoryController.getAvailable)
 );
 
+router.get('/transactions',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    asyncHandler(inventoryController.getTransactions)
+);
+
+router.get('/history',
+    authenticate,
+    requireRole('admin', 'production_manager'),
+    asyncHandler(inventoryController.getProductionHistory)
+);
+
 // Raw Materials
 router.get('/raw-materials',
     authenticate,
@@ -65,6 +83,12 @@ router.post('/raw-materials/:id/adjust',
     authenticate,
     requireRole('admin', 'production_manager'),
     asyncHandler(inventoryController.adjustRawMaterial)
+);
+
+router.post('/bulk-initialize',
+    authenticate,
+    requireRole('admin'),
+    asyncHandler(inventoryController.bulkInitialize)
 );
 
 

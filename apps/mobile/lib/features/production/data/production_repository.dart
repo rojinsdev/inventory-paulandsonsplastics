@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/constants/api_constants.dart';
+import './models/production_history_model.dart';
 
 class ProductionRepository {
   final ApiClient _apiClient;
@@ -80,6 +81,7 @@ class ProductionRepository {
 
   Future<void> submitCapProduction({
     required String capId,
+    required String machineId,
     required int shiftNumber,
     required String startTime,
     required String endTime,
@@ -88,11 +90,14 @@ class ProductionRepository {
     required double actualCycleTimeSeconds,
     required double actualWeightGrams,
     String? remarks,
+    int? downtimeMinutes,
+    String? downtimeReason,
     required DateTime date,
   }) async {
     try {
       final payload = {
         'cap_id': capId,
+        'machine_id': machineId,
         'shift_number': shiftNumber,
         'start_time': startTime,
         'end_time': endTime,
@@ -101,6 +106,8 @@ class ProductionRepository {
         'actual_cycle_time_seconds': actualCycleTimeSeconds,
         'actual_weight_grams': actualWeightGrams,
         'remarks': remarks,
+        'downtime_minutes': downtimeMinutes,
+        'downtime_reason': downtimeReason,
         'date': date.toIso8601String().split('T')[0], // YYYY-MM-DD
       };
 
@@ -130,6 +137,8 @@ class ProductionRepository {
     required double actualCycleTimeSeconds,
     required double actualWeightGrams,
     String? remarks,
+    int? downtimeMinutes,
+    String? downtimeReason,
     required DateTime date,
   }) async {
     try {
@@ -143,6 +152,8 @@ class ProductionRepository {
         'actual_cycle_time_seconds': actualCycleTimeSeconds,
         'actual_weight_grams': actualWeightGrams,
         'remarks': remarks,
+        'downtime_minutes': downtimeMinutes,
+        'downtime_reason': downtimeReason,
         'date': date.toIso8601String().split('T')[0],
       };
 
@@ -152,6 +163,42 @@ class ProductionRepository {
         ApiConstants.innerProductionSubmit,
         data: payload,
       );
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data['error'] ?? e.message;
+        throw Exception(errorMsg);
+      }
+      rethrow;
+    }
+  }
+
+  Future<ProductionHistoryResponse> getProductionHistory({
+    String? factoryId,
+    String? startDate,
+    String? endDate,
+    String? userId,
+    String? itemType,
+    int page = 1,
+    int limit = 20,
+  }) async {
+    try {
+      final Map<String, dynamic> queryParams = {
+        'page': page,
+        'limit': limit,
+      };
+
+      if (factoryId != null) queryParams['factory_id'] = factoryId;
+      if (startDate != null) queryParams['startDate'] = startDate;
+      if (endDate != null) queryParams['endDate'] = endDate;
+      if (userId != null) queryParams['user_id'] = userId;
+      if (itemType != null) queryParams['item_type'] = itemType;
+
+      final response = await _apiClient.client.get(
+        ApiConstants.inventoryHistory,
+        queryParameters: queryParams,
+      );
+
+      return ProductionHistoryResponse.fromJson(response.data);
     } catch (e) {
       if (e is DioException) {
         final errorMsg = e.response?.data['error'] ?? e.message;

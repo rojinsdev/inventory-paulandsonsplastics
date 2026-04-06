@@ -15,8 +15,7 @@ class SalesOrderRepository {
         ApiConstants.salesOrders,
         queryParameters: {
           if (factoryId != null) 'factory_id': factoryId,
-          'status':
-              'pending', // We only care about pending orders that need preparation
+          'status': 'pending,reserved,partially_delivered',
         },
       );
 

@@ -85,7 +85,7 @@ export class InnerController {
             const template = await innerService.getTemplateById(id);
             res.json(template);
         } catch (error: any) {
-            res.status(404).json({ error: 'Template not found' });
+            res.status(500).json({ error: error.message });
         }
     }
 

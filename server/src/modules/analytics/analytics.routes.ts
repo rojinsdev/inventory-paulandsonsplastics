@@ -12,6 +12,7 @@ router.get('/weight-wastage', analyticsController.getWeightWastage);
 router.get('/downtime-breakdown', analyticsController.getDowntimeBreakdown);
 router.get('/machine-efficiency', analyticsController.getMachineEfficiency);
 router.get('/shift-comparison', analyticsController.getShiftComparison);
+router.get('/action-required', analyticsController.getActionRequired);
 router.get('/summary', analyticsController.getDashboardSummary);
 
 export default router;

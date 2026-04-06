@@ -32,6 +32,7 @@ const submitProductionSchema = z.object({
 
 const submitCapProductionSchema = z.object({
     cap_id: z.string().uuid(),
+    machine_id: z.string().uuid(),
     factory_id: z.string().uuid().optional(),
     date: z.string(),
     shift_number: z.number().int().min(1).max(2),
@@ -41,11 +42,14 @@ const submitCapProductionSchema = z.object({
     total_produced: z.number().int().nonnegative().optional(),
     actual_cycle_time_seconds: z.number().nonnegative().optional(),
     actual_weight_grams: z.number().nonnegative().optional(),
+    downtime_minutes: z.number().int().nonnegative().optional(),
+    downtime_reason: z.string().optional(),
     remarks: z.string().optional(),
 });
 
 const submitInnerProductionSchema = z.object({
     inner_id: z.string().uuid(),
+    machine_id: z.string().uuid(),
     factory_id: z.string().uuid().optional(),
     date: z.string(),
     shift_number: z.number().int().min(1).max(2),
@@ -55,6 +59,8 @@ const submitInnerProductionSchema = z.object({
     total_produced: z.number().int().nonnegative().optional(),
     actual_cycle_time_seconds: z.number().nonnegative().optional(),
     actual_weight_grams: z.number().nonnegative().optional(),
+    downtime_minutes: z.number().int().nonnegative().optional(),
+    downtime_reason: z.string().optional(),
     remarks: z.string().optional(),
 });
 
@@ -109,7 +115,7 @@ export class ProductionController {
         const { id } = req.params;
         const { status } = req.body;
 
-        if (!['pending', 'in_production', 'completed', 'cancelled'].includes(status)) {
+        if (!['pending', 'in_production', 'completed', 'prepared', 'cancelled'].includes(status)) {
             throw new AppError('Invalid status', 400);
         }
 

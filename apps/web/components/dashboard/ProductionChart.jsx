@@ -6,7 +6,7 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatNumber } from '@/lib/utils';
 import styles from './Chart.module.css';
 
-export default function ProductionChart({ data, timePeriod, compact }) {
+export default function ProductionChart({ data, timePeriod, compact, height }) {
     const { chartData, comparisons } = useMemo(() => {
         if (!data || !Array.isArray(data)) return { chartData: [], comparisons: null };
 
@@ -142,7 +142,7 @@ export default function ProductionChart({ data, timePeriod, compact }) {
                             strokeDasharray: '3 3',
                         } : null
                     ].filter(Boolean)}
-                    height={compact ? 220 : 300}
+                    height={height || (compact ? 220 : 300)}
                     margin={{ left: 60, right: 60, top: compact ? 20 : 40, bottom: compact ? 30 : 40 }}
                     slotProps={{
                         legend: {

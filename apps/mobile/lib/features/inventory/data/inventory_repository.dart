@@ -4,6 +4,7 @@ import '../../../core/constants/api_constants.dart';
 import '../providers/inventory_provider.dart';
 import '../../inventory/providers/raw_material_model.dart';
 import '../providers/cap_stock_model.dart';
+import '../providers/inner_stock_model.dart';
 
 
 
@@ -124,6 +125,34 @@ class InventoryRepository {
     }
   }
 
+  /// Get inner stock balances (read-only)
+  Future<List<InnerStock>> getInnerStockBalances() async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      final endpoint = factoryId != null
+          ? '${ApiConstants.inventoryInnerBalances}?factory_id=$factoryId'
+          : ApiConstants.inventoryInnerBalances;
+
+      final response = await _apiClient.client.get(endpoint);
+      final responseData = response.data;
+      final List<dynamic> data;
+
+      if (responseData is List<dynamic>) {
+        data = responseData;
+      } else {
+        data = [];
+      }
+
+      return data.map((item) => InnerStock.fromJson(item)).toList();
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(e.response?.data['error'] ??
+            'Failed to fetch inner stock balances');
+      }
+      rethrow;
+    }
+  }
+
   Future<void> adjustRawMaterial({
     required String id,
     required double quantityKg,
@@ -222,5 +251,62 @@ class InventoryRepository {
     }
   }
 
+  Future<List<InventoryTransaction>> getTransactions({String? productId}) async {
+    try {
+      final factoryId = await _apiClient.getFactoryId();
+      String endpoint = '${ApiConstants.inventoryTransactions}?size=50';
+      if (factoryId != null) endpoint += '&factory_id=$factoryId';
+      if (productId != null) endpoint += '&product_id=$productId';
 
+      final response = await _apiClient.client.get(endpoint);
+      final List<dynamic> data = response.data['transactions'] as List<dynamic>? ?? [];
+      return data.map((item) => InventoryTransaction.fromJson(item)).toList();
+    } catch (e) {
+      if (e is DioException) {
+        throw Exception(e.response?.data['error'] ?? 'Failed to fetch transactions');
+      }
+      rethrow;
+    }
+  }
+}
+
+class InventoryTransaction {
+  final String id;
+  final String? productId;
+  final String? productName;
+  final String transactionType;
+  final String fromState;
+  final String toState;
+  final double quantity;
+  final String? unitType;
+  final String? note;
+  final DateTime createdAt;
+
+  InventoryTransaction({
+    required this.id,
+    this.productId,
+    this.productName,
+    required this.transactionType,
+    required this.fromState,
+    required this.toState,
+    required this.quantity,
+    this.unitType,
+    this.note,
+    required this.createdAt,
+  });
+
+  factory InventoryTransaction.fromJson(Map<String, dynamic> json) {
+    return InventoryTransaction(
+      id: json['id'] as String,
+      productId: json['product_id'] as String?,
+      productName: json['products']?['name'] as String?,
+      transactionType: (json['transaction_type'] ?? 'adjustment') as String,
+      fromState: (json['from_state'] ?? 'N/A') as String,
+      toState: (json['to_state'] ?? 'N/A') as String,
+      quantity: (json['quantity'] as num).toDouble(),
+      unitType: json['unit_type'] as String?,
+      note: json['note'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
 }

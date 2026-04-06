@@ -13,11 +13,14 @@ import {
     Calendar,
     RefreshCw,
     X,
+    IndianRupee,
+    ChevronRight,
 } from 'lucide-react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { LineChart } from '@mui/x-charts/LineChart';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { analyticsAPI } from '@/lib/api';
+import { formatCurrency } from '@/lib/utils';
 
 import styles from './analytics.module.css';
 import { useFactory } from '@/contexts/FactoryContext'; // Import Context
@@ -46,6 +49,7 @@ export default function AnalyticsPage() {
     const [downtimeBreakdown, setDowntimeBreakdown] = useState(null);
     const [machineEfficiency, setMachineEfficiency] = useState(null);
     const [shiftComparison, setShiftComparison] = useState(null);
+    const [actionRequired, setActionRequired] = useState([]);
 
     const getDateRange = useCallback(() => {
         const today = new Date();
@@ -103,7 +107,7 @@ export default function AnalyticsPage() {
                 params.factory_id = selectedFactory;
             }
 
-            const [summaryData, cycleData, weightData, downtimeData, efficiencyData, shiftData] =
+            const [summaryData, cycleData, weightData, downtimeData, efficiencyData, shiftData, actionData] =
                 await Promise.all([
                     analyticsAPI.getSummary(params),
                     analyticsAPI.getCycleTimeLoss(params),
@@ -111,6 +115,7 @@ export default function AnalyticsPage() {
                     analyticsAPI.getDowntimeBreakdown(params),
                     analyticsAPI.getMachineEfficiency(params),
                     analyticsAPI.getShiftComparison(params),
+                    analyticsAPI.getActionRequired(params),
                 ]);
 
             setSummary(summaryData);
@@ -119,6 +124,7 @@ export default function AnalyticsPage() {
             setDowntimeBreakdown(downtimeData);
             setMachineEfficiency(efficiencyData);
             setShiftComparison(shiftData);
+            setActionRequired(actionData);
         } catch (error) {
             console.error('Failed to fetch analytics:', error);
         } finally {
@@ -231,6 +237,8 @@ export default function AnalyticsPage() {
                     subtitle="Due to slow cycles"
                     icon={TrendingDown}
                     gradient="linear-gradient(135deg, #ef4444, #dc2626)"
+                    trend={summary?.trends?.efficiency_loss?.value}
+                    trendLabel={summary?.trends?.efficiency_loss?.direction === 'up' ? 'Worse' : 'Better'}
                 />
                 <MetricCard
                     title="Material Wastage"
@@ -238,6 +246,26 @@ export default function AnalyticsPage() {
                     subtitle="Excess weight used"
                     icon={Scale}
                     gradient="linear-gradient(135deg, #f59e0b, #d97706)"
+                    trend={summary?.trends?.wastage?.value}
+                    trendLabel={summary?.trends?.wastage?.direction === 'up' ? 'Worse' : 'Better'}
+                />
+                <MetricCard
+                    title="Financial Impact"
+                    value={formatCurrency(summary?.total_financial_loss || 0)}
+                    subtitle="Estimated material loss"
+                    icon={IndianRupee}
+                    gradient="linear-gradient(135deg, #dc2626, #991b1b)"
+                    trend={summary?.trends?.financial_loss?.value}
+                    trendLabel={summary?.trends?.financial_loss?.direction === 'up' ? 'Worse' : 'Better'}
+                />
+                <MetricCard
+                    title="Total Production"
+                    value={summary?.total_production?.toLocaleString() || 0}
+                    subtitle="Units produced"
+                    icon={Activity}
+                    gradient="linear-gradient(135deg, #10b981, #059669)"
+                    trend={summary?.trends?.production?.value}
+                    trendLabel={summary?.trends?.production?.direction === 'up' ? 'Better' : 'Worse'}
                 />
                 <MetricCard
                     title="Total Downtime"
@@ -245,112 +273,118 @@ export default function AnalyticsPage() {
                     subtitle="Machine idle time"
                     icon={Clock}
                     gradient="linear-gradient(135deg, #3b82f6, #2563eb)"
-                />
-                <MetricCard
-                    title="Total Tubs Produced"
-                    value={summary?.total_production?.toLocaleString() || 0}
-                    subtitle="Tubs produced"
-                    icon={Activity}
-                    gradient="linear-gradient(135deg, #10b981, #059669)"
+                    trend={summary?.trends?.downtime?.value}
+                    trendLabel={summary?.trends?.downtime?.direction === 'up' ? 'Worse' : 'Better'}
                 />
                 <MetricCard
                     title="Flagged Sessions"
                     value={summary?.flagged_sessions || 0}
-                    subtitle="5%+ variance"
+                    subtitle="Need attention"
                     icon={AlertTriangle}
                     gradient="linear-gradient(135deg, #ff5722, #e64a19)"
-                />
-                <MetricCard
-                    title="Total Sessions"
-                    value={summary?.total_sessions || 0}
-                    subtitle="Production entries"
-                    icon={Factory}
-                    gradient="linear-gradient(135deg, #8b5cf6, #7c3aed)"
                 />
             </div>
 
             {/* Charts Grid */}
             <div className={styles.chartsGrid}>
+                {/* Action Required - New Panel */}
+                <div className={styles.chartCard}>
+                    <div className={styles.chartHeader}>
+                        <h3 className={styles.chartTitle}>Action Required</h3>
+                        <span className={styles.chartSubtitle}>Immediate diagnostic focus</span>
+                    </div>
+                    {actionRequired?.length > 0 ? (
+                        <div className={styles.actionItems}>
+                            {actionRequired.map(item => (
+                                <div key={item.id} className={`${styles.actionItem} ${styles[item.severity]}`}>
+                                    <div className={styles.actionIcon}>
+                                        <AlertTriangle size={18} />
+                                    </div>
+                                    <div className={styles.actionContent}>
+                                        <p className={styles.actionReason}>{item.reason}</p>
+                                        <p className={styles.actionDetail}>
+                                            {item.date} • {item.machine_name} • {item.product_name}
+                                        </p>
+                                    </div>
+                                    <ChevronRight size={16} />
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className={styles.emptyState}>No urgent issues detected</div>
+                    )}
+                </div>
+
                 {/* Downtime Breakdown - Pie Chart */}
                 <div className={styles.chartCard}>
                     <div className={styles.chartHeader}>
                         <h3 className={styles.chartTitle}>Downtime Breakdown</h3>
                         <span className={styles.chartSubtitle}>By reason</span>
                     </div>
-                    {downtimeBreakdown?.breakdown?.length > 0 ? (
-                        <PieChart
-                            series={[
-                                {
-                                    data: downtimeBreakdown.breakdown.map((item, index) => ({
-                                        id: index,
-                                        value: item.total_minutes,
-                                        label: item.reason,
-                                    })),
-                                },
-                            ]}
-                            height={300}
-                        />
-                    ) : (
-                        <div className={styles.emptyState}>No downtime data</div>
-                    )}
+                    <div className={styles.downtimeRow}>
+                        {downtimeBreakdown?.breakdown?.length > 0 ? (
+                            <div className={styles.pieContainer}>
+                                <PieChart
+                                    series={[
+                                        {
+                                            data: downtimeBreakdown.breakdown.map((item, index) => ({
+                                                id: index,
+                                                value: item.total_minutes,
+                                                label: item.reason,
+                                            })),
+                                            innerRadius: 60,
+                                            paddingAngle: 2,
+                                            cornerRadius: 4,
+                                        },
+                                    ]}
+                                    height={250}
+                                />
+                            </div>
+                        ) : (
+                            <div className={styles.emptyState}>No downtime data</div>
+                        )}
+                        {downtimeBreakdown?.breakdown?.length > 0 && (
+                            <div className={styles.downtimeList}>
+                                {downtimeBreakdown.breakdown.slice(0, 4).map(item => (
+                                    <div key={item.reason} className={styles.downtimeItem}>
+                                        <span className={styles.reasonLabel}>{item.reason}</span>
+                                        <span className={styles.reasonValue}>{item.total_minutes}m ({item.percentage}%)</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* Shift Comparison - Bar Chart */}
-                <div className={styles.chartCard}>
+                {/* Shift Performance - Bar Chart */}
+                <div className={`${styles.chartCard} ${styles.fullWidth}`}>
                     <div className={styles.chartHeader}>
-                        <h3 className={styles.chartTitle}>Shift Performance</h3>
-                        <span className={styles.chartSubtitle}>Day vs Night efficiency</span>
+                        <h3 className={styles.chartTitle}>Shift Comparison</h3>
+                        <span className={styles.chartSubtitle}>Operational efficiency</span>
                     </div>
                     {shiftComparison && (
                         <BarChart
-                            xAxis={[{ scaleType: 'band', data: ['Shift 1 (Day)', 'Shift 2 (Night)'] }]}
+                            xAxis={[{ scaleType: 'band', data: ['Day Shift', 'Night Shift'] }]}
                             series={[
                                 {
-                                    label: 'Avg Efficiency (%)',
+                                    label: 'Production',
                                     data: [
-                                        shiftComparison.shift_1?.avg_efficiency || 0,
-                                        shiftComparison.shift_2?.avg_efficiency || 0,
+                                        shiftComparison.shift_1?.total_production || 0,
+                                        shiftComparison.shift_2?.total_production || 0,
                                     ],
+                                    color: '#3b82f6',
+                                },
+                                {
+                                    label: 'Wastage (kg)',
+                                    data: [
+                                        shiftComparison.shift_1?.total_wastage || 0,
+                                        shiftComparison.shift_2?.total_wastage || 0,
+                                    ],
+                                    color: '#f59e0b',
                                 },
                             ]}
-                            height={300}
+                            height={400}
                         />
-                    )}
-                </div>
-
-                {/* Machine Efficiency Trends */}
-                <div className={`${styles.chartCard} ${styles.fullWidth}`}>
-                    <div className={styles.chartHeader}>
-                        <h3 className={styles.chartTitle}>Machine Efficiency Trends</h3>
-                        <span className={styles.chartSubtitle}>Performance over time</span>
-                    </div>
-                    {machineEfficiency?.machines?.length > 0 ? (
-                        <div className={styles.machineCharts}>
-                            {machineEfficiency.machines.slice(0, 3).map((machine) => (
-                                <div key={machine.machine_id} className={styles.machineChart}>
-                                    <p className={styles.machineTitle}>
-                                        {machine.machine_name} - Avg: {machine.avg_efficiency}%
-                                    </p>
-                                    <LineChart
-                                        xAxis={[
-                                            {
-                                                scaleType: 'point',
-                                                data: machine.data_points.map((dp) => `${dp.date} S${dp.shift}`),
-                                            },
-                                        ]}
-                                        series={[
-                                            {
-                                                data: machine.data_points.map((dp) => dp.efficiency),
-                                                color: '#8b5cf6',
-                                            },
-                                        ]}
-                                        height={200}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className={styles.emptyState}>No efficiency data</div>
                     )}
                 </div>
             </div>

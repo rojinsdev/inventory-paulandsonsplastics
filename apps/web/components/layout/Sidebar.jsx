@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard,
@@ -29,6 +30,7 @@ import {
     LineChart,
     TrendingUp,
     Menu,
+    Handshake,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useUI } from '@/contexts/UIContext';
@@ -59,15 +61,16 @@ const menuSections = [
                 ],
             },
             {
-                label: 'Tub Config',
+                label: 'Config',
                 icon: Factory,
                 submenu: [
                     { label: 'Machines', href: '/machines' },
                     { label: 'Tubs', href: '/products' },
                     { label: 'Caps', href: '/inventory/caps' },
                     { label: 'Inners', href: '/inventory/inners' },
+                    { label: 'Cap Mapping', href: '/cap-mappings' },
+                    { label: 'Tub Mapping', href: '/die-mappings' },
                     { label: 'Packing Rules', href: '/packing-rules' },
-                    { label: 'Machine Mapping', href: '/die-mappings' },
                 ],
             },
         ]
@@ -75,6 +78,15 @@ const menuSections = [
     {
         section: 'TOOLS',
         items: [
+            {
+                label: 'Purchases',
+                icon: Handshake,
+                submenu: [
+                    { label: 'Suppliers', href: '/company-dealings/suppliers' },
+                    { label: 'Purchases', href: '/company-dealings/purchases' },
+                    { label: 'Payment History', href: '/company-dealings/payments' },
+                ],
+            },
             {
                 label: 'Reports',
                 icon: BarChart3,
@@ -84,6 +96,7 @@ const menuSections = [
                     { label: 'Sales Reports', href: '/reports/sales' },
                     { label: 'Cash Flow & Expenses', href: '/reports/cash-flow' },
                     { label: 'Analytics', href: '/reports/analytics' },
+                    { label: 'Statistics', href: '/statistics' },
                 ],
             },
             {
@@ -101,6 +114,7 @@ const menuSections = [
                 submenu: [
                     { label: 'Factories', href: '/factories' },
                     { label: 'User Management', href: '/users' },
+                    { label: 'Initial Stock Loading', href: '/config/initial-stock' },
                     { label: 'System Settings', href: '/system-settings' },
                     { label: 'Audit Logs', href: '/audit-logs' },
                     { label: 'System Info', href: '/system-info' },
@@ -158,7 +172,13 @@ export default function Sidebar() {
             <div className={styles.header}>
                 <div className={styles.headerMain}>
                     <div className={styles.logoBadge}>
-                        <Layers size={20} className={styles.logoIcon} />
+                        <Image 
+                            src="/logo.svg" 
+                            alt="Paul & Sons Logo" 
+                            width={40} 
+                            height={40} 
+                            className={styles.logoImage}
+                        />
                     </div>
                     {!isSidebarCollapsed && (
                         <div className={styles.orgInfo}>

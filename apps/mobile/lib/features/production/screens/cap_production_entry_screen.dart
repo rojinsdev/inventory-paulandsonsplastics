@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/widgets/multi_select_downtime_reason.dart';
 import '../providers/master_data_provider.dart';
 import '../providers/production_provider.dart';
 
@@ -17,6 +18,7 @@ class _CapProductionEntryScreenState
     extends ConsumerState<CapProductionEntryScreen> {
   final _formKey = GlobalKey<FormState>();
 
+  String? _selectedMachineId;
   String? _selectedTemplateId;
   String? _selectedCapId;
   int _shiftNumber = 1;
@@ -29,6 +31,9 @@ class _CapProductionEntryScreenState
   final _actualCycleTimeController = TextEditingController();
   final _actualWeightController = TextEditingController();
   final _remarksController = TextEditingController();
+  final _downtimeReasonController = TextEditingController();
+
+  List<String> _selectedDowntimeReasons = [];
 
   @override
   void initState() {
@@ -52,21 +57,46 @@ class _CapProductionEntryScreenState
     // Apply sticky logic
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final lastEntry = ref.read(lastEntryProvider);
-      if (lastEntry != null) {
+      
+      // Only apply sticky logic if it's the SAME shift and same date
+      // This prevents Shift 1 times from leaking into Shift 2 and vice versa
+      if (lastEntry != null && 
+          lastEntry.shiftNumber == _shiftNumber &&
+          lastEntry.date.day == _selectedDate.day &&
+          lastEntry.date.month == _selectedDate.month) {
+        
         setState(() {
-          _selectedDate = lastEntry.date;
           final parts = lastEntry.endTime.split(':');
           if (parts.length == 2) {
-            _startTime = TimeOfDay(
-              hour: int.parse(parts[0]),
-              minute: int.parse(parts[1]),
-            );
-            // Default end time logically (12 hours later or at shift boundary)
-            int endHour = (_startTime.hour + 12) % 24;
-            if (_shiftNumber == 1 && endHour > 20) endHour = 20;
-            if (_shiftNumber == 2 && endHour > 8 && endHour < 20) endHour = 8;
+            final hour = int.parse(parts[0]);
+            final minute = int.parse(parts[1]);
+            _startTime = TimeOfDay(hour: hour, minute: minute);
+            
+            // Default end time logically (e.g. 1 hour later, capped at shift boundary)
+            int nextHour = (hour + 1) % 24;
+            
+            if (_shiftNumber == 1) {
+              // Day Shift: Cap at 20:00
+              int endHour = nextHour > 20 ? 20 : nextHour;
+              // If we are already at 20:00, the shift is legally over or we hit a collision
+              if (endHour == hour && endHour == 20) {
+                 // Keep it at 20:00 but maybe the user is logging late
+              }
+              _endTime = TimeOfDay(hour: endHour, minute: minute);
+            } else {
+              // Night Shift: 20:00 to 08:00
+              bool isPastBoundary = nextHour > 8 && nextHour < 20;
+              int endHour = isPastBoundary ? 8 : nextHour;
+              _endTime = TimeOfDay(hour: endHour, minute: minute);
+            }
 
-            _endTime = TimeOfDay(hour: endHour, minute: _startTime.minute);
+            // Final safety collision check
+            if (_startTime.hour == _endTime.hour && _startTime.minute == _endTime.minute) {
+              _endTime = TimeOfDay(
+                hour: _endTime.hour,
+                minute: (_endTime.minute + 15) % 60
+              );
+            }
           }
         });
       }
@@ -80,6 +110,7 @@ class _CapProductionEntryScreenState
     _actualCycleTimeController.dispose();
     _actualWeightController.dispose();
     _remarksController.dispose();
+    _downtimeReasonController.dispose();
     super.dispose();
   }
 
@@ -125,6 +156,13 @@ class _CapProductionEntryScreenState
 
   void _submit() {
     if (_formKey.currentState!.validate()) {
+      if (_selectedMachineId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a machine')),
+        );
+        return;
+      }
+
       if (_selectedCapId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please select a cap')),
@@ -146,6 +184,7 @@ class _CapProductionEntryScreenState
 
       ref.read(productionSubmissionProvider.notifier).submitCap(
             capId: _selectedCapId!,
+            machineId: _selectedMachineId!,
             shiftNumber: _shiftNumber,
             startTime:
                 '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
@@ -162,6 +201,27 @@ class _CapProductionEntryScreenState
             actualWeightGrams: double.parse(_actualWeightController.text),
             remarks: _remarksController.text.isNotEmpty
                 ? _remarksController.text
+                : null,
+            downtimeMinutes: () {
+              final shiftHours = _calculateShiftDuration();
+              final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
+              
+              if (actualCycleTime == 0) return 0; // Prevent showing huge downtime if data is missing
+
+              int actualQuantity = 0;
+              if (_totalWeightController.text.isNotEmpty) {
+                final totalWeight = double.tryParse(_totalWeightController.text) ?? 0;
+                final unitWeight = double.tryParse(_actualWeightController.text) ?? 1;
+                actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
+              } else {
+                actualQuantity = int.tryParse(_totalProducedController.text) ?? 0;
+              }
+              final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+              final shiftDurationSeconds = shiftHours * 3600;
+              return ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440);
+            }(),
+            downtimeReason: _selectedDowntimeReasons.isNotEmpty
+                ? _selectedDowntimeReasons.join(', ')
                 : null,
             date: _selectedDate,
           );
@@ -430,7 +490,9 @@ class _CapProductionEntryScreenState
                                       fontSize: 12,
                                       color: colorScheme.onSurfaceVariant)),
                               const SizedBox(height: 4),
-                              Text(_startTime.format(context),
+                              Text(
+                                  DateFormat.jm().format(DateTime(0, 0, 0,
+                                      _startTime.hour, _startTime.minute)),
                                   style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
@@ -457,7 +519,9 @@ class _CapProductionEntryScreenState
                                       fontSize: 12,
                                       color: colorScheme.onSurfaceVariant)),
                               const SizedBox(height: 4),
-                              Text(_endTime.format(context),
+                              Text(
+                                  DateFormat.jm().format(DateTime(0, 0, 0,
+                                      _endTime.hour, _endTime.minute)),
                                   style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold)),
@@ -469,26 +533,25 @@ class _CapProductionEntryScreenState
                   ],
                 ),
                 const SizedBox(height: 24),
-
-                // Cap Template Selection
-                ref.watch(capTemplatesProvider).when(
-                      data: (templates) => DropdownButtonFormField<String>(
-                        initialValue: _selectedTemplateId,
+                // Machine Selection
+                ref.watch(machinesProvider).when(
+                      data: (machines) => DropdownButtonFormField<String>(
+                        initialValue: _selectedMachineId,
                         decoration: const InputDecoration(
-                          labelText: 'Cap Template',
-                          prefixIcon: Icon(Icons.category_outlined),
+                          labelText: 'Molding Machine',
+                          prefixIcon: Icon(Icons.settings_input_component),
                         ),
-                        items: templates
-                            .map((t) => DropdownMenuItem(
-                                  value: t.id,
-                                  child: Text(t.displayName),
+                        items: machines
+                            .map((m) => DropdownMenuItem(
+                                  value: m.id,
+                                  child: Text(m.name),
                                 ))
                             .toList(),
                         onChanged: (value) {
                           setState(() {
-                            _selectedTemplateId = value;
-                            _selectedCapId =
-                                null; // Clear variant on template change
+                            _selectedMachineId = value;
+                            _selectedTemplateId = null;
+                            _selectedCapId = null;
                           });
                         },
                         validator: (value) => value == null ? 'Required' : null,
@@ -497,6 +560,71 @@ class _CapProductionEntryScreenState
                       error: (error, _) => Text('Error: $error',
                           style: const TextStyle(color: Colors.red)),
                     ),
+                const SizedBox(height: 24),
+
+                // Cap Template Selection (Filtered by Machine Mapping)
+                if (_selectedMachineId != null)
+                  ref.watch(capMappingsProvider).when(
+                        data: (mappings) {
+                          final machineMappings = mappings
+                              .where((m) => m.machineId == _selectedMachineId)
+                              .toList();
+                          
+                          return ref.watch(capTemplatesProvider).when(
+                                data: (templates) {
+                                  // Only show templates that have a mapping for this machine
+                                  final allowedTemplateIds = machineMappings
+                                      .map((m) => m.capTemplateId)
+                                      .toSet();
+                                  final filteredTemplates = templates
+                                      .where((t) => allowedTemplateIds.contains(t.id))
+                                      .toList();
+
+                                  if (filteredTemplates.isEmpty) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(8.0),
+                                      child: Text(
+                                        'No caps mapped to this machine. Please configure mappings in Web Admin.',
+                                        style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
+                                      ),
+                                    );
+                                  }
+
+                                  return DropdownButtonFormField<String>(
+                                    initialValue: _selectedTemplateId,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Cap Template',
+                                      prefixIcon: Icon(Icons.category_outlined),
+                                    ),
+                                    items: filteredTemplates
+                                        .map((t) => DropdownMenuItem(
+                                              value: t.id,
+                                              child: Text(t.displayName),
+                                            ))
+                                        .toList(),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selectedTemplateId = value;
+                                        _selectedCapId = null;
+                                        
+                                        // Set Ideal Cycle Time from Mapping
+                                        final mapping = machineMappings.firstWhere(
+                                            (m) => m.capTemplateId == value);
+                                        _actualCycleTimeController.text =
+                                            mapping.idealCycleTimeSeconds.toString();
+                                      });
+                                    },
+                                    validator: (value) =>
+                                        value == null ? 'Required' : null,
+                                  );
+                                },
+                                loading: () => const LinearProgressIndicator(),
+                                error: (error, _) => Text('Error: $error'),
+                              );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (error, _) => Text('Error: $error'),
+                      ),
                 const SizedBox(height: 24),
 
                 // Cap Variant Selection (Color)
@@ -522,17 +650,13 @@ class _CapProductionEntryScreenState
                             onChanged: (value) {
                               setState(() {
                                 _selectedCapId = value;
-                                // Pre-fill ideal values
+                                // Pre-fill ideal values (default)
                                 final variant =
                                     variants.firstWhere((v) => v.id == value);
-                                if (_actualCycleTimeController.text.isEmpty) {
-                                  _actualCycleTimeController.text =
-                                      variant.idealCycleTimeSeconds.toString();
-                                }
-                                if (_actualWeightController.text.isEmpty) {
-                                  _actualWeightController.text =
-                                      variant.idealWeightGrams.toString();
-                                }
+                                _actualCycleTimeController.text =
+                                    variant.idealCycleTimeSeconds.toString();
+                                _actualWeightController.text =
+                                    variant.idealWeightGrams.toString();
                               });
                             },
                             validator: (value) =>
@@ -560,6 +684,7 @@ class _CapProductionEntryScreenState
                     suffixText: 'kg',
                     helperText: 'Optional if Total Produced is provided',
                   ),
+                  onChanged: (value) => setState(() {}),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   validator: (val) {
@@ -581,6 +706,7 @@ class _CapProductionEntryScreenState
                     suffixText: 'units',
                     helperText: 'Optional if Total Weight is provided',
                   ),
+                  onChanged: (value) => setState(() {}),
                   keyboardType: TextInputType.number,
                   validator: (val) {
                     if ((val == null || val.isEmpty) &&
@@ -604,6 +730,7 @@ class _CapProductionEntryScreenState
                           suffixText: 'seconds',
                           helperText: 'From machine display',
                         ),
+                        onChanged: (value) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         validator: (val) =>
@@ -620,6 +747,7 @@ class _CapProductionEntryScreenState
                           suffixText: 'grams',
                           helperText: 'Measured weight',
                         ),
+                        onChanged: (value) => setState(() {}),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         validator: (val) =>
@@ -627,6 +755,72 @@ class _CapProductionEntryScreenState
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 24),
+                
+                // Downtime System
+                Builder(
+                  builder: (context) {
+                    final hasInput = _totalWeightController.text.isNotEmpty || _totalProducedController.text.isNotEmpty;
+                    final hasProduct = _selectedCapId != null;
+                    final shouldCalculate = hasProduct && hasInput;
+
+                    final shiftHours = _calculateShiftDuration();
+                    final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
+                    
+                    int actualQuantity = 0;
+                    if (_totalWeightController.text.isNotEmpty) {
+                      final totalWeight = double.tryParse(_totalWeightController.text) ?? 0;
+                      final unitWeight = double.tryParse(_actualWeightController.text) ?? 1;
+                      actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
+                    } else {
+                      actualQuantity = int.tryParse(_totalProducedController.text) ?? 0;
+                    }
+                    
+                    final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+                    final shiftDurationSeconds = shiftHours * 3600;
+                    
+                    // If cycle time is 0, we don't have enough data to calculate downtime yet
+                    final downtimeMinutes = (shouldCalculate && actualCycleTime > 0)
+                        ? ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440)
+                        : 0;
+                    
+                    final isRequired = shouldCalculate && downtimeMinutes > 30;
+
+                    return Column(
+                      children: [
+                        MultiSelectDowntimeReason(
+                          initialValues: _selectedDowntimeReasons,
+                          labelText: isRequired ? 'Downtime Reasons (Required: ${downtimeMinutes}m)' : 'Downtime Reasons (Optional: ${downtimeMinutes}m)',
+                          helperText: isRequired ? 'Reason required for downtime > 30 mins' : null,
+                          helperStyle: TextStyle(color: isRequired ? Theme.of(context).colorScheme.error : null),
+                          onSelectionChanged: (selected) {
+                            setState(() {
+                              _selectedDowntimeReasons = selected;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 24),
+                        if (_selectedDowntimeReasons.contains('Other')) ...[
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _downtimeReasonController,
+                            decoration: const InputDecoration(
+                              labelText: 'Specify Other Reason',
+                              prefixIcon: Icon(Icons.edit_note),
+                            ),
+                            maxLines: 2,
+                            validator: (value) {
+                              if (isRequired && (value == null || value.trim().isEmpty)) {
+                                return 'Please specify the reason';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 24),
 
