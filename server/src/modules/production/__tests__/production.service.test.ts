@@ -46,7 +46,7 @@ describe('ProductionService', () => {
         service = new ProductionService();
         jest.clearAllMocks();
         mockFrom = supabase.from;
-        (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: null });
+        (supabase.rpc as jest.Mock).mockResolvedValue({ data: { log_id: 'log-1' }, error: null });
         (SettingsService.getValue as jest.Mock).mockResolvedValue(100); // Default threshold
     });
 
@@ -99,19 +99,13 @@ describe('ProductionService', () => {
 
         // Verify
         expect(result).toBeDefined();
+        expect(result.id).toBe('log-1');
 
-        expect(inventoryService.logTransaction).toHaveBeenCalledWith(
-            'raw_material_consumption',
-            'raw-1',
-            4.75,
-            'kg',
-            'raw_material',
-            null,
-            'fac-1',
-            'log-1',
-            undefined,
-            true
-        );
+        expect(supabase.rpc).toHaveBeenCalledWith('submit_production_atomic', expect.objectContaining({
+            p_machine_id: 'mach-1',
+            p_product_id: 'prod-1',
+            p_total_produced: 100
+        }));
 
         /* Deprecated: Automated FIFO allocation is disabled.
         expect(stockAllocationService.allocateStock).toHaveBeenCalledWith(

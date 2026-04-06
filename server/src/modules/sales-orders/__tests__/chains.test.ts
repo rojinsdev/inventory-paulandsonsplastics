@@ -56,6 +56,7 @@ const setupMocks = () => {
         const chain: any = {};
         chain._where = {};
         chain._in = null;
+        chain._gt = null;
         
         chain.select = jest.fn(() => chain);
         chain.insert = jest.fn((data: any) => {
@@ -70,6 +71,10 @@ const setupMocks = () => {
         });
         chain.eq = jest.fn((col, val) => {
             chain._where[col] = val;
+            return chain;
+        });
+        chain.gt = jest.fn((col, val) => {
+            chain._gt = { col, val };
             return chain;
         });
         chain.update = jest.fn((patch: any) => {
@@ -124,10 +129,14 @@ const setupMocks = () => {
                     return rVal === val;
                 });
             }
-            // IN Filter
             if (chain._in) {
                 const { col, vals } = chain._in;
                 data = data.filter((r: any) => vals.includes(r[col]));
+            }
+            // GT Filter
+            if (chain._gt) {
+                const { col, val } = chain._gt;
+                data = data.filter((r: any) => r[col] > val);
             }
             return data;
         };
@@ -302,19 +311,6 @@ const setupMocks = () => {
                     is_backordered: isBackordered
                 });
 
-                if (isBackordered) {
-                    mockDB.production_requests.push({
-                        id: `req-${Math.random().toString(36).substr(2, 9)}`,
-                        product_id: item.product_id || null,
-                        cap_id: item.cap_id || null,
-                        resource_type: isCap ? 'cap' : 'product',
-                        quantity: item.quantity,
-                        sales_order_id: orderId,
-                        unit_type: item.unit_type || 'bundle',
-                        status: 'pending',
-                        factory_id: factoryId
-                    });
-                }
             }
             return Promise.resolve({ data: { order_id: orderId }, error: null });
         }
@@ -324,7 +320,7 @@ const setupMocks = () => {
             let updatedCount = 0;
 
             for (const item of p_items) {
-                const itemId = item.itemId;
+                const itemId = item.item_id;
                 const qty = item.quantity;
                 
                 const soi = mockDB.sales_order_items.find(i => i.id === itemId);
@@ -845,7 +841,18 @@ describe('Business Chain Integration Tests', () => {
         
         // 3. Mark as Prepared in Production screen (status only)
         // In reality, marking as prepared would add finished/packed stock - we simulate it here by adding stock first
-        mockDB.cap_stock_balances[0].quantity = 100; 
+        let capBalance = mockDB.cap_stock_balances.find(b => b.cap_id === capId && b.state === 'finished');
+        if (capBalance) {
+            capBalance.quantity = 100;
+        } else {
+            mockDB.cap_stock_balances.push({ 
+                cap_id: capId, 
+                state: 'finished', 
+                quantity: 100, 
+                factory_id: 'fact-1',
+                unit_type: 'packet' 
+            });
+        }
         
         const req = mockDB.production_requests[0];
         await productionService.updateProductionRequestStatus(req.id, 'prepared', 'user-1');
