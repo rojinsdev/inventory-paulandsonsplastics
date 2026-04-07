@@ -71,18 +71,12 @@ jobs:
           known_hosts: "ignored"
           if_key_exists: replace
 
-      - name: Adding Known Hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
       - name: Deploy to EC2 via Rsync
         run: |
-          # Sync the compiled code (dist folder)
-          rsync -avz --delete server/dist/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/dist/
-          # Sync configuration files
-          rsync -avz server/package.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package.json
-          rsync -avz server/package-lock.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package-lock.json
+          # Sync with StrictHostKeyChecking=no to bypass known_hosts issues
+          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" server/dist/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/dist/
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" server/package.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package.json
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no" server/package-lock.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package-lock.json
 
       - name: Finalize Deployment on EC2
         uses: appleboy/ssh-action@v1.0.3
