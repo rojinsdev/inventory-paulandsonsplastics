@@ -2,8 +2,12 @@ name: Mobile Release
 
 on:
   push:
+    branches:
+      - main
+      - develop
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   release:
@@ -31,8 +35,14 @@ jobs:
         run: flutter build apk --release --dart-define=API_URL=https://api.paulandsonsplastics.com/api
         working-directory: apps/mobile
 
-      - name: Create Release
-        id: create_release
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
@@ -41,3 +51,4 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
