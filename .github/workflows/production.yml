@@ -51,6 +51,17 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
+      - name: Connection Sanity Check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 20s
+          script: |
+            echo "Successfully connected to EC2!"
+            ls -d /home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -64,19 +75,15 @@ jobs:
           npm run build
         working-directory: server
 
-      - name: Install SSH Key
-        uses: shimataro/ssh-key-action@v2
+      - name: Deploy to EC2 via Robust Rsync
+        uses: easingthemes/ssh-deploy@v5.1.0
         with:
-          key: ${{ secrets.EC2_SSH_KEY }}
-          known_hosts: "ignored"
-          if_key_exists: replace
-
-      - name: Deploy to EC2 via Rsync
-        run: |
-          # Sync with StrictHostKeyChecking=no to bypass known_hosts issues
-          rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" server/dist/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/dist/
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no" server/package.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package.json
-          rsync -avz -e "ssh -o StrictHostKeyChecking=no" server/package-lock.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package-lock.json
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          REMOTE_HOST: ${{ secrets.EC2_HOST }}
+          REMOTE_USER: ${{ secrets.EC2_USERNAME }}
+          SOURCE: "server/dist server/package.json server/package-lock.json"
+          TARGET: "/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/"
+          ARGS: "-rlgoDzvc -i --delete"
 
       - name: Finalize Deployment on EC2
         uses: appleboy/ssh-action@v1.0.3
