@@ -73,6 +73,9 @@ jobs:
           source: "server/dist,server/package.json,server/package-lock.json"
           target: "/home/ubuntu/paulandsonsplastics/"
           strip_components: 0
+          overwrite: true
+          timeout: 60s
+          debug: true
 
       - name: Finalize Deployment on EC2
         uses: appleboy/ssh-action@v1.0.3
