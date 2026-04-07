@@ -64,18 +64,25 @@ jobs:
           npm run build
         working-directory: server
 
-      - name: Copy Files to EC2
-        uses: appleboy/scp-action@v0.1.7
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "server/dist,server/package.json,server/package-lock.json"
-          target: "/home/ubuntu/paulandsonsplastics/"
-          strip_components: 0
-          overwrite: true
-          timeout: 60s
-          debug: true
+          known_hosts: "ignored"
+          if_key_exists: replace
+
+      - name: Adding Known Hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2 via Rsync
+        run: |
+          # Sync the compiled code (dist folder)
+          rsync -avz --delete server/dist/ ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/dist/
+          # Sync configuration files
+          rsync -avz server/package.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package.json
+          rsync -avz server/package-lock.json ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/package-lock.json
 
       - name: Finalize Deployment on EC2
         uses: appleboy/ssh-action@v1.0.3
@@ -84,12 +91,12 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            cd /home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server
             # Load NVM environment
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-            cd /home/ubuntu/paulandsonsplastics/server
-            # Install production dependencies only (much faster)
+            
+            # Install production dependencies only (fast)
             npm ci --omit=dev
             
             # Restart production server
