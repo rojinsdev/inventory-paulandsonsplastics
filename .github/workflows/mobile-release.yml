@@ -10,11 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+        working-directory: apps/mobile
+
+      - name: Build APK
+        run: flutter build apk --release --dart-define=API_URL=https://api.paulandsonsplastics.com/api
+        working-directory: apps/mobile
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
+          files: apps/mobile/build/app/outputs/flutter-apk/app-release.apk
           generate_release_notes: true
           draft: false
           prerelease: false
