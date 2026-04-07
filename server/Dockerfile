@@ -19,6 +19,8 @@ ENV NODE_ENV=production
 
 # Copy only what we need from builder
 COPY --from=builder /app/package*.json ./
+# Copy necessary app files (firebase, etc)
+COPY --from=builder /app/firebase-service-account.json ./
 COPY --from=builder /app/dist ./dist
 
 # Install production-only dependencies
