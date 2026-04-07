@@ -49,43 +49,29 @@ jobs:
     needs: [test-server, test-web]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
-      - name: Connection Sanity Check
-        uses: appleboy/ssh-action@v1.0.3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          timeout: 20s
-          script: |
-            echo "Successfully connected to EC2!"
-            ls -d /home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Build and Push Server Image
+        uses: docker/build-push-action@v5
         with:
-          node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: server/package-lock.json
+          context: ./server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/inventory-server:latest
+            ghcr.io/${{ github.repository_owner }}/inventory-server:${{ github.sha }}
 
-      - name: Build Server
-        run: |
-          npm ci
-          npm run build
-        working-directory: server
-
-      - name: Deploy to EC2 via Robust Rsync
-        uses: easingthemes/ssh-deploy@v5.1.0
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.EC2_HOST }}
-          REMOTE_USER: ${{ secrets.EC2_USERNAME }}
-          SOURCE: "server/dist server/package.json server/package-lock.json"
-          TARGET: "/home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server/"
-          ARGS: "-rlgoDzvc -i --delete"
-
-      - name: Finalize Deployment on EC2
+      - name: Deploy to EC2 via Docker Compose
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -93,22 +79,35 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd /home/${{ secrets.EC2_USERNAME }}/paulandsonsplastics/server
-            # Load NVM environment
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             
-            # Install production dependencies only (fast)
-            npm ci --omit=dev
-            
-            # Restart production server
-            export NODE_ENV=production
-            pm2 restart inventory-server --update-env
-            pm2 save
+            # Create/Update docker-compose.yml on the fly
+            cat <<EOF > docker-compose.yml
+            version: '3.8'
+            services:
+              inventory-server:
+                image: ghcr.io/${{ github.repository_owner }}/inventory-server:latest
+                container_name: inventory-server
+                restart: always
+                ports:
+                  - "4000:4000"
+                env_file:
+                  - .env
+                environment:
+                  - NODE_ENV=production
+                logging:
+                  driver: "json-file"
+                  options:
+                    max-size: "10m"
+                    max-file: "3"
+            EOF
 
-  build-docker-web:
-    needs: test-web
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build Web Image
-        run: docker build -t inventory-web:${{ github.sha }} ./apps/web
+            # Log in to GHCR on the server
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Pull and Restart
+            docker compose pull
+            docker compose up -d --remove-orphans
+            
+            # Cleanup old images
+            docker image prune -f
+

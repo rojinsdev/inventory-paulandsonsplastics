@@ -1,24 +1,31 @@
-# Use a lightweight Node.js image
-FROM node:18-alpine
+# --- Stage 1: Build ---
+FROM node:18-alpine AS builder
 
-# Set working directory inside container
 WORKDIR /app
 
-# Copy package files first to leverage caching
+# Install dependencies first (for caching)
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy the rest of the application code
+# Copy source and build
 COPY . .
-
-# Build the TypeScript code (if necessary, though we might run ts-node in dev)
-# For production, we should build to JS.
 RUN npm run build
 
-# Expose the port the app runs on
+# --- Stage 2: Runtime ---
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Copy only what we need from builder
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/dist ./dist
+
+# Install production-only dependencies
+RUN npm ci --omit=dev
+
+# Expose API port
 EXPOSE 4000
 
-# Define the command to run the app
 CMD ["npm", "start"]
+
