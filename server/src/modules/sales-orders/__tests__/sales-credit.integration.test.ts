@@ -31,12 +31,13 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
         chain.lt = jest.fn().mockReturnValue(chain);
         chain.in = jest.fn().mockReturnValue(chain);
         chain.order = jest.fn().mockReturnValue(chain);
-        chain.maybeSingle = jest.fn().mockResolvedValue({ data: Array.isArray(data) ? data[0] : (data === null ? null : data), error });
         chain.single = jest.fn().mockResolvedValue({ data: Array.isArray(data) ? data[0] : data, error });
+        chain.maybeSingle = jest.fn().mockResolvedValue({ data: Array.isArray(data) ? data[0] : (data === null ? null : data), error });
         chain.update = jest.fn().mockReturnValue(chain);
         chain.insert = jest.fn().mockReturnValue(chain);
         chain.delete = jest.fn().mockReturnValue(chain);
         chain.upsert = jest.fn().mockResolvedValue({ error });
+        chain.or = jest.fn().mockReturnValue(chain);
         chain.then = (resolve: any) => resolve({ data, error });
         return chain;
     };
@@ -73,18 +74,19 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
 
         const orderUpdateSpy = jest.fn().mockReturnValue(createChain({}));
         const paymentInsertSpy = jest.fn().mockReturnValue(createChain({}));
+        const rpcSpy = supabase.rpc as jest.Mock;
 
         mockFrom.mockImplementation((table: string) => {
             if (table === 'sales_orders') {
                 const chain = createChain(mockOrder);
                 chain.update = jest.fn().mockImplementation((updates) => {
-                    // Capture updates to verify balance
+                    // Capture updates to verify balance for recordPayment phase
                     if (updates.balance_due !== undefined) orderUpdateSpy(updates);
                     return chain;
                 });
                 return chain;
             }
-            if (table === 'sales_order_items') return createChain([{ quantity: 10, quantity_shipped: 10, unit_price: 10000 }]);
+            if (table === 'sales_order_items') return createChain([{ id: 'item-1', quantity: 10, quantity_shipped: 0, unit_price: 10000, products: { factory_id: 'fac-1' } }]);
             if (table === 'dispatch_records') return createChain({ id: 'disp-100k' });
             if (table === 'payments') {
                 const chain = createChain({});
@@ -96,23 +98,28 @@ describe('Sales & Credit Integration - Partial Payment Loop', () => {
             return createChain([]);
         });
 
+        // Mock RPC response for process_partial_dispatch
+        rpcSpy.mockResolvedValue({ 
+            data: { 
+                dispatch_id: 'disp-100k',
+                payment_id: 'pay-initial'
+            }, 
+            error: null 
+        });
+
         (cashFlowService.getCategoryId as jest.Mock).mockResolvedValue('cat-sales');
 
         // 1. Process initial delivery with ₹15,000 payment
         await service.processDelivery(orderId, deliveryData);
 
-        // Verify initial balance (100,000 - 15,000 = 85,000)
-        expect(orderUpdateSpy).toHaveBeenCalledWith(expect.objectContaining({
-            total_amount: 100000,
-            amount_paid: 15000,
-            balance_due: 85000
+        // Verify initial balance via RPC call parameters
+        expect(rpcSpy).toHaveBeenCalledWith('process_partial_dispatch', expect.objectContaining({
+            p_order_id: orderId,
+            p_initial_payment: 15000
         }));
 
-        // Verify payment record
-        expect(paymentInsertSpy).toHaveBeenCalledWith(expect.objectContaining({
-            amount: 15000,
-            customer_id: customerId
-        }));
+        // Verify payment record (handled by RPC but we can check if it was called)
+        expect(rpcSpy).toHaveBeenCalled();
 
         // 2. Record second payment of ₹50,000
         // Update mockOrder with current state for the next call

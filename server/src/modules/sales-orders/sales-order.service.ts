@@ -873,7 +873,8 @@ export class SalesOrderService {
         logger.info('Partial delivery processed successfully via RPC', { orderId, result: data, userId: deliveryData.user_id });
 
         // 2. Side Effects: Emit Payment Event if initial payment was made
-        if (deliveryData.initial_payment && deliveryData.initial_payment > 0 && data.payment_id) {
+        const paymentId = data?.payment_id;
+        if (deliveryData.initial_payment && deliveryData.initial_payment > 0 && paymentId) {
             // We need the order's customer_id and factory_id for the event
             const updatedOrder = await this.getOrderById(orderId);
             if (updatedOrder) {
@@ -882,7 +883,7 @@ export class SalesOrderService {
                                 'MAIN_FACTORY'; // Safe fallback
                 
                 eventBus.emit(SystemEvents.SALES_PAYMENT_RECORDED, {
-                    payment_id: data.payment_id,
+                    payment_id: paymentId,
                     order_id: orderId,
                     customer_id: updatedOrder.customer_id,
                     amount: Number(deliveryData.initial_payment),
@@ -890,7 +891,7 @@ export class SalesOrderService {
                     userId: deliveryData.user_id,
                     factory_id: factoryId
                 });
-                logger.info('Sales payment event emitted for initial payment', { orderId, paymentId: data.payment_id });
+                logger.info('Sales payment event emitted for initial payment', { orderId, paymentId: paymentId });
                 return updatedOrder;
             }
         }

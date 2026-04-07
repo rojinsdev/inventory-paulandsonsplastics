@@ -46,6 +46,7 @@ const setupMocks = () => {
         const chain: any = {};
         chain._where = {};
         chain._in = null;
+        chain._gt = null;
         
         const getData = () => {
             let data = [...(mockDB[table] || [])];
@@ -55,6 +56,10 @@ const setupMocks = () => {
             if (chain._in) {
                 const { col, vals } = chain._in;
                 data = data.filter(r => vals.includes(r[col]));
+            }
+            if (chain._gt) {
+                const { col, val } = chain._gt;
+                data = data.filter(r => r[col] > val);
             }
             return data;
         };
@@ -74,11 +79,19 @@ const setupMocks = () => {
             chain._where[col] = val;
             return chain;
         });
+        chain.gt = jest.fn((col, val) => {
+            chain._gt = { col, val };
+            return chain;
+        });
         chain.in = jest.fn((col, vals) => {
             chain._in = { col, vals };
             return chain;
         });
         chain.single = jest.fn(() => {
+            chain._isSingle = true;
+            return chain;
+        });
+        chain.maybeSingle = jest.fn(() => {
             chain._isSingle = true;
             return chain;
         });

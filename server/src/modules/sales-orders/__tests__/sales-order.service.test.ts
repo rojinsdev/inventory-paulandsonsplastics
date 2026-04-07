@@ -28,6 +28,7 @@ describe('SalesOrderService', () => {
         const chain: any = {};
         chain.select = jest.fn().mockReturnValue(chain);
         chain.eq = jest.fn().mockReturnValue(chain);
+        chain.in = jest.fn().mockReturnValue(chain);
         chain.gt = jest.fn().mockReturnValue(chain);
         chain.lt = jest.fn().mockReturnValue(chain);
         chain.order = jest.fn().mockReturnValue(chain);
@@ -110,18 +111,13 @@ describe('SalesOrderService', () => {
         // Execute
         await service.processDelivery(orderId, deliveryData);
 
-        // Verify Calculations
-        expect(updateSpy).toHaveBeenCalledWith(expect.objectContaining({
-            subtotal: 2000,
-            total_amount: 1800,
-            amount_paid: 500,
-            balance_due: 1300,
-            status: 'delivered'
-        }));
-
-        expect(cashFlowService.logEntry).toHaveBeenCalledWith(expect.objectContaining({
-            amount: 500,
-            is_automatic: true
+        // Verify RPC was called with correct mapping
+        expect((supabase.rpc as jest.Mock)).toHaveBeenCalledWith('process_partial_dispatch', expect.objectContaining({
+            p_order_id: orderId,
+            p_discount_type: 'percentage',
+            p_discount_value: 10,
+            p_payment_mode: 'cash',
+            p_initial_payment: 500
         }));
     });
 
