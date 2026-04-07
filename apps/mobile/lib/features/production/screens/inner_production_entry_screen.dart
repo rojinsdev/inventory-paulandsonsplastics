@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/widgets/multi_select_downtime_reason.dart';
+import '../data/models/inner_model.dart';
 import '../providers/master_data_provider.dart';
 import '../providers/production_provider.dart';
 
@@ -190,8 +191,25 @@ class _InnerProductionEntryScreenState
               final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
               final totalWeight = double.tryParse(_totalWeightController.text) ?? 0;
               final unitWeight = double.tryParse(_actualWeightController.text) ?? 1;
+
+              // Get cavity count for this inner
+              final inners = ref.read(innersProvider).value ?? [];
+              final inner = inners.firstWhere(
+                (i) => i.id == _selectedInnerId,
+                orElse: () => Inner(
+                  id: '', 
+                  name: '', 
+                  idealWeightGrams: 0, 
+                  idealCycleTimeSeconds: 10,
+                  cavityCount: 1,
+                ),
+              );
+              final cavityCount = inner.cavityCount > 0 ? inner.cavityCount : 1;
+
               int actualQuantity = (unitWeight > 0) ? (totalWeight * 1000 / unitWeight).floor() : 0;
-              final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+              
+              // Duration = (Quantity / CC) * CycleTime
+              final actualProductionTimeSeconds = (actualQuantity / cavityCount) * actualCycleTime;
               final shiftDurationSeconds = shiftHours * 3600;
               return ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440);
             }(),

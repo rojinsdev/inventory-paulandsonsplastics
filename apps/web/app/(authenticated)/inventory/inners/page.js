@@ -36,6 +36,7 @@ export default function InnerManagementPage() {
         colors: [],
         ideal_weight_grams: '',
         ideal_cycle_time_seconds: '',
+        cavity_count: 1,
         factory_id: '',
         machine_id: '',
         raw_material_id: '',
@@ -178,6 +179,7 @@ export default function InnerManagementPage() {
                 colors: inner.variants?.map(v => v.color) || [],
                 ideal_weight_grams: inner.ideal_weight_grams || '',
                 ideal_cycle_time_seconds: inner.ideal_cycle_time_seconds || '',
+                cavity_count: inner.cavity_count || 1,
                 factory_id: inner.factory_id || '',
                 machine_id: inner.machine_id || '',
                 raw_material_id: inner.raw_material_id || '',
@@ -190,6 +192,7 @@ export default function InnerManagementPage() {
                 colors: ['Transparent'],
                 ideal_weight_grams: '',
                 ideal_cycle_time_seconds: '',
+                cavity_count: 1,
                 factory_id: selectedFactory || (factories.length === 1 ? factories[0].id : ''),
                 machine_id: '',
                 raw_material_id: '',
@@ -212,6 +215,7 @@ export default function InnerManagementPage() {
             product_template_ids: formData.tub_template_ids, // Map back for API
             ideal_weight_grams: parseFloat(formData.ideal_weight_grams),
             ideal_cycle_time_seconds: parseFloat(formData.ideal_cycle_time_seconds) || 0,
+            cavity_count: parseInt(formData.cavity_count) || 1,
             machine_id: formData.machine_id || null,
             raw_material_id: formData.raw_material_id || null
         };
@@ -378,7 +382,7 @@ export default function InnerManagementPage() {
                                                 <div className={styles.specItem}>
                                                     <Clock size={14} className={styles.textMuted} />
                                                     <span className={styles.specValue}>
-                                                        {parseFloat(inner.ideal_cycle_time_seconds) || 0}s
+                                                        {parseFloat(inner.ideal_cycle_time_seconds) || 0}s / {inner.cavity_count || 1}C
                                                     </span>
                                                 </div>
                                             </div>
@@ -528,9 +532,9 @@ export default function InnerManagementPage() {
                                             <h3 className={styles.sectionTitle}>
                                                 <Clock size={16} /> Physical Specifications
                                             </h3>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: '1rem' }}>
                                                 <div className={styles.formGroup}>
-                                                    <label className={styles.formLabel}>Ideal Weight *</label>
+                                                    <label className={styles.formLabel}>Weight *</label>
                                                     <div className={styles.inputWrapper}>
                                                         <input
                                                             type="number"
@@ -540,7 +544,19 @@ export default function InnerManagementPage() {
                                                             onChange={e => setFormData({ ...formData, ideal_weight_grams: e.target.value })}
                                                             required
                                                         />
-                                                        <span className={styles.suffix}>grams</span>
+                                                        <span className={styles.suffix}>g</span>
+                                                    </div>
+                                                </div>
+                                                <div className={styles.formGroup}>
+                                                    <label className={styles.formLabel}>Cavities</label>
+                                                    <div className={styles.inputWrapper}>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.formInput}
+                                                            value={formData.cavity_count}
+                                                            onChange={e => setFormData({ ...formData, cavity_count: e.target.value })}
+                                                            min="1"
+                                                        />
                                                     </div>
                                                 </div>
                                                 <div className={styles.formGroup}>
@@ -553,7 +569,7 @@ export default function InnerManagementPage() {
                                                             value={formData.ideal_cycle_time_seconds}
                                                             onChange={e => setFormData({ ...formData, ideal_cycle_time_seconds: e.target.value })}
                                                         />
-                                                        <span className={styles.suffix}>seconds</span>
+                                                        <span className={styles.suffix}>s</span>
                                                     </div>
                                                 </div>
                                             </div>

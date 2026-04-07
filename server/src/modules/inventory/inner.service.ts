@@ -14,6 +14,7 @@ export interface CreateInnerTemplateDTO {
     name: string;
     ideal_weight_grams: number;
     ideal_cycle_time_seconds?: number;
+    cavity_count?: number;
     raw_material_id?: string;
     machine_id?: string;
     factory_id: string;

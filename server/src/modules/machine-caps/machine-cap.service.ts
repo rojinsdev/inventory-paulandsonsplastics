@@ -4,6 +4,7 @@ export interface CreateMachineCapDTO {
     machine_id: string;
     cap_template_id: string;
     ideal_cycle_time_seconds: number;
+    cavity_count?: number;
     capacity_restriction?: number | null;
     enabled?: boolean;
 }

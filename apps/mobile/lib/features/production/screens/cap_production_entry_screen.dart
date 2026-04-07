@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/widgets/multi_select_downtime_reason.dart';
+import '../data/models/cap_mapping_model.dart';
 import '../providers/master_data_provider.dart';
 import '../providers/production_provider.dart';
 
@@ -206,7 +207,21 @@ class _CapProductionEntryScreenState
               final shiftHours = _calculateShiftDuration();
               final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0;
               
-              if (actualCycleTime == 0) return 0; // Prevent showing huge downtime if data is missing
+              if (actualCycleTime == 0) return 0;
+
+              // Find the cavity count for this machine-cap mapping
+              final mappings = ref.read(capMappingsProvider).value ?? [];
+              final mapping = mappings.firstWhere(
+                (m) => m.machineId == _selectedMachineId && m.capTemplateId == _selectedTemplateId,
+                orElse: () => CapMapping(
+                  id: '', 
+                  machineId: '', 
+                  capTemplateId: '', 
+                  idealCycleTimeSeconds: 10,
+                  cavityCount: 1,
+                ),
+              );
+              final cavityCount = mapping.cavityCount;
 
               int actualQuantity = 0;
               if (_totalWeightController.text.isNotEmpty) {
@@ -216,7 +231,9 @@ class _CapProductionEntryScreenState
               } else {
                 actualQuantity = int.tryParse(_totalProducedController.text) ?? 0;
               }
-              final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+
+              // Duration = (Quantity / CavityCount) * CycleTime
+              final actualProductionTimeSeconds = (actualQuantity / cavityCount) * actualCycleTime;
               final shiftDurationSeconds = shiftHours * 3600;
               return ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440);
             }(),

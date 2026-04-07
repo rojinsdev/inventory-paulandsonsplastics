@@ -7,6 +7,7 @@ const createMappingSchema = z.object({
     product_template_id: z.string().uuid(),
     product_id: z.string().uuid().optional(),
     ideal_cycle_time_seconds: z.number().positive(),
+    cavity_count: z.number().int().min(1).optional(),
     capacity_restriction: z.number().nullable().optional(),
     enabled: z.boolean().optional(),
 });

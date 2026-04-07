@@ -41,11 +41,16 @@ async function findCapVariantByTemplate(capTemplateId: string, productColor: str
     if (error || !caps || caps.length === 0) return null;
 
     // Exact color match
-    const exactMatch = caps.find(c => c.color?.toLowerCase() === productColor?.toLowerCase());
-    if (exactMatch) return exactMatch.id;
+    if (productColor) {
+        const exactMatch = caps.find(c => c.color?.toLowerCase() === productColor?.toLowerCase());
+        if (exactMatch) return exactMatch.id;
+    }
 
-// Fallback: return first variant
-    return caps[0].id;
+    // If only one variant exists for this template, use it
+    if (caps.length === 1) return caps[0].id;
+
+    // Otherwise, return null to signal ambiguity (must be resolved via discoverStockVariant)
+    return null;
 }
 
 // Helper to find an inner variant matching an inner template
@@ -186,9 +191,9 @@ export class InventoryService {
      * 2. Legacy Fallback
      * 3. Dominant Stock Selection (>95% of total product stock in that state)
      */
-    private async discoverStockVariant(productId: string, state: string, factoryId: string, unitType: string) {
+    private async discoverStockVariant(productId: string, state: string, factoryId: string, unitType: string, knownCapId?: string, knownInnerId?: string) {
         // Query for all variants of this product in this state with > 0 quantity
-        const { data: allStock, error } = await supabase
+        let query = supabase
             .from('stock_balances')
             .select(`
                 cap_id, 
@@ -203,7 +208,18 @@ export class InventoryService {
             .eq('factory_id', factoryId)
             .gt('quantity', 0);
 
+        // Apply partial filters if provided
+        if (knownCapId) {
+            query = query.eq('cap_id', knownCapId);
+        }
+        if (knownInnerId) {
+            query = query.eq('inner_id', knownInnerId);
+        }
+
+        const { data: allStock, error } = await query;
+
         if (error) throw new Error(`Error discovering stock variant: ${error.message}`);
+
         if (!allStock || allStock.length === 0) return { capId: null, innerId: null, found: false };
 
         // --- STAGE 1: Exact Unit Type Match ---
@@ -355,7 +371,7 @@ export class InventoryService {
 
         // Smart Discovery Fallback (if still missing dimensions and source is packed)
         if (source === 'packed' && (!finalCapId || !finalInnerId)) {
-            const discovery = await this.discoverStockVariant(productId, sourceState, factory, 'packet');
+            const discovery = await this.discoverStockVariant(productId, sourceState, factory, 'packet', finalCapId, finalInnerId);
             if (discovery.found) {
                 finalCapId = finalCapId || discovery.capId || undefined;
                 finalInnerId = finalInnerId || discovery.innerId || undefined;
@@ -466,7 +482,7 @@ export class InventoryService {
         // Smart Discovery Fallback (if still missing IDs)
         if (!finalCapId || !finalInnerId) {
             const sourceUnitType = fromState === 'finished' ? unitType : 'packet';
-            const discovery = await this.discoverStockVariant(productId, fromState, factory, sourceUnitType);
+            const discovery = await this.discoverStockVariant(productId, fromState, factory, sourceUnitType, finalCapId, finalInnerId);
             if (discovery.found) {
                 finalCapId = finalCapId || discovery.capId || undefined;
                 finalInnerId = finalInnerId || discovery.innerId || undefined;

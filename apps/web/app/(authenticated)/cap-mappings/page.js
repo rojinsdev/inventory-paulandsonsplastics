@@ -25,6 +25,7 @@ export default function CapMappingsPage() {
         machine_id: '',
         cap_template_id: '',
         ideal_cycle_time_seconds: '',
+        cavity_count: '1',
         capacity_restriction: '',
         enabled: true,
     });
@@ -124,6 +125,7 @@ export default function CapMappingsPage() {
             machine_id: machines[0]?.id || '',
             cap_template_id: templates[0]?.id || '',
             ideal_cycle_time_seconds: '',
+            cavity_count: '1',
             capacity_restriction: '',
             enabled: true,
         });
@@ -137,6 +139,7 @@ export default function CapMappingsPage() {
             machine_id: mapping.machine_id || '',
             cap_template_id: mapping.cap_template_id || '',
             ideal_cycle_time_seconds: mapping.ideal_cycle_time_seconds || '',
+            cavity_count: mapping.cavity_count || '1',
             capacity_restriction: mapping.capacity_restriction || '',
             enabled: mapping.enabled !== false,
         });
@@ -150,6 +153,7 @@ export default function CapMappingsPage() {
         const payload = {
             ...formData,
             ideal_cycle_time_seconds: Number(formData.ideal_cycle_time_seconds),
+            cavity_count: Number(formData.cavity_count) || 1,
             capacity_restriction: formData.capacity_restriction
                 ? Number(formData.capacity_restriction)
                 : null,
@@ -283,6 +287,7 @@ export default function CapMappingsPage() {
                                 <tr>
                                     <th>Machine</th>
                                     <th>Template</th>
+                                    <th>Cavities</th>
                                     <th>Cycle Time (sec)</th>
                                     <th>Capacity Limit</th>
                                     <th>Enabled</th>
@@ -294,6 +299,7 @@ export default function CapMappingsPage() {
                                     <tr key={mapping.id}>
                                         <td className={styles.nameCell}>{getMachineName(mapping.machine_id)}</td>
                                         <td>{getTemplateName(mapping.cap_template_id)}</td>
+                                        <td style={{ textAlign: 'center' }}>{mapping.cavity_count || 1}</td>
                                         <td className={styles.cycleCell}>{mapping.ideal_cycle_time_seconds}s</td>
                                         <td className={styles.capacityCell}>{mapping.capacity_restriction || '—'}</td>
                                         <td>
@@ -371,7 +377,21 @@ export default function CapMappingsPage() {
 
                                 <div className={styles.formRow}>
                                     <div className={styles.formGroup}>
-                                        <label className={styles.formLabel}>Ideal Cycle Time (seconds) *</label>
+                                        <label className={styles.formLabel}>Cavity Count *</label>
+                                        <input
+                                            type="number"
+                                            className={styles.formInput}
+                                            value={formData.cavity_count}
+                                            onChange={(e) =>
+                                                setFormData({ ...formData, cavity_count: e.target.value })
+                                            }
+                                            required
+                                            min="1"
+                                            placeholder="Number of cavities"
+                                        />
+                                    </div>
+                                    <div className={styles.formGroup}>
+                                        <label className={styles.formLabel}>Ideal Cycle Time (sec) *</label>
                                         <input
                                             type="number"
                                             step="any"
@@ -382,7 +402,6 @@ export default function CapMappingsPage() {
                                             }
                                             required
                                             min="0.1"
-                                            placeholder="Time to produce one cap"
                                         />
                                     </div>
                                     <div className={styles.formGroup}>
@@ -394,7 +413,7 @@ export default function CapMappingsPage() {
                                             onChange={(e) =>
                                                 setFormData({ ...formData, capacity_restriction: e.target.value })
                                             }
-                                            placeholder="Max daily caps (optional)"
+                                            placeholder="Max daily (opt)"
                                             min="0"
                                         />
                                     </div>

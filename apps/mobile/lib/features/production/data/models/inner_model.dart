@@ -4,6 +4,7 @@ class Inner {
   final String? color;
   final double idealWeightGrams;
   final double idealCycleTimeSeconds;
+  final int cavityCount;
   final int stockQuantity;
   final String? templateId;
 
@@ -13,6 +14,7 @@ class Inner {
     this.color,
     required this.idealWeightGrams,
     required this.idealCycleTimeSeconds,
+    this.cavityCount = 1,
     this.stockQuantity = 0,
     this.templateId,
   });
@@ -35,7 +37,7 @@ class Inner {
       name = json['template']['name'] as String? ?? 'Unknown';
     }
 
-    // Helper for robust double parsing
+    // Helper for robust parsing
     double parseDouble(dynamic value) {
       if (value == null) return 0.0;
       if (value is num) return value.toDouble();
@@ -43,7 +45,14 @@ class Inner {
       return 0.0;
     }
 
-    // Try to get weights/times from template if not present on variant
+    int parseInt(dynamic value) {
+      if (value == null) return 0;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value) ?? 0;
+      return 0;
+    }
+
+    // Try to get weights/times/cavities from template if not present on variant
     double weight = parseDouble(json['ideal_weight_grams']);
     if (weight == 0.0 && json['template'] != null) {
       weight = parseDouble(json['template']['ideal_weight_grams']);
@@ -54,12 +63,18 @@ class Inner {
       cycleTime = parseDouble(json['template']['ideal_cycle_time_seconds']);
     }
 
+    int cavities = parseInt(json['cavity_count']);
+    if (cavities == 0 && json['template'] != null) {
+      cavities = parseInt(json['template']['cavity_count']);
+    }
+
     return Inner(
       id: json['id'] as String? ?? '',
       name: name,
       color: json['color'] as String?,
       idealWeightGrams: weight,
       idealCycleTimeSeconds: cycleTime,
+      cavityCount: cavities > 0 ? cavities : 1,
       stockQuantity: stock,
       templateId: json['template_id'] as String?,
     );

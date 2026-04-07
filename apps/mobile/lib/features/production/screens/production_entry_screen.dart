@@ -224,6 +224,15 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
 
       final actualCycleTime = double.tryParse(_actualCycleTimeController.text) ?? 0.0;
       
+      // Get cavity count for this machine-template mapping
+      final machines = ref.read(machinesProvider).value ?? [];
+      final Machine? machine = machines.any((m) => m.id == _selectedMachineId) 
+          ? machines.firstWhere((m) => m.id == _selectedMachineId)
+          : null;
+      final int cavityCount = (machine != null && _selectedTemplateId != null)
+          ? (machine.templateCavityCounts[_selectedTemplateId] ?? 1)
+          : 1;
+
       int actualQuantity = 0;
       if (_isWeightBased) {
         final totalWeight = double.tryParse(_totalWeightController.text) ?? 0.0;
@@ -235,7 +244,8 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
         actualQuantity = totalProduced - damagedCount;
       }
 
-      final actualProductionTimeSeconds = actualQuantity * actualCycleTime;
+      // Duration_actual = (Quantity / CC) * CycleTime
+      final actualProductionTimeSeconds = (actualQuantity / cavityCount) * actualCycleTime;
       final shiftDurationSeconds = shiftDuration * 3600;
       final downtimeMinutes =
           ((shiftDurationSeconds - actualProductionTimeSeconds) / 60)

@@ -5,6 +5,7 @@ export interface CreateMachineProductDTO {
     product_template_id: string;
     product_id?: string;
     ideal_cycle_time_seconds: number;
+    cavity_count?: number;
     capacity_restriction?: number | null;
     enabled?: boolean;
 }

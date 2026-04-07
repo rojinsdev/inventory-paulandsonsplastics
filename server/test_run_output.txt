@@ -1,0 +1,421 @@
+
+> server@1.0.0 test
+> jest
+
+PASS src/utils/__tests__/AppError.test.ts (10.733 s)
+  AppError Utility
+    ΓêÜ should create an operational error with correct status code (47 ms)
+    ΓêÜ should set status to "error" for 500 status code (1 ms)
+    ΓêÜ should capture stack trace (13 ms)
+
+PASS src/utils/__tests__/auth.test.ts (11.333 s)
+  resolveAuthorizedFactoryId
+    ΓêÜ should return undefined if no user is present (25 ms)
+    ΓêÜ should return fixed factory_id for production_manager ignoring query (1 ms)
+    ΓêÜ should return query factory_id for admin (1 ms)
+    ΓêÜ should return undefined for admin if no query factory_id is provided (1 ms)
+
+PASS src/modules/purchases/__tests__/purchase-chains.test.ts (11.815 s)
+  Purchase & Inventory Chain Tests
+    ΓêÜ Scenario 1: Raw Material Purchase Flow (50 ms)
+    ΓêÜ Scenario 2: External Finished Product Purchase (Cash) (3 ms)
+    ΓêÜ Scenario 3: External Finished Product Purchase (Credit) (8 ms)
+    ΓêÜ Scenario 4: Quick Define + Purchase Integration (6 ms)
+    ΓêÜ Scenario 5: General Supplier Payment & History Filtering (8 ms)
+
+PASS src/modules/products/__tests__/product.service.test.ts (11.787 s)
+  ProductService
+    updateTemplate
+      ΓêÜ should update template and sync variants (31 ms)
+
+PASS src/modules/cash-flow/__tests__/cash-flow.service.test.ts (12.066 s)
+  CashFlowService - Shared Costs
+    ΓêÜ should calculate shared cost split correctly (56 ms)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:29"}
+{"customerId":"cust-1","itemCount":1,"level":"info","message":"Creating sales order atomically:","timestamp":"2026-04-07 11:20:29","userId":"user-1"}
+{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-04-07 11:20:29"}
+{"error":{},"level":"error","message":"Error in sendToUsers","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    [MOCK RPC] Calling create_order_atomic with args: {
+      p_customer_id: 'cust-1',
+      p_delivery_date: null,
+      p_notes: '',
+      p_user_id: 'user-1',
+      p_items: [
+        {
+          product_id: 'prod-1',
+          quantity: 10,
+          unit_price: 100,
+          unit_type: 'packet'
+        }
+      ],
+      p_order_date: '2026-04-07'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"Sales order created atomically","orderId":"order-y3y0gm7qt","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"Production request created","orderId":"order-y3y0gm7qt","productId":"prod-1","quantity":10,"requestId":"pro-xs61lqe3d","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    Γ£à CHAIN SUCCESS: Sales Order -> Production Request & Side Effects triggered.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:527:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    [MOCK INVENTORY] adjustRawMaterial called for rw-1 with 50kg
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:415:17)
+
+PASS src/modules/inventory/__tests__/stock-allocation.service.test.ts (12.375 s)
+  StockAllocationService
+    ΓêÜ should fulfill request manually and move stock to reserved (126 ms)
+
+  console.log
+    [MOCK INVENTORY] Updated rw-1 weight to 150
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:420:25)
+
+{"level":"info","message":"[FinanceHandler] Logged purchase cash flow","purchaseId":"pur-0823hhdlx","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    Γ£à CHAIN SUCCESS: Procurement -> Stock & Automated Finance updated.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:562:17)
+
+{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:29"}
+{"actual_quantity":20,"level":"info","machine_id":"mac-1","message":"Executing atomic production submission:","product_id":"prod-1","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    [MOCK RPC] Calling submit_production_atomic with args: {
+      p_machine_id: 'mac-1',
+      p_product_id: 'prod-1',
+      p_shift_number: 1,
+      p_start_time: '08:00',
+      p_end_time: '08:15',
+      p_total_produced: 20,
+      p_damaged_count: 0,
+      p_actual_cycle_time_seconds: 30,
+      p_actual_weight_grams: 500,
+      p_downtime_minutes: 5,
+      p_downtime_reason: null,
+      p_date: '2026-04-07',
+      p_user_id: 'user-1',
+      p_factory_id: 'fac-1',
+      p_theoretical_quantity: 30,
+      p_efficiency_percentage: 66.67,
+      p_is_cost_recovered: null,
+      p_shift_hours: 0.25
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+  console.log
+    [MOCK RPC] Deducted RM 10kg. Remaining: 90
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:256:29)
+
+{"itemsCount":1,"level":"info","message":"Processing partial delivery via RPC","orderId":"order-100k","timestamp":"2026-04-07 11:20:29","userId":"admin-1"}
+{"level":"info","message":"Partial delivery processed successfully via RPC","orderId":"order-100k","result":null,"timestamp":"2026-04-07 11:20:29","userId":"admin-1"}
+  console.log
+    Γ£à CHAIN SUCCESS: Production -> Material consumed & Stock produced.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:614:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:29"}
+{"customerId":"cust-1","itemCount":1,"level":"info","message":"Creating sales order atomically:","timestamp":"2026-04-07 11:20:29","userId":"user-1"}
+  console.log
+    [MOCK RPC] Calling create_order_atomic with args: {
+      p_customer_id: 'cust-1',
+      p_delivery_date: null,
+      p_notes: '',
+      p_user_id: 'user-1',
+      p_items: [
+        {
+          product_id: 'prod-1',
+          quantity: 20,
+          unit_type: 'bundle',
+          unit_price: 10
+        }
+      ],
+      p_order_date: '2026-04-07'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"Sales order created atomically","orderId":"order-jydbt1435","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    Order created: order-jydbt1435 Status: pending
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:652:17)
+
+  console.log
+    Order Item: item-2m75fd9zm Reserved: 0
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:654:17)
+
+{"itemCount":1,"level":"info","message":"Executing atomic order preparation:","orderId":"order-jydbt1435","timestamp":"2026-04-07 11:20:29","userId":"user-1"}
+  console.log
+    [MOCK RPC] Calling prepare_order_items_atomic with args: {
+      p_order_id: 'order-jydbt1435',
+      p_items: [ { item_id: 'item-2m75fd9zm', quantity: 20 } ],
+      p_user_id: 'user-1'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"Sales order items prepared atomically","orderId":"order-jydbt1435","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    Updated Order Status: reserved
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:670:17)
+
+  console.log
+    Stock - Finished: 80 Reserved: 20
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:678:17)
+
+  console.log
+    Γ£à CHAIN SUCCESS: Sales Order -> Prepared & Reserved.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:683:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:29"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:29"}
+  console.log
+    [MOCK RPC] Calling adjust_stock with args: {
+      p_factory_id: 'fact-1',
+      p_state: 'reserved',
+      p_quantity_change: -20,
+      p_cap_id: undefined,
+      p_unit_type: 'bundle',
+      p_product_id: 'prod-1'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+  console.log
+    [MOCK RPC] Updated stock for prod-1 (reserved) by -20. New: 0
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:196:21)
+
+{"level":"info","message":"Order delivered, stock deducted","orderId":"sal-1","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+{"level":"info","message":"Sales order status updated","newStatus":"delivered","orderId":"sal-1","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+  console.log
+    Γ£à CHAIN SUCCESS: Reserved Stock -> Delivered & Audited.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:733:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:30"}
+{"amount":50,"level":"info","message":"Payment recorded successfully","newBalanceDue":150,"orderId":"sal-1","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+{"level":"info","message":"[FinanceHandler] Logged sales payment","paymentId":"pay-6hr784hxr","timestamp":"2026-04-07 11:20:30"}
+  console.log
+    Γ£à CHAIN SUCCESS: Customer Payment -> Balance & Finance updated.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:771:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:30"}
+  console.log
+    Γ£à CHAIN SUCCESS: Production Request marked as Prepared (Audited).
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:815:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:30"}
+{"customerId":"cust-1","itemCount":1,"level":"info","message":"Creating sales order atomically:","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+  console.log
+    [MOCK RPC] Calling create_order_atomic with args: {
+      p_customer_id: 'cust-1',
+      p_delivery_date: '2026-05-01',
+      p_notes: '',
+      p_user_id: 'user-1',
+      p_items: [ { cap_id: 'cap-1', quantity: 100, unit_type: 'packet' } ],
+      p_order_date: '2026-04-07'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"Sales order created atomically","orderId":"order-8h2zqz9n6","timestamp":"2026-04-07 11:20:30"}
+{"capId":"cap-1","level":"info","message":"Production request created","orderId":"order-8h2zqz9n6","productId":null,"quantity":100,"requestId":"pro-d3tdmedfh","timestamp":"2026-04-07 11:20:30"}
+{"itemCount":1,"level":"info","message":"Executing atomic order preparation:","orderId":"order-8h2zqz9n6","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+{"itemsCount":2,"level":"info","message":"Processing partial delivery via RPC","orderId":"order-1","timestamp":"2026-04-07 11:20:30","userId":"user-admin"}
+  console.log
+    [MOCK RPC] Calling prepare_order_items_atomic with args: {
+      p_order_id: 'order-8h2zqz9n6',
+      p_items: [ { item_id: 'item-nlfmzfnd7', quantity: 100 } ],
+      p_user_id: 'user-1'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"Sales order items prepared atomically","orderId":"order-8h2zqz9n6","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"Partial delivery processed successfully via RPC","orderId":"order-1","result":null,"timestamp":"2026-04-07 11:20:30","userId":"user-admin"}
+{"itemsCount":1,"level":"info","message":"Processing partial delivery via RPC","orderId":"order-8h2zqz9n6","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+  console.log
+    [MOCK RPC] Calling process_partial_dispatch with args: {
+      p_order_id: 'order-8h2zqz9n6',
+      p_items: [ { item_id: 'item-nlfmzfnd7', quantity: 100, unit_price: 10 } ],
+      p_discount_type: 'fixed',
+      p_discount_value: 0,
+      p_payment_mode: 'cash',
+      p_credit_deadline: null,
+      p_initial_payment: 0,
+      p_notes: '',
+      p_user_id: 'user-1',
+      p_payment_method: 'cash'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"Partial delivery processed successfully via RPC","orderId":"order-8h2zqz9n6","result":"batch-h84mcy3qf","timestamp":"2026-04-07 11:20:30","userId":"user-1"}
+  console.log
+    Γ£à CHAIN SUCCESS: Standalone Cap Fulfillment -> Manual Reservation -> Dispatch.
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:879:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:30"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:30"}
+{"itemsCount":1,"level":"info","message":"Processing partial delivery via RPC","orderId":"order-blocked","timestamp":"2026-04-07 11:20:30","userId":"u-1"}
+  console.log
+    [MOCK RPC] Calling process_partial_dispatch with args: {
+      p_order_id: 'order-blocked',
+      p_items: [ { item_id: 'item-blocked', quantity: 50, unit_price: 100 } ],
+      p_discount_type: 'fixed',
+      p_discount_value: 0,
+      p_payment_mode: 'cash',
+      p_credit_deadline: null,
+      p_initial_payment: 0,
+      p_notes: '',
+      p_user_id: 'u-1',
+      p_payment_method: 'cash'
+    }
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:163:17)
+
+{"level":"info","message":"[Overdue Check] Marked 1 orders as overdue and sent notifications","timestamp":"2026-04-07 11:20:30"}
+{"count":0,"filters":{"status":"pending"},"level":"info","message":"Pending payments fetched","timestamp":"2026-04-07 11:20:30"}
+{"count":0,"filters":{"status":"paid"},"level":"info","message":"Pending payments fetched","timestamp":"2026-04-07 11:20:30"}
+{"level":"warn","message":"Sales order not found","orderId":"non-existent","timestamp":"2026-04-07 11:20:30"}
+{"count":0,"filters":{"status":"overdue"},"level":"info","message":"Pending payments fetched","timestamp":"2026-04-07 11:20:30"}
+{"count":0,"filters":{"status":"all"},"level":"info","message":"Pending payments fetched","timestamp":"2026-04-07 11:20:30"}
+{"count":0,"filters":{"customer_id":"cust-1"},"level":"info","message":"Pending payments fetched","timestamp":"2026-04-07 11:20:30"}
+PASS src/modules/sales-orders/__tests__/sales-order.service.test.ts (12.535 s)
+  SalesOrderService
+    ΓêÜ should calculate totals and discounts correctly during delivery (25 ms)
+    getPendingPayments
+      ΓêÜ should filter by pending status (balance_due > 0) (3 ms)
+      ΓêÜ should filter by paid status (balance_due = 0) (2 ms)
+      ΓêÜ should return null if order is not found (2 ms)
+      ΓêÜ should filter by overdue status (2 ms)
+      ΓêÜ should not apply balance filter when status is all (3 ms)
+      ΓêÜ should filter by customer_id if provided (4 ms)
+
+FAIL src/modules/sales-orders/__tests__/sales-credit.integration.test.ts (12.512 s)
+  Sales & Credit Integration - Partial Payment Loop
+    ├ù should handle the full partial payment cycle correctly (21 ms)
+    ΓêÜ should correctly mark orders as overdue and send notifications (46 ms)
+
+  ΓùÅ Sales & Credit Integration - Partial Payment Loop ΓÇ║ should handle the full partial payment cycle correctly
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: ObjectContaining {"amount_paid": 15000, "balance_due": 85000, "total_amount": 100000}
+
+    Number of calls: 0
+
+      103 |
+      104 |         // Verify initial balance (100,000 - 15,000 = 85,000)
+    > 105 |         expect(orderUpdateSpy).toHaveBeenCalledWith(expect.objectContaining({
+          |                                ^
+      106 |             total_amount: 100000,
+      107 |             amount_paid: 15000,
+      108 |             balance_due: 85000
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/sales-credit.integration.test.ts:105:32)
+
+  console.log
+    Γ£à CHAIN SUCCESS: Manual Reservation Enforcement (Blocked Dispatch).
+
+      at Object.<anonymous> (src/modules/sales-orders/__tests__/chains.test.ts:900:17)
+
+PASS src/modules/sales-orders/__tests__/chains.test.ts (12.529 s)
+  Business Chain Integration Tests
+    ΓêÜ should create a production request when a backordered item is ordered (204 ms)
+    ΓêÜ Chain 1: Procurement -> Raw Material Stock -> Cash Flow (16 ms)
+    ΓêÜ Chain 2: Production -> Raw Material Consumption -> Stock Update (20 ms)
+    ΓêÜ Chain 4: Sales Order -> Fulfillment (Preparation/Reservation) (17 ms)
+    ΓêÜ Chain 5: Fulfillment -> Dispatch (Delivery) (19 ms)
+    ΓêÜ Chain 6: Customer Payment -> Balance Update (5 ms)
+    ΓêÜ Chain 7: Production Request -> Mark as Prepared (Manual Flow) (4 ms)
+    ΓêÜ Chain 8: Standalone Cap Fulfillment (13 ms)
+    ΓêÜ Chain 9: Manual Reservation Enforcement (Dispatch blocked if not reserved) (78 ms)
+
+{"actual_quantity":95,"level":"info","machine_id":"mach-1","message":"Executing atomic production submission:","product_id":"prod-1","timestamp":"2026-04-07 11:20:30"}
+PASS src/modules/production/__tests__/production.service.test.ts (12.569 s)
+  ProductionService
+    ΓêÜ should submit production successfully and deduct raw materials (53 ms)
+    ΓêÜ should throw error if insufficient raw material (34 ms)
+
+{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-04-07 11:20:31"}
+  console.log
+    Γ£à PlanningService initialized with updated query logic
+
+      at new PlanningService (src/modules/planning/planning.service.ts:21:17)
+
+{"level":"info","message":"Initializing System Event Handlers...","timestamp":"2026-04-07 11:20:31"}
+{"level":"info","message":"[AuditHandler] Registering listeners...","timestamp":"2026-04-07 11:20:31"}
+{"level":"info","message":"[NotificationHandler] Registering listeners...","timestamp":"2026-04-07 11:20:31"}
+{"level":"info","message":"[FinanceHandler] Registering listeners...","timestamp":"2026-04-07 11:20:31"}
+{"level":"info","message":"System Event Handlers initialized successfully.","timestamp":"2026-04-07 11:20:31"}
+[32minfo[39m: Fetching profile for user ID: user-123 {"service":"inventory-system","timestamp":"2026-04-07T05:50:31.674Z"}
+[0mPOST /api/auth/login [32m200[0m 28.165 ms - 199[0m
+[0mPOST /api/auth/login [33m400[0m 6.664 ms - 303[0m
+[33mwarn[39m: Login failed for test@example.com: Invalid login credentials {"service":"inventory-system","timestamp":"2026-04-07T05:50:31.709Z"}
+[0mPOST /api/auth/login [33m401[0m 10.260 ms - 55[0m
+PASS src/modules/auth/__tests__/auth.integration.test.ts (14.152 s)
+  Auth Integration
+    ΓêÜ should login successfully with valid credentials (65 ms)
+    ΓêÜ should return 400 for invalid input (15 ms)
+    ΓêÜ should return 401 for wrong credentials (19 ms)
+
+Test Suites: 1 failed, 10 passed, 11 total
+Tests:       1 failed, 37 passed, 38 total
+Snapshots:   0 total
+Time:        15.606 s, estimated 22 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?

@@ -6,6 +6,7 @@ const createMappingSchema = z.object({
     machine_id: z.string().uuid(),
     cap_template_id: z.string().uuid(),
     ideal_cycle_time_seconds: z.number().nonnegative(),
+    cavity_count: z.number().int().min(1).optional(),
     capacity_restriction: z.number().nullable().optional(),
     enabled: z.boolean().optional(),
 });

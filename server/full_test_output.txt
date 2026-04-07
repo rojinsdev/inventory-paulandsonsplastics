@@ -1,127 +1,23 @@
+{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-04-04 09:25:20"}
+≡ƒº¬ Starting FULL Production Chain Test...
+1. Creating Test Raw Material...
+   Γ£à Created Raw Material: Chain-Test RM 1775274921587
+2. Creating Test Cap Template...
+   Γ£à Created Cap Template: Chain-Test Cap 1775274921587
+2.5 Creating Specific Cap Variant...
+   Γ£à Created Cap Variant: Variant 1775274921587
+3. Creating Machine-Cap Mapping...
+   Γ£à Created Machine Mapping (Ideal Speed: 4.5s)
+4. Submitting Production via API...
+{"actual_cycle_time_seconds":4.5,"calculated_quantity":10000,"cap_id":"bba7aec8-f893-457b-8ca6-6a59bc9456c1","date":"2026-04-04","end_time":"12:00","factory_id":"7ec2471f-c1c4-4603-9181-0cbde159420b","level":"info","machine_id":"9c171193-d1b6-4a7d-9819-0ef73c11aed3","message":"Inserting cap production log:","shift_number":1,"start_time":"08:00","timestamp":"2026-04-04 09:25:22","total_weight_produced_kg":50,"user_id":"864c7dee-f736-4e32-906c-cdd2e59f3ef4"}
+   Γ£à Production Submitted: 50kg
 
-> server@1.0.0 test
-> jest
+4.5 Creating Test Tub Template & Variant...
+   Γ£à Created Tub Variant: Tub Variant 1775274921587
+4.6 Submitting Tub Production...
 
-PASS src/utils/__tests__/AppError.test.ts (6.308 s)
-  AppError Utility
-    ΓêÜ should create an operational error with correct status code (14 ms)
-    ΓêÜ should set status to "error" for 500 status code (1 ms)
-    ΓêÜ should capture stack trace (14 ms)
 
-PASS src/modules/cash-flow/__tests__/cash-flow.service.test.ts (6.319 s)
-  CashFlowService - Shared Costs
-    ΓêÜ should calculate shared cost split correctly (62 ms)
-
-PASS src/modules/products/__tests__/product.service.test.ts (6.505 s)
-  ProductService
-    updateTemplate
-      ΓêÜ should update template and sync variants (16 ms)
-
-PASS src/utils/__tests__/auth.test.ts (6.492 s)
-  resolveAuthorizedFactoryId
-    ΓêÜ should return undefined if no user is present (11 ms)
-    ΓêÜ should return fixed factory_id for production_manager ignoring query (2 ms)
-    ΓêÜ should return query factory_id for admin (1 ms)
-    ΓêÜ should return undefined for admin if no query factory_id is provided (1 ms)
-
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:16"}
-{"error":{},"level":"error","message":"Error in sendToUsers","timestamp":"2026-03-23 08:06:17"}
-PASS src/modules/inventory/__tests__/stock-allocation.service.test.ts (9.709 s)
-  StockAllocationService
-    ΓêÜ should fulfill request manually and move stock to reserved (128 ms)
-
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:17"}
-{"actual_quantity":95,"level":"info","machine_id":"mach-1","message":"Inserting production log:","product_id":"prod-1","timestamp":"2026-03-23 08:06:17"}
-PASS src/modules/production/__tests__/production.service.test.ts (10.379 s)
-  ProductionService
-    ΓêÜ should submit production successfully and deduct raw materials (19 ms)
-    ΓêÜ should throw error if insufficient raw material (36 ms)
-
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:18"}
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:18"}
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:18"}
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:18"}
-{"level":"info","message":"Firebase Admin SDK initialized successfully","timestamp":"2026-03-23 08:06:18"}
-{"factoryId":"fac-1","level":"info","message":"Stock delivered successfully","productId":"prod-1","quantity":10,"timestamp":"2026-03-23 08:06:18"}
-{"factoryId":"fac-1","level":"info","message":"Stock delivered successfully","productId":"prod-2","quantity":5,"timestamp":"2026-03-23 08:06:18"}
-{"level":"info","message":"Partial delivery processed successfully","newStatus":"delivered","orderId":"order-1","timestamp":"2026-03-23 08:06:18"}
-{"factoryId":"fac-1","level":"info","message":"Stock delivered successfully","productId":"prod-1","quantity":10,"timestamp":"2026-03-23 08:06:18"}
-{"count":0,"filters":{"status":"pending"},"level":"info","message":"Pending payments fetched","timestamp":"2026-03-23 08:06:18"}
-{"count":0,"filters":{"status":"paid"},"level":"info","message":"Pending payments fetched","timestamp":"2026-03-23 08:06:18"}
-{"level":"warn","message":"Sales order not found","orderId":"non-existent","timestamp":"2026-03-23 08:06:18"}
-{"count":0,"filters":{"status":"overdue"},"level":"info","message":"Pending payments fetched","timestamp":"2026-03-23 08:06:18"}
-{"count":0,"filters":{"status":"all"},"level":"info","message":"Pending payments fetched","timestamp":"2026-03-23 08:06:18"}
-{"count":0,"filters":{"customer_id":"cust-1"},"level":"info","message":"Pending payments fetched","timestamp":"2026-03-23 08:06:18"}
-{"level":"info","message":"[Overdue Check] Marked 1 orders as overdue and sent notifications","timestamp":"2026-03-23 08:06:18"}
-FAIL src/modules/sales-orders/__tests__/sales-order.service.test.ts (10.751 s)
-  SalesOrderService
-    ├ù should calculate totals and discounts correctly during delivery (14 ms)
-    getPendingPayments
-      ΓêÜ should filter by pending status (balance_due > 0) (1 ms)
-      ΓêÜ should filter by paid status (balance_due = 0) (2 ms)
-      ΓêÜ should return null if order is not found (3 ms)
-      ΓêÜ should filter by overdue status (2 ms)
-      ΓêÜ should not apply balance filter when status is all (3 ms)
-      ΓêÜ should filter by customer_id if provided (2 ms)
-
-  ΓùÅ SalesOrderService ΓÇ║ should calculate totals and discounts correctly during delivery
-
-    expect(jest.fn()).toHaveBeenCalledWith(...expected)
-
-    Expected: ObjectContaining {"amount_paid": 500, "balance_due": 1300, "status": "delivered", "subtotal": 2000, "total_amount": 1800}
-    Received: {"amount_paid": 500, "delivered_at": "2026-03-23T02:36:18.094Z", "status": "delivered"}
-
-    Number of calls: 1
-
-      105 |
-      106 |         // Verify Calculations
-    > 107 |         expect(updateSpy).toHaveBeenCalledWith(expect.objectContaining({
-          |                           ^
-      108 |             subtotal: 2000,
-      109 |             total_amount: 1800,
-      110 |             amount_paid: 500,
-
-      at Object.<anonymous> (src/modules/sales-orders/__tests__/sales-order.service.test.ts:107:27)
-
-FAIL src/modules/sales-orders/__tests__/sales-credit.integration.test.ts (10.81 s)
-  Sales & Credit Integration - Partial Payment Loop
-    ├ù should handle the full partial payment cycle correctly (8 ms)
-    ΓêÜ should correctly mark orders as overdue and send notifications (5 ms)
-
-  ΓùÅ Sales & Credit Integration - Partial Payment Loop ΓÇ║ should handle the full partial payment cycle correctly
-
-    TypeError: (updatedItems.data || []).every is not a function
-
-      981 |         // 6. Update order-level totals and status
-      982 |         const updatedItems = await supabase.from('sales_order_items').select('quantity, quantity_shipped').eq('order_id', orderId);
-    > 983 |         const isFullyShipped = (updatedItems.data || []).every(i => i.quantity_shipped >= i.quantity);
-          |                                                          ^
-      984 |         
-      985 |         const newStatus = isFullyShipped ? 'delivered' : 'partially_delivered';
-      986 |         const initialPayment = deliveryData.initial_payment || 0;
-
-      at SalesOrderService.processDelivery (src/modules/sales-orders/sales-order.service.ts:983:58)
-      at Object.<anonymous> (src/modules/sales-orders/__tests__/sales-credit.integration.test.ts:99:9)
-
-  console.log
-    Γ£à PlanningService initialized with updated query logic
-
-      at new PlanningService (src/modules/planning/planning.service.ts:21:17)
-
-[32minfo[39m: Fetching profile for user ID: user-123 {"service":"inventory-system","timestamp":"2026-03-23T02:36:18.951Z"}
-[0mPOST /api/auth/login [32m200[0m 19.829 ms - 199[0m
-[0mPOST /api/auth/login [33m400[0m 2.248 ms - 303[0m
-[33mwarn[39m: Login failed for test@example.com: Invalid login credentials {"service":"inventory-system","timestamp":"2026-03-23T02:36:18.970Z"}
-[0mPOST /api/auth/login [33m401[0m 5.941 ms - 55[0m
-PASS src/modules/auth/__tests__/auth.integration.test.ts (11.567 s)
-  Auth Integration
-    ΓêÜ should login successfully with valid credentials (45 ms)
-    ΓêÜ should return 400 for invalid input (7 ms)
-    ΓêÜ should return 401 for wrong credentials (10 ms)
-
-Test Suites: 2 failed, 7 passed, 9 total
-Tests:       2 failed, 22 passed, 24 total
-Snapshots:   0 total
-Time:        12.74 s, estimated 19 s
-Ran all test suites.
-Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
+6. Cleaning up test data...
+≡ƒÆÑ TEST FAILED!
+40 minutes unaccounted. Please provide downtime reason.
+   Γ£à Cleanup complete.

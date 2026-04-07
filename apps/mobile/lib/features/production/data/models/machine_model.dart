@@ -5,6 +5,7 @@ class Machine {
   final String status;
   final List<String> allowedTemplateIds;
   final Map<String, double> templateCycleTimes;
+  final Map<String, int> templateCavityCounts;
 
   Machine({
     required this.id,
@@ -13,6 +14,7 @@ class Machine {
     required this.status,
     this.allowedTemplateIds = const [],
     this.templateCycleTimes = const {},
+    this.templateCavityCounts = const {},
   });
 
   factory Machine.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class Machine {
     final mpRaw = json['machine_products'] as List?;
     final allowedIds = <String>[];
     final cycleTimes = <String, double>{};
+    final cavityCounts = <String, int>{};
 
     if (mpRaw != null) {
       for (var mp in mpRaw) {
@@ -30,6 +33,8 @@ class Machine {
           if (cycleTime != null) {
             cycleTimes[templateId] = cycleTime;
           }
+          final cavityCount = (mp['cavity_count'] as num?)?.toInt() ?? 1;
+          cavityCounts[templateId] = cavityCount;
         }
       }
     }
@@ -41,6 +46,7 @@ class Machine {
       status: json['status'] as String? ?? 'offline',
       allowedTemplateIds: allowedIds,
       templateCycleTimes: cycleTimes,
+      templateCavityCounts: cavityCounts,
     );
   }
 }

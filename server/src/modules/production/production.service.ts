@@ -123,11 +123,11 @@ export class ProductionService {
             throw new AppError('Machine and Product belong to different factories', 400);
         }
 
-        // 6. Get Ideal Cycle Time
+        // 6. Get Ideal Cycle Time and Cavity Count
         // NOTE: machine_products is now keyed on (machine_id, product_template_id) since migration 022
         const { data: machineProduct, error: mpError } = await supabase
             .from('machine_products')
-            .select('ideal_cycle_time_seconds')
+            .select('ideal_cycle_time_seconds, cavity_count')
             .eq('machine_id', data.machine_id)
             .eq('product_template_id', product.template_id)
             .single();
@@ -163,10 +163,11 @@ export class ProductionService {
 
         // === CYCLE TIME LOSS CALCULATION ===
         const actual_cycle_time = data.actual_cycle_time_seconds ?? ideal_cycle_time;
-        const ideal_production_time = actual_quantity * ideal_cycle_time;
-        const actual_production_time = actual_quantity * actual_cycle_time;
+        const cavity_count = machineProduct.cavity_count || 1;
+        const ideal_production_time = (actual_quantity / cavity_count) * ideal_cycle_time;
+        const actual_production_time = (actual_quantity / cavity_count) * actual_cycle_time;
         const cycle_time_loss_seconds = actual_production_time - ideal_production_time;
-        const units_lost_to_cycle = Math.floor(cycle_time_loss_seconds / ideal_cycle_time);
+        const units_lost_to_cycle = Math.floor(cycle_time_loss_seconds / (ideal_cycle_time / cavity_count));
 
         // === DOWNTIME CALCULATION ===
         const shift_duration_seconds = shiftDuration * 60; // Convert minutes to seconds
@@ -189,8 +190,8 @@ export class ProductionService {
         const flagged_for_review = (data.actual_cycle_time_seconds ?? ideal_cycle_time) > (ideal_cycle_time * variance_threshold);
 
         // === EFFICIENCY (for backward compatibility) ===
-        const theoretical_quantity = Math.floor(shift_duration_seconds / ideal_cycle_time);
-        const efficiency_percentage = Number(((actual_quantity / theoretical_quantity) * 100).toFixed(2));
+        const theoretical_quantity = Math.floor((shift_duration_seconds / ideal_cycle_time) * cavity_count);
+        const efficiency_percentage = theoretical_quantity > 0 ? Number(((actual_quantity / theoretical_quantity) * 100).toFixed(2)) : 0;
 
         // === RAW MATERIAL CHECK ===
         const requiredMaterialKg = (product.weight_grams * actual_quantity) / 1000;
@@ -732,10 +733,10 @@ export class ProductionService {
             throw new AppError(`Cap not found: ${capError?.message || 'Unknown error'}`, 404);
         }
 
-        // 1.5 Get Ideal Cycle Time from Mapping
+        // 1.5 Get Ideal Cycle Time and Cavity Count from Mapping
         const { data: machineCap, error: mcError } = await supabase
             .from('machine_cap_templates')
-            .select('ideal_cycle_time_seconds')
+            .select('ideal_cycle_time_seconds, cavity_count')
             .eq('machine_id', data.machine_id)
             .eq('cap_template_id', cap.template_id)
             .single();
@@ -771,7 +772,8 @@ export class ProductionService {
         // === DOWNTIME CALCULATION ===
         const shiftDuration = this.calculateShiftDuration(data.start_time, data.end_time, data.shift_number as any);
         const actual_cycle_time = data.actual_cycle_time_seconds ?? ideal_cycle_time;
-        const actual_production_time = final_quantity * actual_cycle_time;
+        const cavity_count = machineCap.cavity_count || 1;
+        const actual_production_time = (final_quantity / cavity_count) * actual_cycle_time;
         const shift_duration_seconds = shiftDuration * 60;
         const downtime_seconds = shift_duration_seconds - actual_production_time;
         const downtime_minutes = data.downtime_minutes ?? Math.max(0, Math.floor(downtime_seconds / 60));
@@ -924,7 +926,7 @@ export class ProductionService {
             .select(`
                 id,
                 ideal_cycle_time_seconds,
-                template:inner_templates(name, ideal_weight_grams, raw_material_id, ideal_cycle_time_seconds)
+                template:inner_templates(name, ideal_weight_grams, raw_material_id, ideal_cycle_time_seconds, cavity_count)
             `)
             .eq('id', data.inner_id)
             .single();
@@ -936,6 +938,7 @@ export class ProductionService {
 
         const template = (inner as any).template;
         const ideal_cycle_time = inner.ideal_cycle_time_seconds || template.ideal_cycle_time_seconds || 0;
+        const cavity_count = template.cavity_count || 1;
 
 
         // 2. Calculate Quantity & Deduction Weight
@@ -960,7 +963,7 @@ export class ProductionService {
         // === DOWNTIME CALCULATION ===
         const shiftDuration = this.calculateShiftDuration(data.start_time, data.end_time, data.shift_number as any);
         const actual_cycle_time = data.actual_cycle_time_seconds ?? ideal_cycle_time;
-        const actual_production_time = final_quantity * actual_cycle_time;
+        const actual_production_time = (final_quantity / cavity_count) * actual_cycle_time;
         const shift_duration_seconds = shiftDuration * 60;
         const downtime_seconds = shift_duration_seconds - actual_production_time;
         const downtime_minutes = data.downtime_minutes ?? Math.max(0, Math.floor(downtime_seconds / 60));
