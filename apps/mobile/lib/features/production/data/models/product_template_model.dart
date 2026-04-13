@@ -17,6 +17,10 @@ class ProductTemplate {
   final int? itemsPerBox;
   final String? rawMaterialId;
   final double? sellingPrice;
+  /// Default cap template for this tub (from web product template mapping).
+  final String? capTemplateId;
+  /// Default inner template for this tub (from web product template mapping).
+  final String? innerTemplateId;
 
   ProductTemplate({
     required this.id,
@@ -35,10 +39,16 @@ class ProductTemplate {
     this.itemsPerBox,
     this.rawMaterialId,
     this.sellingPrice,
+    this.capTemplateId,
+    this.innerTemplateId,
   });
 
   factory ProductTemplate.fromJson(Map<String, dynamic> json) {
     var variantsList = json['variants'] as List? ?? [];
+    final capTpl = json['cap_template'];
+    final capFromJoin = capTpl is Map<String, dynamic>
+        ? capTpl['id'] as String?
+        : null;
     return ProductTemplate(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? 'Unknown',
@@ -56,6 +66,9 @@ class ProductTemplate {
       itemsPerBox: json['items_per_box'] as int?,
       rawMaterialId: json['raw_material_id'] as String?,
       sellingPrice: (json['selling_price'] as num?)?.toDouble(),
+      capTemplateId:
+          json['cap_template_id'] as String? ?? capFromJoin,
+      innerTemplateId: json['inner_template_id'] as String?,
     );
   }
 

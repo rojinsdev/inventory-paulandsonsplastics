@@ -52,6 +52,12 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
       totalInners += inner.quantity;
     }
 
+    final hasCapBreakdown = widget.stocks.any((s) {
+      final p = InventoryStockComboHelper.packetCombos(s);
+      final f = InventoryStockComboHelper.finishedUnitCombos(s);
+      return p.any((c) => c.packedQty > 0) || f.any((c) => c.bundledQty > 0);
+    });
+
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -61,93 +67,244 @@ class _StockSummaryCardState extends State<StockSummaryCard> {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: widget.onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Current Stock Summary',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  Icon(Icons.inventory_2_outlined, 
-                       size: 20, 
-                       color: colorScheme.primary.withValues(alpha: 0.5)),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: widget.onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: StockItem(
-                          label: 'Loose',
-                          value: totalSemiFinished,
-                          icon: Icons.grain_outlined,
+                      Text(
+                        'Current Stock Summary',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onSurface,
                         ),
                       ),
-                      Expanded(
-                        child: StockItem(
-                          label: 'Packets',
-                          value: totalPacked,
-                          icon: Icons.inventory_2_outlined,
+                      Icon(Icons.inventory_2_outlined,
+                          size: 20,
+                          color: colorScheme.primary.withValues(alpha: 0.5)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Expanded(
+                            child: StockItem(
+                              label: 'Loose',
+                              value: totalSemiFinished,
+                              icon: Icons.grain_outlined,
+                            ),
+                          ),
+                          Expanded(
+                            child: StockItem(
+                              label: 'Packets',
+                              value: totalPacked,
+                              icon: Icons.inventory_2_outlined,
+                            ),
+                          ),
+                          Expanded(
+                            child: StockItem(
+                              label: 'Bundles',
+                              value: totalBundled,
+                              icon: Icons.layers_outlined,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20.0),
+                        child: Divider(
+                          height: 1,
+                          color:
+                              colorScheme.outlineVariant.withValues(alpha: 0.3),
                         ),
                       ),
-                      Expanded(
-                        child: StockItem(
-                          label: 'Bundles',
-                          value: totalBundled,
-                          icon: Icons.layers_outlined,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          const Spacer(flex: 1),
+                          Expanded(
+                            flex: 2,
+                            child: StockItem(
+                              label: 'Caps',
+                              value: totalCaps,
+                              icon: Icons.radio_button_checked,
+                            ),
+                          ),
+                          const Spacer(flex: 1),
+                          Expanded(
+                            flex: 2,
+                            child: StockItem(
+                              label: 'Inners',
+                              value: totalInners,
+                              icon: Icons.album_outlined,
+                            ),
+                          ),
+                          const Spacer(flex: 1),
+                        ],
                       ),
                     ],
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 20.0),
-                    child: Divider(
-                      height: 1,
-                      color: colorScheme.outlineVariant.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      const Spacer(flex: 1),
-                      Expanded(
-                        flex: 2,
-                        child: StockItem(
-                          label: 'Caps',
-                          value: totalCaps,
-                          icon: Icons.radio_button_checked,
-                        ),
-                      ),
-                      const Spacer(flex: 1),
-                      Expanded(
-                        flex: 2,
-                        child: StockItem(
-                          label: 'Inners',
-                          value: totalInners,
-                          icon: Icons.album_outlined,
-                        ),
-                      ),
-                      const Spacer(flex: 1),
-                    ],
-                  ),
                 ],
               ),
-            ],
+            ),
           ),
+          if (hasCapBreakdown)
+            Theme(
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 20),
+                childrenPadding:
+                    const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                title: Text(
+                  'Tub × cap breakdown',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  'Packed packets & finished units per cap',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final stock in widget.stocks) ...[
+                          if (InventoryStockComboHelper.packetCombos(stock)
+                                  .any((c) => c.packedQty > 0) ||
+                              InventoryStockComboHelper.finishedUnitCombos(
+                                      stock)
+                                  .any((c) => c.bundledQty > 0))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _SummaryTubCapBlock(stock: stock),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryTubCapBlock extends StatelessWidget {
+  final InventoryStock stock;
+
+  const _SummaryTubCapBlock({required this.stock});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final packets = InventoryStockComboHelper.packetCombos(stock)
+        .where((c) => c.packedQty > 0)
+        .toList();
+    final finished = InventoryStockComboHelper.finishedUnitCombos(stock)
+        .where((c) => c.bundledQty > 0)
+        .toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.25),
         ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            stock.displayName,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (packets.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Packets',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            ...packets.map(
+              (c) => Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        InventoryStockComboHelper.comboLabel(c),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      '${c.packedQty} pkt',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          if (finished.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Finished (bundles / bags / boxes)',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.tertiary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            ...finished.map(
+              (c) => Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        InventoryStockComboHelper.comboLabel(c),
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ),
+                    Text(
+                      '${c.bundledQty} ${InventoryStockComboHelper.unitTypeLabel(c.unitType)}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import OrderValidation from '@/lib/validation/orderValidation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useUI } from '@/contexts/UIContext';
 import { Plus, Loader2, ShoppingCart, Eye, Trash2, Edit, Filter, Clock, AlertCircle, CheckCircle2, X, User, Calendar, ClipboardList, Package } from 'lucide-react';
@@ -184,6 +185,27 @@ export default function OrdersPage() {
         const c = caps.find((c) => c.id === id);
         return c ? c.name : 'Unknown';
     };
+    const getTubDisplay = (item) => {
+        const p = item.product_id ? tubs.find((t) => t.id === item.product_id) : item.products;
+        if (!p) return '—';
+        const color = p.color ? `, ${p.color}` : '';
+        return `${p.name} (${p.size}${color})`;
+    };
+    const getCapDisplay = (item) => {
+        const c = item.cap_id ? caps.find((cap) => cap.id === item.cap_id) : item.caps;
+        if (!c) return '—';
+        const color = c.color ? ` (${c.color})` : '';
+        return `${c.name}${color}`;
+    };
+    const getColorSummary = (item) => {
+        const p = item.product_id ? tubs.find((t) => t.id === item.product_id) : item.products;
+        const c = item.cap_id ? caps.find((cap) => cap.id === item.cap_id) : item.caps;
+        const tubColor = p?.color || '—';
+        const capColor = c?.color || '—';
+        if (!p && c) return `Cap: ${capColor}`;
+        if (p && !c) return `Tub: ${tubColor}`;
+        return `Tub: ${tubColor} / Cap: ${capColor}`;
+    };
     const getItemName = (item) => {
         if (item.product_id) return getTubName(item.product_id);
         if (item.cap_id) return getCapName(item.cap_id);
@@ -203,7 +225,7 @@ export default function OrdersPage() {
                 quantity: 1,
                 unit_type: 'bundle',
                 unit_price: '',
-                include_inner: false
+                include_inner: true
             }],
             notes: '',
             order_date: new Date().toISOString().split('T')[0],
@@ -229,7 +251,9 @@ export default function OrdersPage() {
                     quantity: item.quantity,
                     unit_type: item.unit_type || (item.cap_id ? 'loose' : 'bundle'),
                     unit_price: item.unit_price || '',
-                    include_inner: item.include_inner || false
+                    include_inner: item.product_id
+                        ? item.include_inner !== false
+                        : false,
                 };
             }),
             notes: order.notes || '',
@@ -249,7 +273,7 @@ export default function OrdersPage() {
                 quantity: 1,
                 unit_type: 'bundle',
                 unit_price: '',
-                include_inner: false
+                include_inner: true
             }],
         });
     };
@@ -273,8 +297,25 @@ export default function OrdersPage() {
                 [field]: value, 
                 product_id: '', 
                 cap_id: '',
-                unit_type: value === 'cap' ? 'loose' : 'bundle'
+                unit_type: value === 'cap' ? 'loose' : 'bundle',
+                include_inner: value === 'cap' ? false : true,
             };
+        } else if (field === 'product_id') {
+            // Reset cap when product changes (new product may have different cap template)
+            const tub = tubOptions.find((t) => t.value === value);
+            newItems[index] = {
+                ...newItems[index],
+                [field]: value,
+                cap_id: '',
+                include_inner: tub?.hasInner ? true : false,
+            };
+        } else if (field === 'unit_type') {
+            // Clear cap_id when switching to loose (caps not needed for loose tubs)
+            const updates = { [field]: value };
+            if (value === 'loose') {
+                updates.cap_id = '';
+            }
+            newItems[index] = { ...newItems[index], ...updates };
         } else {
             newItems[index] = { ...newItems[index], [field]: value };
         }
@@ -283,11 +324,8 @@ export default function OrdersPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (formData.items.length === 0) {
-            alert('Please add at least one item');
-            return;
-        }
-
+        
+        // Prepare payload first
         const payload = {
             customer_id: formData.customer_id,
             delivery_date: formData.order_date || new Date().toISOString().split('T')[0],
@@ -297,15 +335,40 @@ export default function OrdersPage() {
                 quantity: Number(item.quantity),
                 unit_type: item.unit_type,
                 unit_price: item.unit_price ? Number(item.unit_price) : undefined,
-                include_inner: item.include_inner || false,
+                include_inner: item.product_id
+                    ? (tubOptions.find((t) => t.value === item.product_id)?.hasInner
+                        ? item.include_inner !== false
+                        : false)
+                    : false,
             })),
             notes: formData.notes,
         };
 
-        if (isEditing) {
-            updateMutation.mutate({ id: editOrderId, data: payload });
-        } else {
-            createMutation.mutate(payload);
+        // Comprehensive client-side validation
+        try {
+            const validationErrors = OrderValidation.validateOrderCreation(payload);
+
+            if (validationErrors.length > 0) {
+                const formattedErrors = OrderValidation.formatErrors(validationErrors);
+                
+                // Show detailed error message
+                const errorMessage = `Order validation failed:\n\n${formattedErrors.details.map(err => `• ${err.message}`).join('\n')}`;
+                alert(errorMessage);
+                
+                // Log validation errors for debugging
+                console.error('Order validation errors:', formattedErrors);
+                return;
+            }
+
+            // If validation passes, submit the order
+            if (isEditing) {
+                updateMutation.mutate({ id: editOrderId, data: payload });
+            } else {
+                createMutation.mutate(payload);
+            }
+        } catch (error) {
+            console.error('Validation error:', error);
+            alert('An error occurred during validation. Please check your input and try again.');
         }
     };
 
@@ -343,13 +406,17 @@ export default function OrdersPage() {
         const factoryName = factory ? factory.name : 'Unknown Factory';
         const templateData = Array.isArray(p.product_templates) ? p.product_templates[0] : p.product_templates;
         const hasInner = !!templateData?.inner_template_id;
+        const hasCapTemplate = !!templateData?.cap_template_id;
 
         return {
             value: p.id,
             label: `${p.name} (${p.size}, ${p.color})`,
             factory_id: p.factory_id,
             factoryName,
-            hasInner
+            hasInner,
+            hasCapTemplate,
+            capTemplateId: templateData?.cap_template_id,
+            color: p.color
         };
     }), [tubs, factories]);
 
@@ -359,12 +426,39 @@ export default function OrdersPage() {
             value: c.id,
             label: c.color ? `${c.name} (${c.color})` : c.name,
             factory_id: c.factory_id,
-            factoryName: factory ? factory.name : 'Unknown Factory'
+            factoryName: factory ? factory.name : 'Unknown Factory',
+            template_id: c.template_id
         };
     }), [caps, factories]);
 
+    // Get available caps for a specific product (based on template and factory)
+    const getCapOptionsForProduct = useCallback((productId, factoryId) => {
+        const product = tubOptions.find(t => t.value === productId);
+        if (!product?.hasCapTemplate) return [];
+        
+        return capOptions.filter(c => 
+            c.template_id === product.capTemplateId &&
+            (!factoryId || c.factory_id === factoryId)
+        );
+    }, [tubOptions, capOptions]);
+
     const getStockForProduct = (productId, unitType, capId) => {
-        const stockItems = availableStock.filter(s => (capId ? s.cap_id === capId : s.product_id === productId));
+        // For tub+cap combinations, filter by both product_id and cap_id
+        // For cap-only orders, filter by cap_id only
+        // For tub-only orders, filter by product_id only
+        const stockItems = availableStock.filter(s => {
+            if (productId && capId) {
+                // Tub+cap combination: must match both
+                return s.product_id === productId && s.cap_id === capId;
+            } else if (capId) {
+                // Cap-only order
+                return s.cap_id === capId;
+            } else if (productId) {
+                // Tub-only order (loose or no cap required)
+                return s.product_id === productId;
+            }
+            return false;
+        });
         
         // Map unit types to inventory states
         const stateMapping = {
@@ -746,21 +840,34 @@ export default function OrdersPage() {
                                     ) : (
                                         formData.items.map((item, index) => {
                                             const currentStock = getStockForProduct(item.product_id, item.unit_type, item.cap_id);
+                                            const needsCapSelection = item.item_type === 'product' &&
+                                                item.product_id &&
+                                                ['packet', 'bundle'].includes(item.unit_type) &&
+                                                tubOptions.find(t => t.value === item.product_id)?.hasCapTemplate;
 
                                             return (
                                                 <div key={index} className={styles.itemCard}>
                                                     <div className={styles.itemCardHeader}>
                                                         <span className={styles.itemNumber}>ITEM #{String(index + 1).padStart(2, '0')}</span>
-                                                        <button
-                                                            type="button"
-                                                            className={styles.removeButton}
-                                                            onClick={() => handleRemoveItem(index)}
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
+                                                        <div className={styles.itemHeaderRight}>
+                                                            {(item.product_id || item.cap_id) && (
+                                                                <div className={styles.stockIndicator}>
+                                                                    <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: currentStock > 0 ? '#10b981' : '#f43f5e' }}></div>
+                                                                    <span>Available Stock: <span className={styles.stockValue}>{currentStock}</span></span>
+                                                                </div>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                className={styles.removeButton}
+                                                                onClick={() => handleRemoveItem(index)}
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
                                                     </div>
 
-                                                    <div className={styles.productSelectGrid}>
+                                                    {/* Row 1: Type, Factory, Product, Cap (if needed) */}
+                                                    <div className={cn(styles.productSelectGridRow1, needsCapSelection ? styles.productSelectGridRow1WithCap : styles.productSelectGridRow1NoCap)}>
                                                         {/* Item Type Toggle */}
                                                         <div className={styles.formItem}>
                                                             <div className={styles.typeToggle}>
@@ -789,6 +896,7 @@ export default function OrdersPage() {
                                                                 onChange={(val) => handleItemChange(index, 'factory_id', val)}
                                                                 placeholder="Select Factory"
                                                                 searchable={false}
+                                                                className={styles.orderSelect}
                                                             />
                                                         </div>
  
@@ -803,15 +911,26 @@ export default function OrdersPage() {
                                                                 onChange={(val) => handleItemChange(index, item.item_type === 'cap' ? 'cap_id' : 'product_id', val)}
                                                                 placeholder={item.item_type === 'cap' ? "Choose Cap..." : "Choose Tub..."}
                                                                 searchable={true}
+                                                                className={styles.orderSelect}
                                                             />
-                                                            {(item.product_id || item.cap_id) && (
-                                                                <div className={styles.stockIndicator}>
-                                                                    <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: currentStock > 0 ? '#10b981' : '#f43f5e' }}></div>
-                                                                    <span>Available Stock: <span className={styles.stockValue}>{currentStock}</span></span>
-                                                                </div>
-                                                            )}
                                                         </div>
 
+                                                        {needsCapSelection && (
+                                                            <div className={styles.formItem}>
+                                                                <CustomSelect
+                                                                    options={getCapOptionsForProduct(item.product_id, item.factory_id)}
+                                                                    value={item.cap_id || ''}
+                                                                    onChange={(val) => handleItemChange(index, 'cap_id', val)}
+                                                                    placeholder="Select Cap..."
+                                                                    searchable={true}
+                                                                    className={styles.orderSelect}
+                                                                />
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Row 2: Quantity, Unit, Rate */}
+                                                    <div className={styles.productSelectGridRow2}>
                                                         {/* Quantity */}
                                                         <div className={styles.formItem}>
                                                             <input
@@ -832,9 +951,10 @@ export default function OrdersPage() {
                                                                 onChange={(val) => handleItemChange(index, 'unit_type', val)}
                                                                 placeholder="Unit"
                                                                 searchable={false}
+                                                                className={styles.orderSelect}
                                                             />
                                                         </div>
-                                                        
+
                                                         {/* Rate (Optional) */}
                                                         <div className={styles.formItem}>
                                                             <input
@@ -847,6 +967,7 @@ export default function OrdersPage() {
                                                                 step="0.01"
                                                             />
                                                         </div>
+                                                    </div>
 
                                                         {/* Include Inner Toggle */}
                                                         {tubOptions.find(op => op.value === item.product_id)?.hasInner && (
@@ -855,18 +976,17 @@ export default function OrdersPage() {
                                                                     <input
                                                                         type="checkbox"
                                                                         id={`include_inner_${index}`}
-                                                                        checked={item.include_inner || false}
+                                                                        checked={item.include_inner !== false}
                                                                         onChange={(e) => handleItemChange(index, 'include_inner', e.target.checked)}
                                                                         className={styles.checkboxModern}
                                                                     />
                                                                     <label htmlFor={`include_inner_${index}`} className={styles.toggleLabel}>
-                                                                        <span className={styles.toggleTitle}>Include Inner Component</span>
-                                                                        <span className={styles.toggleDescription}>Adds mapped inner part (e.g. cap liner) to this order item</span>
+                                                                        <span className={styles.toggleTitle}>With inner (liner)</span>
+                                                                        <span className={styles.toggleDescription}>On by default — turn off if the customer does not want the inner. Affects which stock can fulfill this line.</span>
                                                                     </label>
                                                                 </div>
                                                             </div>
                                                         )}
-                                                    </div>
                                                 </div>
                                             );
                                         })
@@ -1053,7 +1173,10 @@ export default function OrdersPage() {
                                         <table className={styles.table}>
                                             <thead>
                                                 <tr>
-                                                    <th className={styles.colProduct}>Item</th>
+                                                    <th className={styles.colProduct}>Tub</th>
+                                                    <th className={styles.colCap}>Cap</th>
+                                                    <th className={styles.colColor}>Color</th>
+                                                    <th className={styles.colColor}>Inner</th>
                                                     <th className={styles.colFactory}>Factory</th>
                                                     <th className={styles.colQuantity}>Needed</th>
                                                     <th className={styles.colUnit}>Reserved</th>
@@ -1066,9 +1189,20 @@ export default function OrdersPage() {
                                                     const c = caps.find(cp => cp.id === item.cap_id);
                                                     const f = factories.find(fac => fac.id === (p?.factory_id || c?.factory_id));
 
+                                                    const tubForInner = tubs.find(prod => prod.id === item.product_id);
+                                                    const tplInner = Array.isArray(tubForInner?.product_templates)
+                                                        ? tubForInner.product_templates[0]
+                                                        : tubForInner?.product_templates;
+                                                    const lineHasInnerTpl = !!tplInner?.inner_template_id;
+
                                                     return (
                                                         <tr key={idx}>
-                                                            <td className={styles.colProduct}>{getItemName(item)}</td>
+                                                            <td className={styles.colProduct}>{getTubDisplay(item)}</td>
+                                                            <td className={styles.colCap}>{getCapDisplay(item)}</td>
+                                                            <td className={styles.colColor}>{getColorSummary(item)}</td>
+                                                            <td className={styles.colColor}>
+                                                                {!item.product_id ? '—' : !lineHasInnerTpl ? '—' : (item.include_inner !== false ? 'With inner' : 'Without inner')}
+                                                            </td>
                                                             <td className={styles.colFactory}>{f?.name || 'Unknown'}</td>
                                                             <td className={styles.colQuantity}>{item.quantity}</td>
                                                             <td className={styles.colUnit}>{item.quantity_reserved || 0}</td>

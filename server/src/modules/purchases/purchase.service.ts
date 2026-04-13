@@ -25,21 +25,28 @@ export class PurchaseService {
         rate_per_kg?: number;
         created_by: string;
         payment_mode?: string;
-        due_date?: string;
+        due_date?: string | null;
     }) {
+        const purchaseDate =
+            data.purchase_date?.trim?.() || new Date().toISOString().split('T')[0];
+        const dueDate =
+            data.due_date && String(data.due_date).trim() !== ''
+                ? String(data.due_date).trim()
+                : null;
+
         // 1. Create the purchase record
         const { data: purchase, error: pError } = await supabase
             .from('purchases')
             .insert({
                 supplier_id: data.supplier_id,
                 factory_id: data.factory_id,
-                purchase_date: data.purchase_date || new Date().toISOString().split('T')[0],
+                purchase_date: purchaseDate,
                 item_type: data.item_type,
                 description: data.description,
                 total_amount: data.total_amount,
                 paid_amount: data.paid_amount,
                 balance_due: data.balance_due,
-                due_date: data.due_date,
+                due_date: dueDate,
                 payment_status: data.balance_due === 0 ? 'paid' : (data.paid_amount > 0 ? 'partial' : 'pending'),
                 created_by: data.created_by
             })

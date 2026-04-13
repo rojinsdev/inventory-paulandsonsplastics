@@ -19,7 +19,7 @@ class ProductionRequestsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tub Production Requests'),
+        title: const Text('Production Requests'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -32,11 +32,8 @@ class ProductionRequestsScreen extends ConsumerWidget {
       ),
       body: requestsAsync.when(
         data: (requests) {
-          final filteredRequests = requests.where((request) {
-            return request.status != 'completed' && 
-                   request.status != 'prepared' && 
-                   request.status != 'cancelled';
-          }).toList();
+          final filteredRequests =
+              requests.where((r) => r.showsInRequestsList).toList();
 
           if (filteredRequests.isEmpty) {
             return Center(
@@ -62,8 +59,7 @@ class ProductionRequestsScreen extends ConsumerWidget {
 
           for (final request in filteredRequests) {
             if (request.salesOrderId != null) {
-              final groupId = request.orderNumber ?? request.salesOrderId!;
-              groupedRequests.putIfAbsent(groupId, () => []).add(request);
+              groupedRequests.putIfAbsent(request.salesOrderId!, () => []).add(request);
             } else {
               standaloneRequests.add(request);
             }
@@ -74,13 +70,14 @@ class ProductionRequestsScreen extends ConsumerWidget {
             children: [
               for (final entry in groupedRequests.entries)
                 _OrderProductionCard(
-                  orderNumber: entry.key,
+                  orderSuffix: ProductionRequest.webOrderSuffixFromId(entry.key),
                   requests: entry.value,
                 ),
               if (standaloneRequests.isNotEmpty)
                 _OrderProductionCard(
-                  orderNumber: 'Individual Requests',
+                  orderSuffix: '',
                   requests: standaloneRequests,
+                  titleOverride: 'Individual Requests',
                 ),
             ],
           );
@@ -104,12 +101,14 @@ class ProductionRequestsScreen extends ConsumerWidget {
 }
 
 class _OrderProductionCard extends StatelessWidget {
-  final String orderNumber;
+  final String orderSuffix;
   final List<ProductionRequest> requests;
+  final String? titleOverride;
 
   const _OrderProductionCard({
-    required this.orderNumber,
+    required this.orderSuffix,
     required this.requests,
+    this.titleOverride,
   });
 
   @override
@@ -136,9 +135,10 @@ class _OrderProductionCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    orderNumber == 'Individual Requests'
-                        ? orderNumber
-                        : 'Order #${orderNumber.contains('-') ? orderNumber.split('-').last.toUpperCase() : orderNumber}',
+                    titleOverride ??
+                        (orderSuffix.isEmpty
+                            ? 'Order'
+                            : 'Order #$orderSuffix'),
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: colorScheme.primary,
@@ -204,7 +204,8 @@ class _RequestRow extends ConsumerWidget {
                           color: colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    if (request.requiredInnerName != null) ...[
+                    if (request.includeInner &&
+                        request.requiredInnerName != null) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -219,12 +220,70 @@ class _RequestRow extends ConsumerWidget {
                             Icon(Icons.layers_outlined, size: 12, color: Colors.orange.shade900),
                             const SizedBox(width: 6),
                             Text(
-                              'REQUIRES INNER: ${request.requiredInnerName}',
+                              'WITH INNER: ${request.requiredInnerName}',
                               style: TextStyle(
                                 color: Colors.orange.shade900, 
                                 fontSize: 10, 
                                 fontWeight: FontWeight.bold, 
                                 letterSpacing: 0.5
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (!request.isInner &&
+                        !request.includeInner &&
+                        request.productId != null) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blueGrey.withAlpha(28),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blueGrey.withAlpha(90)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.layers_clear_outlined,
+                                size: 12, color: Colors.blueGrey.shade800),
+                            const SizedBox(width: 6),
+                            Text(
+                              'WITHOUT INNER (customer)',
+                              style: TextStyle(
+                                color: Colors.blueGrey.shade900,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (request.capName != null && request.capName!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withAlpha(28),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.teal.withAlpha(100)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.circle_outlined, size: 12, color: Colors.teal.shade900),
+                            const SizedBox(width: 6),
+                            Text(
+                              'CAP: ${request.capName}'
+                                  '${request.capColor != null && request.capColor!.trim().isNotEmpty ? ' (${request.capColor})' : ''}',
+                              style: TextStyle(
+                                color: Colors.teal.shade900,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ],

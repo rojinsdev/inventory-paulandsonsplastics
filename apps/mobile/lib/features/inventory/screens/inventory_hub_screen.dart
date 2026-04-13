@@ -113,7 +113,7 @@ class InventoryHubScreen extends ConsumerWidget {
                             ref.watch(productionRequestsProvider);
                         final pendingCount = requestsState.when(
                           data: (items) => items
-                              .where((item) => item.status == 'pending')
+                              .where((item) => item.showsInRequestsList)
                               .length,
                           loading: () => null,
                           error: (_, __) => null,
@@ -122,7 +122,7 @@ class InventoryHubScreen extends ConsumerWidget {
                         return _InventoryActionCard(
                           title: 'Tub Production Requests',
                           subtitle: pendingCount != null
-                              ? '$pendingCount requests pending'
+                              ? '$pendingCount active requests'
                               : 'Manage tub requests',
                           icon: Icons.assignment_outlined,
                           containerColor: colorScheme.secondaryContainer,
@@ -151,8 +151,9 @@ class InventoryHubScreen extends ConsumerWidget {
                       builder: (context, ref, child) {
                         final ordersState = ref.watch(pendingOrdersProvider);
                         final pendingCount = ordersState.when(
-                          data: (items) =>
-                              items.where((item) => !item.isPrepared).length,
+                          data: (items) => items
+                              .where((item) => item.showsInOrderPreparation)
+                              .length,
                           loading: () => null,
                           error: (_, __) => null,
                         );

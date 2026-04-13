@@ -106,6 +106,19 @@
     opacity: 0.8;
 }
 
+/* Table horizontal scroll */
+.tableScroll {
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tableScroll :global(.table) {
+    width: 100%;
+    min-width: 920px;
+}
+
 /* Table Cell Styles */
 .phoneCell,
 .addressCell {

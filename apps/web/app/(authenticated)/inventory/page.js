@@ -23,6 +23,7 @@ import { formatNumber, cn } from '@/lib/utils';
 import InternalStockTable from '@/components/inventory/InternalStockTable';
 import CapStockTable from '@/components/inventory/CapStockTable';
 import InnerStockTable from '@/components/inventory/InnerStockTable';
+import CombinationStockTable from '@/components/inventory/CombinationStockTable';
 import styles from './page.module.css';
 
 export default function StockOverviewPage() {
@@ -34,7 +35,7 @@ export default function StockOverviewPage() {
 
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [activeTab, setActiveTab] = useState('products');
+    const [activeTab, setActiveTab] = useState('combinations');
     
     // Product Stock State
     const [stockRaw, setStockRaw] = useState([]);
@@ -47,6 +48,7 @@ export default function StockOverviewPage() {
 
     // Cap Stock State
     const [capStock, setCapStock] = useState([]);
+    const [caps, setCaps] = useState([]);
     const [capFilters, setCapFilters] = useState({
         search: '',
         factory_id: '',
@@ -61,9 +63,18 @@ export default function StockOverviewPage() {
 
     // Inner Stock State
     const [innerStock, setInnerStock] = useState([]);
+    const [inners, setInners] = useState([]);
     const [innerFilters, setInnerFilters] = useState({
         search: '',
         factory_id: '',
+    });
+
+    // Combination Stock State
+    const [combinationStock, setCombinationStock] = useState([]);
+    const [combinationFilters, setCombinationFilters] = useState({
+        search: '',
+        factory_id: '',
+        state: '',
     });
 
     useEffect(() => {
@@ -102,27 +113,52 @@ export default function StockOverviewPage() {
         try {
             setLoading(true);
             const params = selectedFactory ? { factory_id: selectedFactory } : {};
-            
+
+            // Same data path as mobile inventory hub: /inventory/overview loads ALL balances for the factory
+            // (GET /inventory/stock is paginated to 10 rows and was missing most stock rows on this page).
+            const overviewParams = {
+                ...params,
+                include_combinations: 'true',
+            };
+
             // Fetch everything in parallel
-            const [stockRes, productsRes, capsRes, innersRes] = await Promise.all([
-                inventoryAPI.getStock(params),
+            const [overviewRes, productsRes, capsRes, innersRes, capsDataRes, innersDataRes] = await Promise.all([
+                inventoryAPI.getOverview(overviewParams),
                 productsAPI.getAll(params),
                 capsAPI.getBalances(params),
-                innersAPI.getBalances(params)
+                innersAPI.getBalances(params),
+                capsAPI.getAll(params),
+                innersAPI.getAll(params),
             ]);
 
-            // Handle Product Stock
-            const stockDataArray = stockRes?.stock || stockRes?.data || (Array.isArray(stockRes) ? stockRes : []);
+            const balances =
+                overviewRes &&
+                typeof overviewRes === 'object' &&
+                !Array.isArray(overviewRes) &&
+                Array.isArray(overviewRes.balances)
+                    ? overviewRes.balances
+                    : [];
+
+            const stockDataArray = balances;
             setStockRaw(stockDataArray);
+            setCombinationStock(stockDataArray);
             setProducts(Array.isArray(productsRes) ? productsRes : (productsRes?.data || []));
 
             // Handle Cap Stock
             const capDataArray = capsRes?.balances || capsRes?.data || (Array.isArray(capsRes) ? capsRes : []);
             setCapStock(capDataArray);
+            
+            // Handle Caps Data
+            const capsArray = capsDataRes?.caps || capsDataRes?.data || (Array.isArray(capsDataRes) ? capsDataRes : []);
+            setCaps(capsArray);
 
             // Handle Inner Stock
             const innerDataArray = innersRes?.balances || innersRes?.data || (Array.isArray(innersRes) ? innersRes : []);
             setInnerStock(innerDataArray);
+            
+            // Handle Inners Data
+            const innersArray = innersDataRes?.inners || innersDataRes?.data || (Array.isArray(innersDataRes) ? innersDataRes : []);
+            setInners(innersArray);
 
             if (stockDataArray.length > 0) {
                 const stats = {
@@ -150,6 +186,15 @@ export default function StockOverviewPage() {
     useEffect(() => {
         loadData();
     }, [selectedFactory, loadData]);
+
+    // Refetch when returning to the tab (e.g. after logging production on mobile)
+    useEffect(() => {
+        const onVisibility = () => {
+            if (document.visibilityState === 'visible') loadData();
+        };
+        document.addEventListener('visibilitychange', onVisibility);
+        return () => document.removeEventListener('visibilitychange', onVisibility);
+    }, [loadData]);
 
     const stockCards = [
         {
@@ -231,6 +276,19 @@ export default function StockOverviewPage() {
                     <div className={styles.tabsContainer}>
                         <div className={styles.tabsList}>
                             <button
+                                onClick={() => setActiveTab('combinations')}
+                                className={cn(
+                                    styles.tabButton,
+                                    activeTab === 'combinations' && styles.tabActive
+                                )}
+                            >
+                                <Boxes size={18} />
+                                <span>Combinations</span>
+                                {activeTab === 'combinations' && (
+                                    <div className={styles.tabIndicator} />
+                                )}
+                            </button>
+                            <button
                                 onClick={() => setActiveTab('products')}
                                 className={cn(
                                     styles.tabButton,
@@ -274,7 +332,18 @@ export default function StockOverviewPage() {
 
                     {/* Tab Content */}
                     <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        {activeTab === 'products' ? (
+                        {activeTab === 'combinations' ? (
+                            <CombinationStockTable
+                                stock={combinationStock}
+                                loading={loading}
+                                filters={combinationFilters}
+                                setFilters={setCombinationFilters}
+                                factories={factories}
+                                products={products}
+                                caps={caps}
+                                inners={inners}
+                            />
+                        ) : activeTab === 'products' ? (
                             <InternalStockTable
                                 stock={stockRaw}
                                 products={products}

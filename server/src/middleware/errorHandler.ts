@@ -16,6 +16,7 @@ const sendErrorDev = (err: any, req: Request, res: Response) => {
 const sendErrorProd = (err: any, req: Request, res: Response) => {
     // A) Operational, trusted error: send message to client
     if (err.isOperational) {
+        logger.warn(`[${err.statusCode}] ${req.method} ${req.originalUrl} → ${err.message}`);
         res.status(err.statusCode).json({
             status: err.status,
             message: err.message,

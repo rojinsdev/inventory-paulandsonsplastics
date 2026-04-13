@@ -24,8 +24,12 @@ class Inner {
     final stockField = json['stock'];
     int stock = 0;
     if (stockField != null) {
-      if (stockField is List && stockField.isNotEmpty) {
-        stock = (stockField[0]['quantity'] as num?)?.toInt() ?? 0;
+      if (stockField is List) {
+        for (final row in stockField) {
+          if (row is Map && row['quantity'] != null) {
+            stock += (row['quantity'] as num).toInt();
+          }
+        }
       } else if (stockField is Map) {
         stock = (stockField['quantity'] as num?)?.toInt() ?? 0;
       }

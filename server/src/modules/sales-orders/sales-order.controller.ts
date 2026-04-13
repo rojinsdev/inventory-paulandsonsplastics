@@ -15,6 +15,7 @@ const createOrderSchema = z.object({
         quantity: z.number().int().positive(),
         unit_type: z.enum(['bundle', 'packet', 'loose']).optional(),
         unit_price: z.number().positive().optional(),
+        include_inner: z.boolean().optional(),
     })).min(1).refine(items => items.every(item => item.product_id || item.cap_id), {
         message: "Every item must have either a product_id or a cap_id",
         path: ["items"]

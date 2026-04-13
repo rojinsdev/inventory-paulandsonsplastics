@@ -97,7 +97,7 @@ export default function InventoryStateTable({ data, loading, type, filters = {},
                                         {formatNumber(item.quantity)}
                                     </td>
                                     <td style={{ textAlign: 'right' }} className="text-muted">
-                                        {formatDate(item.updated_at || item.last_updated || item.created_at || new Date())}
+                                        {formatDate(item.updated_at || item.created_at || new Date())}
                                     </td>
                                 </tr>
                             );

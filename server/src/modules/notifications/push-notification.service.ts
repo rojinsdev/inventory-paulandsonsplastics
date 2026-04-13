@@ -133,13 +133,20 @@ export class PushNotificationService {
     async sendToTokens(tokens: string[], payload: PushNotificationPayload) {
         if (!this.isInitialized || tokens.length === 0) return;
 
+        const stringData: Record<string, string> = {};
+        if (payload.data) {
+            for (const [k, v] of Object.entries(payload.data)) {
+                stringData[k] = v === undefined || v === null ? '' : String(v);
+            }
+        }
+
         const message: admin.messaging.MulticastMessage = {
             tokens: tokens,
             notification: {
                 title: payload.title,
                 body: payload.body,
             },
-            data: payload.data,
+            data: Object.keys(stringData).length ? stringData : undefined,
             android: {
                 priority: 'high',
                 notification: {

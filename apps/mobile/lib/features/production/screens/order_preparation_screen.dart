@@ -16,17 +16,6 @@ class OrderPreparationScreen extends ConsumerStatefulWidget {
 class _OrderPreparationScreenState
     extends ConsumerState<OrderPreparationScreen> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = ref.read(authStateProvider).value;
-      ref
-          .read(pendingOrdersProvider.notifier)
-          .fetchPending(factoryId: user?.factoryId);
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authStateProvider);
     final user = authState.value;
@@ -51,8 +40,7 @@ class _OrderPreparationScreenState
         data: (items) {
           final groupedItems = <String, List<SalesOrderItem>>{};
           for (final item in items) {
-            final isReady = !item.isBackordered || item.productionStatus == 'prepared';
-            if (!item.isPrepared && isReady) {
+            if (item.showsInOrderPreparation) {
               groupedItems.putIfAbsent(item.orderId, () => []).add(item);
             }
           }

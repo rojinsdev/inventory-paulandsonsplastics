@@ -125,16 +125,21 @@ export class CapService {
         return { success: true };
     }
 
+    /**
+     * Stock lives on cap_stock_balances by production site (factory_id).
+     * Do NOT filter by caps.factory_id — that is catalog/home and can differ from where caps were produced.
+     */
     async getCapStockBalances(factoryId?: string) {
         let query = supabase
-            .from('caps')
+            .from('cap_stock_balances')
             .select(`
                 id,
-                name,
-                color,
-                ideal_weight_grams,
+                cap_id,
                 factory_id,
-                balance:cap_stock_balances(id, quantity)
+                quantity,
+                state,
+                unit_type,
+                caps(id, name, color, ideal_weight_grams)
             `);
 
         if (factoryId) {
@@ -145,18 +150,67 @@ export class CapService {
 
         if (error) throw new Error(error.message);
 
-        // Map to match the flattened structure expected by the frontend
-        return (data || []).map((item: any) => ({
-            id: item.balance?.[0]?.id || `temp-${item.id}`,
-            cap_id: item.id,
-            factory_id: item.factory_id,
-            quantity: item.balance?.[0]?.quantity || 0,
-            caps: {
-                name: item.name,
-                color: item.color,
-                ideal_weight_grams: item.ideal_weight_grams
+        const aggregated = new Map<
+            string,
+            { id: string; cap_id: string; factory_id: string; quantity: number; caps: any }
+        >();
+
+        for (const row of data || []) {
+            if (!row.caps) continue;
+            const key = `${row.cap_id}:${row.factory_id}`;
+            const qty = Number(row.quantity) || 0;
+            const existing = aggregated.get(key);
+            if (!existing) {
+                aggregated.set(key, {
+                    id: row.id as string,
+                    cap_id: row.cap_id as string,
+                    factory_id: row.factory_id as string,
+                    quantity: qty,
+                    caps: row.caps
+                });
+            } else {
+                existing.quantity += qty;
             }
-        }));
+        }
+
+        return Array.from(aggregated.values());
+    }
+
+    /**
+     * Total quantity per cap_id from cap_stock_balances, optionally scoped to one production site.
+     * Matches aggregation used by getCapStockBalances (all state/unit rows summed per cap at factory).
+     */
+    private async buildCapStockQuantityMap(
+        capIds: string[],
+        factoryId?: string
+    ): Promise<Map<string, number>> {
+        const map = new Map<string, number>();
+        const unique = [...new Set(capIds.filter(Boolean))];
+        if (unique.length === 0) return map;
+
+        let q = supabase.from('cap_stock_balances').select('cap_id, quantity').in('cap_id', unique);
+        if (factoryId) {
+            q = q.eq('factory_id', factoryId);
+        }
+
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+
+        for (const row of data || []) {
+            const id = row.cap_id as string;
+            const qty = Number(row.quantity) || 0;
+            map.set(id, (map.get(id) ?? 0) + qty);
+        }
+        return map;
+    }
+
+    private attachCapTemplateVariantStock(templates: any[], qtyMap: Map<string, number>) {
+        for (const t of templates) {
+            for (const v of t.variants || []) {
+                const id = v.id as string | undefined;
+                v.stock = { quantity: id ? qtyMap.get(id) ?? 0 : 0 };
+            }
+        }
     }
 
     // --- Template Management ---
@@ -213,10 +267,7 @@ export class CapService {
             .from('cap_templates')
             .select(`
                 *,
-                variants:caps(
-                    *,
-                    stock:cap_stock_balances(quantity)
-                ),
+                variants:caps(*),
                 mapped_tub_templates:product_templates(id, name, size)
             `);
 
@@ -226,24 +277,33 @@ export class CapService {
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);
-        return data;
+        const list = data || [];
+        const capIds: string[] = [];
+        for (const t of list) {
+            for (const v of t.variants || []) {
+                if (v?.id) capIds.push(v.id as string);
+            }
+        }
+        const qtyMap = await this.buildCapStockQuantityMap(capIds, factoryId);
+        this.attachCapTemplateVariantStock(list, qtyMap);
+        return list;
     }
 
-    async getTemplateById(id: string) {
+    async getTemplateById(id: string, factoryId?: string) {
         const { data, error } = await supabase
             .from('cap_templates')
             .select(`
                 *,
-                variants:caps(
-                    *,
-                    stock:cap_stock_balances(quantity)
-                ),
+                variants:caps(*),
                 mapped_tub_templates:product_templates(id, name, size)
             `)
             .eq('id', id)
             .single();
 
         if (error) throw new Error(error.message);
+        const capIds = (data.variants || []).map((v: { id?: string }) => v.id).filter(Boolean) as string[];
+        const qtyMap = await this.buildCapStockQuantityMap(capIds, factoryId);
+        this.attachCapTemplateVariantStock([data], qtyMap);
         return data;
     }
 

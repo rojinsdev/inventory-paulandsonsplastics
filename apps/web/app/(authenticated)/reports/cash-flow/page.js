@@ -58,6 +58,7 @@ export default function CashFlowPage() {
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [entryType, setEntryType] = useState('expense');
+    const [chartModal, setChartModal] = useState(null);
 
     useEffect(() => {
         setPageTitle('Cash Flow & Expenses');
@@ -67,6 +68,15 @@ export default function CashFlowPage() {
     useEffect(() => {
         if (selectedFactory) setFilterFactory(selectedFactory);
     }, [selectedFactory]);
+
+    useEffect(() => {
+        if (!chartModal) return;
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') setChartModal(null);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [chartModal]);
 
     // Unified data fetch for both analytics and ledger
     const { data: analytics, isLoading: loadingAnalytics, refetch: refetchAnalytics } = useQuery({
@@ -100,6 +110,143 @@ export default function CashFlowPage() {
 
     const handleRefresh = () => {
         refetchAnalytics();
+    };
+
+    const handleChartKeyDown = (event, type) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setChartModal(type);
+        }
+    };
+
+    const getTopBreakdown = (list) => {
+        if (!list || list.length === 0) return null;
+        return list.reduce((best, item) => (item.value > best.value ? item : best), list[0]);
+    };
+
+    const chartModalDetails = useMemo(() => {
+        if (!chartModal) return null;
+
+        const topIncome = getTopBreakdown(analytics?.incomeBreakdown);
+        const topExpense = getTopBreakdown(analytics?.expenseBreakdown);
+        const topPayment = getTopBreakdown(analytics?.paymentModeBreakdown);
+
+        if (chartModal === 'trend') {
+            return {
+                title: period === 'day' ? 'Hourly Cash Velocity' : 'Monthly Cash Velocity',
+                subtitle: period === 'day' ? 'Inflows vs Outflows by Hour' : 'Daily comparison of inflows vs outflows',
+                stats: [
+                    { label: 'Total Inflow', value: formatCurrency(analytics?.totalIncome || 0) },
+                    { label: 'Total Expense', value: formatCurrency(analytics?.totalExpense || 0) },
+                    { label: 'Net Position', value: formatCurrency(analytics?.netCashFlow || 0) }
+                ]
+            };
+        }
+
+        if (chartModal === 'inflow') {
+            return {
+                title: 'Inflow Distribution',
+                subtitle: 'Sources of revenue',
+                stats: [
+                    { label: 'Inflow Total', value: formatCurrency(analytics?.totalIncome || 0) },
+                    { label: 'Top Source', value: topIncome ? topIncome.name : 'No data', sub: topIncome ? formatCurrency(topIncome.value) : null },
+                    { label: 'Categories', value: String(analytics?.incomeBreakdown?.length || 0) }
+                ]
+            };
+        }
+
+        if (chartModal === 'expense') {
+            return {
+                title: 'Expense Distribution',
+                subtitle: 'Allocating costs',
+                stats: [
+                    { label: 'Expense Total', value: formatCurrency(analytics?.totalExpense || 0) },
+                    { label: 'Top Expense', value: topExpense ? topExpense.name : 'No data', sub: topExpense ? formatCurrency(topExpense.value) : null },
+                    { label: 'Categories', value: String(analytics?.expenseBreakdown?.length || 0) }
+                ]
+            };
+        }
+
+        if (chartModal === 'payment') {
+            const paymentTotal = analytics?.paymentModeBreakdown?.reduce((sum, item) => sum + Number(item.value || 0), 0) || 0;
+            return {
+                title: 'Payment Splits',
+                subtitle: 'Collected by method',
+                stats: [
+                    { label: 'Total Payments', value: formatCurrency(paymentTotal) },
+                    { label: 'Top Method', value: topPayment ? topPayment.name : 'No data', sub: topPayment ? formatCurrency(topPayment.value) : null },
+                    { label: 'Methods', value: String(analytics?.paymentModeBreakdown?.length || 0) }
+                ]
+            };
+        }
+
+        return null;
+    }, [analytics, chartModal, period]);
+
+    const renderModalChart = () => {
+        if (!chartModalDetails) return null;
+
+        if (chartModal === 'trend') {
+            return (chartData.series?.[0]?.data?.length > 0) ? (
+                <LineChart
+                    xAxis={chartData.xAxis}
+                    series={chartData.series}
+                    height={420}
+                    margin={{ left: 60, right: 20, top: 20, bottom: 40 }}
+                />
+            ) : (
+                <div className={styles.emptyState}>No transaction data for this period</div>
+            );
+        }
+
+        if (chartModal === 'inflow') {
+            return chartData.inflowDist.length > 0 ? (
+                <PieChart
+                    series={[{
+                        data: chartData.inflowDist,
+                        innerRadius: 90,
+                        outerRadius: 150,
+                        paddingAngle: 5,
+                        cornerRadius: 4,
+                    }]}
+                    height={420}
+                />
+            ) : (
+                <div className={styles.emptyState}>No inflow data</div>
+            );
+        }
+
+        if (chartModal === 'expense') {
+            return chartData.expenseDist.length > 0 ? (
+                <PieChart
+                    series={[{
+                        data: chartData.expenseDist,
+                        innerRadius: 90,
+                        outerRadius: 150,
+                        paddingAngle: 5,
+                        cornerRadius: 4,
+                    }]}
+                    height={420}
+                />
+            ) : (
+                <div className={styles.emptyState}>No expense data</div>
+            );
+        }
+
+        if (chartModal === 'payment') {
+            return chartData.paymentDist.length > 0 ? (
+                <BarChart
+                    xAxis={[{ scaleType: 'band', data: chartData.paymentDist.map(p => p.label) }]}
+                    series={[{ data: chartData.paymentDist.map(p => p.value), color: '#3b82f6' }]}
+                    height={300}
+                    margin={{ left: 40, right: 10, top: 10, bottom: 40 }}
+                />
+            ) : (
+                <div className={styles.emptyState}>No payment data</div>
+            );
+        }
+
+        return null;
     };
 
     const chartData = useMemo(() => {
@@ -265,7 +412,13 @@ export default function CashFlowPage() {
             {/* Bento Grid Layout */}
             <div className={styles.bentoGrid}>
                 {/* Hero: Cash Flow Trend */}
-                <div className={cn(styles.bentoCard, styles.span2x2)}>
+                <div
+                    className={cn(styles.bentoCard, styles.span2x2, styles.chartClickable)}
+                    onClick={() => setChartModal('trend')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => handleChartKeyDown(event, 'trend')}
+                >
                     <div className={styles.chartHeader}>
                         <h3 className={styles.chartTitle}>{period === 'day' ? 'Hourly Cash Velocity' : 'Monthly Cash Velocity'}</h3>
                         <p className={styles.chartSubtitle}>{period === 'day' ? 'Inflows vs Outflows by Hour' : 'Daily comparison of inflows vs outflows'}</p>
@@ -327,7 +480,13 @@ export default function CashFlowPage() {
                 />
 
                 {/* Distributions */}
-                <div className={cn(styles.bentoCard, styles.span2x1)}>
+                <div
+                    className={cn(styles.bentoCard, styles.span2x1, styles.chartClickable)}
+                    onClick={() => setChartModal('inflow')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => handleChartKeyDown(event, 'inflow')}
+                >
                     <div className={styles.chartHeader}>
                         <h3 className={styles.chartTitle}>Inflow Distribution</h3>
                         <p className={styles.chartSubtitle}>Sources of revenue</p>
@@ -350,7 +509,13 @@ export default function CashFlowPage() {
                     </div>
                 </div>
 
-                <div className={cn(styles.bentoCard, styles.span2x1)}>
+                <div
+                    className={cn(styles.bentoCard, styles.span2x1, styles.chartClickable)}
+                    onClick={() => setChartModal('expense')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => handleChartKeyDown(event, 'expense')}
+                >
                     <div className={styles.chartHeader}>
                         <h3 className={styles.chartTitle}>Expense Distribution</h3>
                         <p className={styles.chartSubtitle}>Allocating costs</p>
@@ -391,7 +556,13 @@ export default function CashFlowPage() {
                 />
 
                 {/* Operational Insights - Payment Mode */}
-                <div className={cn(styles.bentoCard, styles.span1x1)}>
+                <div
+                    className={cn(styles.bentoCard, styles.span1x1, styles.chartClickable)}
+                    onClick={() => setChartModal('payment')}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => handleChartKeyDown(event, 'payment')}
+                >
                     <div className={styles.chartHeader}>
                         <h3 className={styles.chartTitle}>Payment Splits</h3>
                     </div>
@@ -505,6 +676,43 @@ export default function CashFlowPage() {
                     </div>
                 </div>
             </div>
+
+            {chartModalDetails && (
+                <div className={styles.modalOverlay} onClick={() => setChartModal(null)}>
+                    <div
+                        className={cn(styles.modal, styles.chartModal)}
+                        role="dialog"
+                        aria-modal="true"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className={styles.modalHeader}>
+                            <div className={styles.modalTitleIcon}>
+                                <ClipboardCheck color="var(--primary)" />
+                                <div>
+                                    <h2 className={styles.modalTitle}>{chartModalDetails.title}</h2>
+                                    <div className={styles.chartSubtitle}>{chartModalDetails.subtitle}</div>
+                                </div>
+                            </div>
+                            <button onClick={() => setChartModal(null)} className={styles.closeBtn}><X size={20} /></button>
+                        </div>
+
+                        <div className={styles.chartModalBody}>
+                            <div className={styles.chartModalCanvas}>
+                                {renderModalChart()}
+                            </div>
+                            <div className={styles.chartModalStats}>
+                                {chartModalDetails.stats.map((stat, index) => (
+                                    <div key={index} className={styles.chartStatCard}>
+                                        <div className={styles.chartStatLabel}>{stat.label}</div>
+                                        <div className={styles.chartStatValue}>{stat.value}</div>
+                                        {stat.sub && <div className={styles.chartStatSub}>{stat.sub}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Entry Modal */}
             {

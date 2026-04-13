@@ -88,7 +88,7 @@ export interface BulkInitDTO {
 }
 
 export class InventoryService {
-    private async ensureSufficientStock(productId: string | null, state: string, quantity: number, factoryId: string, capId: string | null = null, innerId: string | null = null, unitType: string = '') {
+    private async ensureSufficientStock(productId: string | null, state: string, quantity: number, factoryId: string, capId: string | null = null, innerId: string | null = null, unitType: string = 'loose') {
         const query = supabase
             .from('stock_balances')
             .select('quantity')
@@ -105,14 +105,9 @@ export class InventoryService {
         if (innerId) query.eq('inner_id', sanitizeUUID(innerId));
         else query.is('inner_id', null);
 
-        // Unit type check with legacy fallback
-        if (unitType) {
-            query.eq('unit_type', unitType);
-        } else if (state === 'semi_finished') {
-            query.eq('unit_type', 'loose');
-        } else {
-            query.eq('unit_type', '');
-        }
+        // Match stored unit_type exactly; '' is valid legacy loose (do not coerce to 'loose' here)
+        const effectiveUnit = unitType === '' ? '' : (unitType || 'loose');
+        query.eq('unit_type', effectiveUnit);
 
         const { data, error } = await query.maybeSingle();
 
@@ -137,6 +132,25 @@ export class InventoryService {
             
             if (legacyData?.quantity) {
                 currentQty = legacyData.quantity;
+            }
+        }
+
+        // Legacy loose: row may still use unit_type '' while callers pass 'loose'
+        if (currentQty < quantity && effectiveUnit === 'loose' && productId) {
+            let legLoose = supabase
+                .from('stock_balances')
+                .select('quantity')
+                .eq('product_id', productId)
+                .eq('state', state)
+                .eq('factory_id', factoryId)
+                .eq('unit_type', '');
+            if (capId) legLoose = legLoose.eq('cap_id', sanitizeUUID(capId));
+            else legLoose = legLoose.is('cap_id', null);
+            if (innerId) legLoose = legLoose.eq('inner_id', sanitizeUUID(innerId));
+            else legLoose = legLoose.is('inner_id', null);
+            const { data: legacyLoose } = await legLoose.maybeSingle();
+            if (legacyLoose) {
+                currentQty = Math.max(currentQty, Number(legacyLoose.quantity));
             }
         }
 
@@ -225,17 +239,20 @@ export class InventoryService {
         // --- STAGE 1: Exact Unit Type Match ---
         const exactMatches = allStock.filter(v => v.unit_type === unitType);
         if (exactMatches.length === 1) {
-            return { capId: exactMatches[0].cap_id, innerId: exactMatches[0].inner_id, found: true };
+            const row = exactMatches[0];
+            return { capId: row.cap_id, innerId: row.inner_id, unitType: row.unit_type ?? unitType, found: true };
         }
 
         // --- STAGE 2: Legacy Fallback (Include "" and NULL) ---
-        const legacyMatches = allStock.filter(v => 
-            v.unit_type === unitType || 
-            (unitType === 'packet' && (v.unit_type === '' || !v.unit_type))
+        const legacyMatches = allStock.filter(v =>
+            v.unit_type === unitType ||
+            (unitType === 'packet' && (v.unit_type === '' || !v.unit_type)) ||
+            (unitType === 'loose' && (v.unit_type === '' || !v.unit_type))
         );
 
         if (legacyMatches.length === 1) {
-             return { capId: legacyMatches[0].cap_id, innerId: legacyMatches[0].inner_id, found: true };
+            const row = legacyMatches[0];
+            return { capId: row.cap_id, innerId: row.inner_id, unitType: row.unit_type ?? unitType, found: true };
         }
 
         // --- STAGE 3: Dominant Selection (>95% of total stock) ---
@@ -245,7 +262,12 @@ export class InventoryService {
             
             if (dominant) {
                 logger.info(`Dominant stock variant auto-selected for ${productId} (${state}): Using variant with ${dominant.quantity}/${totalStock} items.`);
-                return { capId: dominant.cap_id, innerId: dominant.inner_id, found: true };
+                return {
+                    capId: dominant.cap_id,
+                    innerId: dominant.inner_id,
+                    unitType: dominant.unit_type ?? unitType,
+                    found: true,
+                };
             }
 
             // --- STAGE 4: Ambiguity Error with details ---
@@ -263,7 +285,14 @@ export class InventoryService {
 
 
     // 1. Pack: Semi-Finished (Loose) -> Packed (Packets)
-    async packItems(productId: string, packetsCreated: number, selectedCapId?: string, selectedInnerId?: string, userId?: string) {
+    async packItems(
+        productId: string,
+        packetsCreated: number,
+        selectedCapId?: string,
+        selectedInnerId?: string,
+        userId?: string,
+        includeInner: boolean = true
+    ) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -275,27 +304,57 @@ export class InventoryService {
         const resolvedCapId = selectedCapId
             || (capTemplateId ? await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) : null);
 
-        // Resolve inner variant
+        // Resolve inner variant (skip entirely when packing without inner)
         const innerTemplateId = (productDetails as any).product_templates?.[0]?.inner_template_id
             ?? (productDetails as any).product_templates?.inner_template_id;
-        const resolvedInnerId = selectedInnerId
-            || (innerTemplateId ? await findInnerVariantByTemplate(innerTemplateId, factory) : null);
+        let resolvedInnerId: string | null = null;
+        if (includeInner) {
+            resolvedInnerId = selectedInnerId
+                || (innerTemplateId ? await findInnerVariantByTemplate(innerTemplateId, factory) : null);
+        }
 
         // Get items per packet from product
         const requiredLooseItems = packetsCreated * itemsPerPacket;
 
-        // Validation: Ensure sufficient loose stock
-        await this.ensureSufficientStock(productId, 'semi_finished', requiredLooseItems, factory, null, null, 'loose');
+        // Resolve which semi_finished row to deduct (may carry cap_id/inner_id; must match adjust_stock keys)
+        let loosePick = await this.discoverStockVariant(
+            productId,
+            'semi_finished',
+            factory,
+            'loose',
+            resolvedCapId ?? undefined,
+            resolvedInnerId ?? undefined
+        );
+        if (!loosePick.found) {
+            loosePick = await this.discoverStockVariant(productId, 'semi_finished', factory, 'loose');
+        }
+        if (!loosePick.found) {
+            throw new Error('No semi-finished loose stock found for this product.');
+        }
+        const looseCapId = loosePick.capId ?? null;
+        const looseInnerId = loosePick.innerId ?? null;
+        const looseUnitForEnsure =
+            loosePick.unitType === '' ? '' : (loosePick.unitType || 'loose');
+        const looseRpcUnit = looseUnitForEnsure;
 
-        // Deduct Semi-Finished stock (no cap — loose items never have a cap dimension)
+        await this.ensureSufficientStock(
+            productId,
+            'semi_finished',
+            requiredLooseItems,
+            factory,
+            looseCapId,
+            looseInnerId,
+            looseUnitForEnsure
+        );
+
         const { error: deductError } = await supabase.rpc('adjust_stock', {
             p_product_id: productId,
             p_factory_id: factory,
             p_state: 'semi_finished',
             p_quantity_change: -requiredLooseItems,
-            p_cap_id: null,
-            p_unit_type: 'loose',
-            p_inner_id: null
+            p_cap_id: looseCapId,
+            p_unit_type: looseRpcUnit,
+            p_inner_id: looseInnerId
         });
 
         if (deductError) throw new Error(`Failed to deduct semi-finished stock: ${deductError.message}`);
@@ -318,9 +377,9 @@ export class InventoryService {
                 p_factory_id: factory,
                 p_state: 'semi_finished',
                 p_quantity_change: requiredLooseItems,
-                p_cap_id: null,
-                p_unit_type: '',
-                p_inner_id: null
+                p_cap_id: looseCapId,
+                p_unit_type: looseRpcUnit,
+                p_inner_id: looseInnerId
             });
             throw new Error(`Failed to add packed stock: ${addError.message}`);
         }
@@ -329,7 +388,16 @@ export class InventoryService {
         await stockAllocationService.allocateStock(productId, 'packed', packetsCreated, factory);
 
         // Log Transaction
-        await this.logTransaction('pack', productId, packetsCreated, 'packet', 'semi_finished', 'packed', factory, undefined, undefined, false, undefined, undefined, userId);
+        await this.logTransaction({
+            transaction_type: 'pack',
+            item_id: productId,
+            quantity: packetsCreated,
+            unit: 'packet',
+            state: 'packed',
+            factory_id: factory,
+            user_id: userId,
+            note: `Packed ${packetsCreated} packets`
+        });
 
         // Deduct Cap Inventory
         if (resolvedCapId) {
@@ -343,7 +411,16 @@ export class InventoryService {
     }
 
     // 2. Bundle: Packed (Packets) OR Semi-Finished (Loose) -> Finished (Units: Bundles/Bags/Boxes)
-    async bundlePackets(productId: string, unitsCreated: number, unitType: 'bundle' | 'bag' | 'box', source: 'packed' | 'semi_finished' = 'packed', selectedCapId?: string, selectedInnerId?: string, userId?: string) {
+    async bundlePackets(
+        productId: string,
+        unitsCreated: number,
+        unitType: 'bundle' | 'bag' | 'box',
+        source: 'packed' | 'semi_finished' = 'packed',
+        selectedCapId?: string,
+        selectedInnerId?: string,
+        userId?: string,
+        includeInner: boolean = true
+    ) {
         const productDetails = await getProductPackingDetails(productId);
         const factory = productDetails.factory_id || MAIN_FACTORY_ID;
 
@@ -355,7 +432,7 @@ export class InventoryService {
 
         // Resolve IDs
         let finalCapId: string | undefined = selectedCapId;
-        let finalInnerId: string | undefined = selectedInnerId;
+        let finalInnerId: string | undefined = includeInner ? selectedInnerId : undefined;
 
         // Resolve IDs via templates
         const productTemplatesArr = (productDetails as any).product_templates;
@@ -365,16 +442,26 @@ export class InventoryService {
         if (!finalCapId && capTemplateId) {
             finalCapId = await findCapVariantByTemplate(capTemplateId, productDetails.color, factory) || undefined;
         }
-        if (!finalInnerId && innerTemplateId) {
+        if (includeInner && !finalInnerId && innerTemplateId) {
             finalInnerId = await findInnerVariantByTemplate(innerTemplateId, factory) || undefined;
         }
 
         // Smart Discovery Fallback (if still missing dimensions and source is packed)
-        if (source === 'packed' && (!finalCapId || !finalInnerId)) {
-            const discovery = await this.discoverStockVariant(productId, sourceState, factory, 'packet', finalCapId, finalInnerId);
+        const needInnerDiscovery = includeInner && !finalInnerId;
+        if (source === 'packed' && (!finalCapId || needInnerDiscovery)) {
+            const discovery = await this.discoverStockVariant(
+                productId,
+                sourceState,
+                factory,
+                'packet',
+                finalCapId,
+                includeInner ? finalInnerId : undefined
+            );
             if (discovery.found) {
                 finalCapId = finalCapId || discovery.capId || undefined;
-                finalInnerId = finalInnerId || discovery.innerId || undefined;
+                if (includeInner) {
+                    finalInnerId = finalInnerId || discovery.innerId || undefined;
+                }
             }
         }
 
@@ -446,7 +533,16 @@ export class InventoryService {
         await stockAllocationService.allocateStock(productId, 'finished', unitsCreated, factory);
 
         // Log Transaction
-        await this.logTransaction('bundle', productId, unitsCreated, unitType, sourceState, 'finished', factory, undefined, undefined, false, undefined, undefined, userId, finalCapId, finalInnerId);
+        await this.logTransaction({
+            transaction_type: 'bundle',
+            item_id: productId,
+            quantity: unitsCreated,
+            unit: unitType,
+            state: 'finished',
+            factory_id: factory,
+            user_id: userId,
+            note: `Bundled ${unitsCreated} ${unitType}`
+        });
 
         // Deduct Cap ONLY if sourcing from loose (packed items already had caps deducted at packing time)
         if (source === 'semi_finished') {
@@ -591,7 +687,17 @@ export class InventoryService {
         }
 
         // Log Transaction
-        await this.logTransaction('unpack', productId, quantityToUnpack, fromState === 'finished' ? unitType : 'packet', fromState, toState, factory, undefined, `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? unitType : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`, false, undefined, undefined, userId, finalCapId, finalInnerId);
+        await this.logTransaction({
+            transaction_type: 'unpack',
+            item_id: productId,
+            quantity: quantityToUnpack,
+            unit: fromState === 'finished' ? unitType : 'packet',
+            state: toState,
+            factory_id: factory,
+            user_id: userId,
+            is_negative: true,
+            note: `Unpacked ${quantityToUnpack} ${fromState === 'finished' ? unitType : 'packet'} yielding ${yieldQuantity} ${toState === 'packed' ? 'packets' : 'loose items'}`
+        });
 
         // 4. Return Caps ONLY if target is semi_finished (loose items — caps removed from product)
         if (toState === 'semi_finished') {
@@ -620,44 +726,89 @@ export class InventoryService {
         }
     }
 
-    public async logTransaction(
-        type: string,
-        entityId: string | null,
-        qty: number,
-        unitType: string,
-        fromState: string | null,
-        toState: string | null,
-        factoryId: string,
-        referenceId?: string,
-        note?: string,
-        isRawMaterial: boolean = false,
-        cost_per_kg?: number,
-        total_cost?: number,
-        userId?: string,
-        capId?: string,
-        innerId?: string
-    ) {
-        const { error } = await supabase.from('inventory_transactions').insert({
-            product_id: isRawMaterial ? null : entityId,
-            raw_material_id: isRawMaterial ? entityId : null,
-            quantity: qty,
-            unit_type: unitType,
-            from_state: fromState,
-            to_state: toState,
-            transaction_type: type,
-            factory_id: factoryId,
-            reference_id: referenceId,
-            note: note || `Transaction ${type} for ${qty} ${unitType}s`,
+    public async logTransaction(params: {
+        transaction_type: string;
+        item_id?: string | null;
+        product_id?: string | null;
+        cap_id?: string | null;
+        inner_id?: string | null;
+        raw_material_id?: string | null;
+        quantity: number;
+        unit: string;
+        category?: string | null;
+        state?: string | null;
+        factory_id: string;
+        reference_id?: string | null;
+        user_id?: string | null;
+        is_negative?: boolean;
+        cost_per_kg?: number;
+        total_cost?: number;
+        note?: string;
+    }) {
+        const {
+            transaction_type,
+            item_id,
+            product_id,
+            cap_id,
+            inner_id,
+            raw_material_id,
+            quantity,
+            unit,
+            category,
+            state,
+            factory_id,
+            reference_id,
+            user_id,
+            is_negative,
             cost_per_kg,
             total_cost,
-            created_by: userId,
-            cap_id: capId,
-            inner_id: innerId
-        });
+            note
+        } = params;
 
-        if (error) {
-            logger.error('Failed to log inventory transaction:', { error: error.message, type, entityId, qty });
-            throw new Error(`Inventory transaction logging failed: ${error.message}`);
+        try {
+            // ID Normalization Logic
+            let finalProductId = product_id;
+            let finalCapId = cap_id;
+            let finalInnerId = inner_id;
+            let finalRawMaterialId = raw_material_id;
+
+            // Backward compatibility for generic 'item_id' + 'category'
+            if (item_id && !finalProductId && !finalCapId && !finalInnerId && !finalRawMaterialId) {
+                if (category === 'raw_material') finalRawMaterialId = item_id;
+                else if (category === 'cap') finalCapId = item_id;
+                else if (category === 'inner') finalInnerId = item_id;
+                else finalProductId = item_id;
+            }
+
+            // State Normalization (ensure it matches enum)
+            let finalState = state;
+            if (state === 'loose') finalState = 'semi_finished';
+
+            const { error } = await supabase
+                .from('inventory_transactions')
+                .insert({
+                    transaction_type,
+                    product_id: finalProductId,
+                    cap_id: finalCapId,
+                    inner_id: finalInnerId,
+                    raw_material_id: finalRawMaterialId,
+                    quantity: is_negative ? -Math.abs(quantity) : Math.abs(quantity),
+                    unit_type: unit,
+                    from_state: finalState as any, 
+                    to_state: finalState as any,
+                    factory_id,
+                    reference_id: reference_id,
+                    created_by: user_id,
+                    cost_per_kg,
+                    total_cost,
+                    note: note || `Transaction: ${transaction_type}`
+                });
+
+            if (error) {
+                logger.error('Failed to log inventory transaction:', error);
+            }
+        } catch (err) {
+            logger.error('Inventory log transaction exception:', err);
         }
     }
 
@@ -700,17 +851,16 @@ export class InventoryService {
         if (error) throw new Error(`Cap stock addition error: ${error.message}`);
 
         // 3. Log to general inventory transactions for visibility
-        await this.logTransaction(
-            'unpack_return',
-            null,
-            quantity,
-            'packet', // Use packet as proxy or similar if 'cap' not allowed, but let's check
-            null,
-            'semi_finished',
-            factoryId,
-            capId, // Use reference_id for capId
-            note || `Returned ${quantity} caps for unpacking`
-        );
+        await this.logTransaction({
+            transaction_type: 'unpack_return',
+            item_id: null,
+            quantity: quantity,
+            unit: 'packet',
+            state: 'semi_finished',
+            factory_id: factoryId,
+            reference_id: capId,
+            note: note || `Returned ${quantity} caps for unpacking`
+        });
 
         logger.info(`Returned ${quantity} caps (ID: ${capId}) for ${note}`);
     }
@@ -726,17 +876,16 @@ export class InventoryService {
 
         if (error) throw new Error(`Inner stock addition error: ${error.message}`);
 
-        await this.logTransaction(
-            'inner_return',
-            null,
-            quantity,
-            'packet',
-            null,
-            'semi_finished',
-            factoryId,
-            innerId,
-            note || `Returned ${quantity} inners`
-        );
+        await this.logTransaction({
+            transaction_type: 'inner_return',
+            item_id: null,
+            quantity: quantity,
+            unit: 'packet',
+            state: 'semi_finished',
+            factory_id: factoryId,
+            reference_id: innerId,
+            note: note || `Returned ${quantity} inners`
+        });
 
         logger.info(`Returned ${quantity} inners (ID: ${innerId}) for ${note}`);
     }
@@ -761,9 +910,9 @@ export class InventoryService {
             `, { count: 'exact' })
             .order('product_id');
 
-        // Filter by factory if provided
+        // Filter by warehouse site on the balance row (not products.factory_id — catalog vs stock location can differ)
         if (filters?.factoryId) {
-            query = query.eq('products.factory_id', filters.factoryId);
+            query = query.eq('factory_id', filters.factoryId);
         }
 
         const { data, error, count } = await query.range(from, to);
@@ -839,6 +988,8 @@ export class InventoryService {
     }
 
 
+
+
     async adjustStock(data: {
         product_id: string;
         cap_id?: string | null;
@@ -855,6 +1006,9 @@ export class InventoryService {
 
         const quantityChange = type === 'increment' ? quantity : -quantity;
 
+        // Standardize on 'loose' for RPC to match refined database functions
+        const rpcUnitType = unit_type || 'loose';
+
         const { error } = await supabase.rpc('adjust_stock', {
             p_product_id: product_id,
             p_factory_id: factory_id,
@@ -862,32 +1016,28 @@ export class InventoryService {
             p_quantity_change: quantityChange,
             p_cap_id: sanitizeUUID(cap_id),
             p_inner_id: sanitizeUUID(inner_id),
-            p_unit_type: unit_type === 'loose' ? '' : unit_type
+            p_unit_type: rpcUnitType
         });
 
         if (error) throw new Error(`Stock adjustment failed: ${error.message}`);
 
         // Log Transaction
-        await this.logTransaction(
-            type === 'increment' ? 'adjustment_in' : 'adjustment_out',
-            product_id,
-            quantity,
-            unit_type === 'loose' ? '' : unit_type,
-            state,
-            state,
-            factory_id,
-            cap_id || undefined,
-            reason,
-            false,
-            undefined,
-            undefined,
-            userId
-        );
+        await this.logTransaction({
+            transaction_type: type === 'increment' ? 'adjustment_in' : 'adjustment_out',
+            item_id: product_id,
+            quantity: quantity,
+            unit: rpcUnitType,
+            state: state,
+            factory_id: factory_id,
+            reference_id: cap_id || undefined,
+            note: reason,
+            user_id: userId
+        });
 
         return { success: true };
     }
 
-    async getStockOverview(factoryId?: string) {
+    async getStockOverview(factoryId?: string, includeCombinations = false) {
         // 1. Get products (including template info)
         let productQuery = supabase
             .from('products')
@@ -902,8 +1052,13 @@ export class InventoryService {
         // 2. Get caps for display
         const { data: caps } = await supabase.from('caps').select('id, color');
 
-        // 3. Get all balances for this factory
-        let balanceQuery = supabase.from('stock_balances').select('*, caps(color)');
+        // 3. Get all balances for this factory with detailed joins
+        let balanceQuery = supabase.from('stock_balances').select(`
+            *,
+            products(id, name, color, size),
+            caps(id, name, color, template_id),
+            inners(id, color, inner_templates(name))
+        `);
         if (factoryId) {
             balanceQuery = balanceQuery.eq('factory_id', factoryId);
         }
@@ -931,6 +1086,7 @@ export class InventoryService {
                 if (!comboMap.has(key)) {
                     comboMap.set(key, {
                         cap_id: b.cap_id,
+                        cap_name: (b as any).caps?.name || null,
                         cap_color: (b as any).caps?.color || 'N/A',
                         unit_type: b.unit_type,
                         packed_qty: 0,
@@ -961,6 +1117,13 @@ export class InventoryService {
             };
         });
 
+        if (includeCombinations) {
+            return {
+                stock: overview,
+                balances: balances
+            };
+        }
+        
         return overview;
     }
 
@@ -1114,21 +1277,20 @@ export class InventoryService {
         if (error) throw new Error(error.message);
 
         // 4. Log detailed transaction
-        await this.logTransaction(
-            adjustmentKg > 0 ? 'purchase' : 'adjustment',
-            id,
-            adjustmentKg,
-            'kg',
-            'raw_material',
-            'raw_material',
-            material.factory_id,
-            undefined,
-            reason || `Adjustment: ${quantity} ${unit} at ${rate_per_kg}/kg`,
-            true,
-            rate_per_kg,
-            totalCost,
-            userId
-        );
+        await this.logTransaction({
+            transaction_type: adjustmentKg > 0 ? 'purchase' : 'adjustment',
+            item_id: id,
+            quantity: adjustmentKg,
+            unit: 'kg',
+            category: 'raw_material',
+            state: 'raw_material',
+            factory_id: material.factory_id,
+            note: reason || `Adjustment: ${quantity} ${unit} at ${rate_per_kg}/kg`,
+            is_negative: true,
+            cost_per_kg: rate_per_kg,
+            total_cost: totalCost,
+            user_id: userId
+        });
 
         // 5. Log to Cash Flow if it's a purchase (adjustmentKg > 0)
         // Default to 'Cash' if no payment_mode is provided for backward compatibility
@@ -1249,7 +1411,15 @@ export class InventoryService {
                     
                     if (error) throw error;
                     
-                    await this.logTransaction('initial_load', item.id, item.quantity, 'kg', 'none', 'raw_material', factoryId, undefined, undefined, true, undefined, undefined, userId);
+                    await this.logTransaction({
+                        transaction_type: 'initial_load',
+                        item_id: item.id,
+                        quantity: item.quantity,
+                        unit: 'kg',
+                        category: 'raw_material',
+                        factory_id: factoryId,
+                        user_id: userId
+                    });
                 } 
                 else if (item.type === 'product') {
                     const { error } = await supabase
@@ -1267,7 +1437,15 @@ export class InventoryService {
 
                     if (error) throw error;
                     
-                    await this.logTransaction('initial_load', item.id, item.quantity, item.unit_type || 'units', 'none', item.state || 'packed', factoryId, undefined, undefined, false, undefined, undefined, userId);
+                    await this.logTransaction({
+                        transaction_type: 'initial_load',
+                        item_id: item.id,
+                        quantity: item.quantity,
+                        unit: item.unit_type || 'units',
+                        state: item.state || 'packed',
+                        factory_id: factoryId,
+                        user_id: userId
+                    });
                 }
                 else if (item.type === 'cap') {
                     const { error } = await supabase
@@ -1282,7 +1460,16 @@ export class InventoryService {
                         });
 
                     if (error) throw error;
-                    await this.logTransaction('initial_load', null, item.quantity, 'caps', 'none', 'cap_stock', factoryId, undefined, undefined, false, undefined, undefined, userId, item.id);
+                    await this.logTransaction({
+                        transaction_type: 'initial_load',
+                        item_id: null,
+                        quantity: item.quantity,
+                        unit: 'caps',
+                        state: 'cap_stock',
+                        factory_id: factoryId,
+                        user_id: userId,
+                        reference_id: item.id
+                    });
                 }
                 else if (item.type === 'inner') {
                     const { error } = await supabase
@@ -1298,7 +1485,16 @@ export class InventoryService {
 
                     if (error) throw error;
                     // Fix: logTransaction(..., capId, innerId)
-                    await this.logTransaction('initial_load', null, item.quantity, 'inners', 'none', 'inner_stock', factoryId, undefined, undefined, false, undefined, undefined, userId, undefined, item.id);
+                    await this.logTransaction({
+                        transaction_type: 'initial_load',
+                        item_id: null,
+                        quantity: item.quantity,
+                        unit: 'inners',
+                        state: 'inner_stock',
+                        factory_id: factoryId,
+                        user_id: userId,
+                        reference_id: item.id
+                    });
                 }
 
                 results.push({ id: item.id, type: item.type, success: true });

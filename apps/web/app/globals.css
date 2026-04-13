@@ -38,14 +38,28 @@
     /* Semantics */
     --primary: var(--indigo-600);
     --primary-hover: var(--indigo-700);
+    --primary-dark: var(--primary-hover);
     --primary-light: var(--indigo-100);
+    --primary-50: var(--indigo-50);
+    --primary-100: var(--indigo-100);
+    --primary-200: var(--indigo-200);
+    --primary-700: var(--indigo-700);
+    --primary-900: var(--indigo-900);
+    --primary-rgb: 79, 70, 229;
     --accent: var(--orange-500);
     --accent-hover: var(--orange-600);
     --background: var(--slate-50);
     --surface: white;
+    --surface-hover: var(--slate-50);
     --border: var(--slate-200);
     --text-main: var(--slate-900);
     --text-muted: var(--slate-500);
+
+    /* Compatibility aliases (legacy token names used in CSS modules) */
+    --text-primary: var(--text-main);
+    --text-secondary: var(--text-muted);
+    --danger: var(--error);
+    --danger-light: var(--error-bg);
 
     /* Status Colors */
     --success: #22c55e;
@@ -99,13 +113,26 @@
     --text-muted: #a1a1aa;
     /* Zinc 400 */
 
+    /* Compatibility aliases (legacy token names used in CSS modules) */
+    --text-primary: var(--text-main);
+    --text-secondary: var(--text-muted);
+    --danger: var(--error);
+    --danger-light: var(--error-bg);
+
     /* Electric Indigo - Neon Pop */
     --primary: #818cf8;
     /* Indigo 400 - Vibrancy against black */
     --primary-hover: #6366f1;
     /* Indigo 500 */
+    --primary-dark: var(--primary-hover);
     --primary-light: rgba(129, 140, 248, 0.15);
     /* Glassy primary bg */
+    --primary-50: rgba(129, 140, 248, 0.08);
+    --primary-100: rgba(129, 140, 248, 0.12);
+    --primary-200: rgba(129, 140, 248, 0.18);
+    --primary-700: #6366f1;
+    --primary-900: #312e81;
+    --primary-rgb: 129, 140, 248;
 
     /* Electric Orange */
     --accent: #fb923c;
@@ -454,6 +481,11 @@ h6 {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Empty State */

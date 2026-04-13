@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/production/providers/production_request_provider.dart';
+import '../../features/production/providers/sales_order_provider.dart';
 import '../constants/api_constants.dart';
 
 final notificationServiceProvider = Provider((ref) {
@@ -100,11 +102,13 @@ class NotificationService {
         FirebaseMessaging.onMessage.listen((RemoteMessage message) {
           debugPrint('🔔 [FCM] Foreground Message received: ${message.notification?.title}');
           _showLocalNotification(message);
+          _refreshDemandLists();
         });
 
         // Handle notification clicks when app is in background but not terminated
         FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
           debugPrint('🔔 [FCM] Notification opened app: ${message.data}');
+          _refreshDemandLists();
         });
 
         // Listen for auth state changes to register pending tokens
@@ -122,6 +126,15 @@ class NotificationService {
       debugPrint('Stack: $stack');
     }
     debugPrint('🔔 [FCM] initialize() completed');
+  }
+
+  void _refreshDemandLists() {
+    try {
+      _ref.invalidate(productionRequestsProvider);
+      _ref.invalidate(pendingOrdersProvider);
+    } catch (e) {
+      debugPrint('🔔 [FCM] refresh demand lists: $e');
+    }
   }
 
   void _showLocalNotification(RemoteMessage message) {

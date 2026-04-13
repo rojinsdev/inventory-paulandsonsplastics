@@ -53,39 +53,9 @@ export class SalesOrderService {
         const orderId = result.order_id;
         logger.info('Sales order created atomically', { orderId });
 
-        // 3. Demand Signaling: Create production requests for backordered items
-        // Fetch newly created backordered items for this order
-        const { data: backorderedItems, error: fetchError } = await supabase
-            .from('sales_order_items')
-            .select('product_id, cap_id, quantity, unit_type, inner_id, include_inner, order_id')
-            .eq('order_id', orderId)
-            .eq('is_backordered', true);
+        // Backordered production_requests: only create_order_atomic (shortfall qty), not here.
 
-        if (!fetchError && backorderedItems) {
-            for (const item of backorderedItems) {
-                // Determine factory_id (can be cached if needed, for now we follow existing service pattern)
-                let factoryId = MAIN_FACTORY_ID;
-                if (item.product_id) {
-                    const { data: prod } = await supabase.from('products').select('factory_id').eq('id', item.product_id).single();
-                    factoryId = prod?.factory_id || MAIN_FACTORY_ID;
-                } else if (item.cap_id) {
-                    const { data: cap } = await supabase.from('caps').select('factory_id').eq('id', item.cap_id).single();
-                    factoryId = cap?.factory_id || MAIN_FACTORY_ID;
-                }
-
-                await this.createProductionRequest(
-                    item.product_id, 
-                    factoryId, 
-                    item.quantity, 
-                    item.unit_type, 
-                    orderId, 
-                    item.cap_id || undefined, 
-                    item.inner_id || undefined
-                );
-            }
-        }
-
-        // 4. Side Effects: Emit Event
+        // Side effects: emit event
         // Side effects (Notifications, Audit, Finance) are now handled by event listeners
         eventBus.emit(SystemEvents.SALES_ORDER_CREATED, {
             order_id: orderId,
@@ -239,7 +209,15 @@ export class SalesOrderService {
 
         // 3. Log Audit Trail
         try {
-            await inventoryService.logTransaction('reserve', productId, quantity, unitType, sourceState, 'reserved', factoryId);
+            await inventoryService.logTransaction({
+                transaction_type: 'reserve',
+                item_id: productId,
+                quantity: quantity,
+                unit: unitType,
+                state: sourceState,
+                reference_id: 'reserved',
+                factory_id: factoryId
+            });
         } catch (auditError: any) {
             logger.error('Failed to log inventory transaction for stock reservation', { error: auditError.message, productId, quantity, factoryId });
         }
@@ -362,7 +340,15 @@ export class SalesOrderService {
 
         // 3. Log Audit Trail
         try {
-            await inventoryService.logTransaction('unreserve', (productId || capId)!, quantity, unitType, 'reserved', targetState, factoryId);
+            await inventoryService.logTransaction({
+                transaction_type: 'unreserve',
+                item_id: (productId || capId)!,
+                quantity: quantity,
+                unit: unitType,
+                state: 'reserved',
+                reference_id: targetState,
+                factory_id: factoryId
+            });
         } catch (auditError: any) {
             logger.error('Failed to log inventory transaction for stock unreservation', { error: auditError.message, productId, capId, quantity, factoryId });
         }
@@ -387,7 +373,7 @@ export class SalesOrderService {
         } else {
             query = supabase
                 .from('stock_balances')
-                .select('quantity, cap_id')
+                .select('quantity, cap_id, inner_id')
                 .eq('product_id', productId!)
                 .eq('state', 'reserved')
                 .eq('factory_id', factoryId)
@@ -424,6 +410,7 @@ export class SalesOrderService {
             };
             if (!capId) {
                 adjustParams.p_product_id = productId;
+                adjustParams.p_inner_id = (balance as any).inner_id ?? null;
             }
 
             const { error: deductError } = await supabase.rpc(capId ? 'adjust_cap_stock' : 'adjust_stock', adjustParams);
@@ -434,7 +421,14 @@ export class SalesOrderService {
 
         // Log Audit Trail
         try {
-            await inventoryService.logTransaction('delivery', (productId || capId)!, quantity, unitType, 'reserved', null, factoryId);
+            await inventoryService.logTransaction({
+                transaction_type: 'delivery',
+                item_id: (productId || capId)!,
+                quantity: quantity,
+                unit: unitType,
+                state: 'reserved',
+                factory_id: factoryId
+            });
         } catch (auditError: any) {
             logger.error('Failed to log inventory transaction for stock delivery', { error: auditError.message, productId, capId, quantity, factoryId });
         }
@@ -466,7 +460,7 @@ export class SalesOrderService {
                     products(name, size, color, selling_price, factory_id),
                     caps(name, factory_id)
                 ),
-                production_requests(product_id, cap_id, status)
+                production_requests(product_id, cap_id, inner_id, status)
             `, { count: 'exact' });
 
         if (filters?.status) {
@@ -523,7 +517,7 @@ export class SalesOrderService {
                     products(name, size, color, selling_price, factory_id),
                     caps(name, factory_id)
                 ),
-                production_requests(product_id, cap_id, status)
+                production_requests(product_id, cap_id, inner_id, status)
             `)
             .eq('id', id)
             .maybeSingle();
@@ -564,7 +558,7 @@ export class SalesOrderService {
             // For now, we follow the existing pattern: unreserve full quantity for non-backordered.
             // Use quantity_reserved as the source of truth for what needs to be unreserved.
             if (item.quantity_reserved && item.quantity_reserved > 0) {
-                await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId);
+                await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId, item.cap_id);
             }
         }
 
@@ -641,10 +635,12 @@ export class SalesOrderService {
                     order_id: id,
                     product_id: item.product_id || null,
                     cap_id: item.cap_id || null,
+                    quantity: item.quantity,
                     quantity_reserved: 0,
                     unit_type: unit_type,
                     unit_price: item.unit_price ?? sellingPrice,
-                    is_backordered: isBackordered
+                    is_backordered: isBackordered,
+                    include_inner: item.include_inner ?? true
                 });
 
             if (itemError) {
@@ -705,19 +701,23 @@ export class SalesOrderService {
                     const factoryId = (item.products as any)?.factory_id || (item.caps as any)?.factory_id || MAIN_FACTORY_ID;
                     await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId, item.cap_id);
                 }
-                
-                if (item.is_backordered) {
-                    // Cancel the production request if it exists
-                    const { error: cancelReqError } = await supabase
-                        .from('production_requests')
-                        .update({ status: 'cancelled' })
-                        .eq('sales_order_id', id)
-                        .or(`product_id.eq.${item.product_id},cap_id.eq.${item.cap_id}`);
-                    if (cancelReqError) {
-                        logger.error('Failed to cancel production request for cancelled order item', { error: cancelReqError.message, orderId: id, productId: item.product_id, capId: item.cap_id });
-                    }
-                }
             }
+
+            // Cancel every open production request for this order (not only is_backordered lines —
+            // RPC + service can both create PRs; per-item .or(product_id,cap_id) filters often miss rows).
+            const { error: cancelReqError } = await supabase
+                .from('production_requests')
+                .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+                .eq('sales_order_id', id)
+                .in('status', ['pending', 'in_production', 'ready']);
+
+            if (cancelReqError) {
+                logger.error('Failed to cancel production requests for cancelled order', {
+                    error: cancelReqError.message,
+                    orderId: id,
+                });
+            }
+
             logger.info('Order cancelled, stock unreserved and production requests cancelled', { orderId: id, userId });
         }
 
@@ -872,32 +872,60 @@ export class SalesOrderService {
 
         logger.info('Partial delivery processed successfully via RPC', { orderId, result: data, userId: deliveryData.user_id });
 
-        // 2. Side Effects: Emit Payment Event if initial payment was made
-        const paymentId = data?.payment_id;
-        if (deliveryData.initial_payment && deliveryData.initial_payment > 0 && paymentId) {
-            // We need the order's customer_id and factory_id for the event
-            const updatedOrder = await this.getOrderById(orderId);
-            if (updatedOrder) {
-                const factoryId = (updatedOrder.sales_order_items?.[0]?.products as any)?.factory_id || 
-                                (updatedOrder.sales_order_items?.[0]?.caps as any)?.factory_id || 
-                                'MAIN_FACTORY'; // Safe fallback
-                
-                eventBus.emit(SystemEvents.SALES_PAYMENT_RECORDED, {
-                    payment_id: paymentId,
-                    order_id: orderId,
-                    customer_id: updatedOrder.customer_id,
-                    amount: Number(deliveryData.initial_payment),
-                    payment_mode: deliveryData.payment_method || 'cash',
-                    userId: deliveryData.user_id,
-                    factory_id: factoryId
-                });
-                logger.info('Sales payment event emitted for initial payment', { orderId, paymentId: paymentId });
-                return updatedOrder;
-            }
+        const rpcResult = (data ?? {}) as Record<string, unknown>;
+        const updatedOrder = await this.getOrderById(orderId);
+
+        const dispatchId = rpcResult.dispatch_id != null ? String(rpcResult.dispatch_id) : '';
+        if (dispatchId && updatedOrder) {
+            eventBus.emit(SystemEvents.SALES_DISPATCH_BATCH_RECORDED, {
+                dispatch_id: dispatchId,
+                order_id: orderId,
+                customer_id: updatedOrder.customer_id,
+                user_id: deliveryData.user_id,
+                payment_mode: deliveryData.payment_mode || 'cash',
+                subtotal: Number(rpcResult.subtotal ?? 0),
+                discount: Number(rpcResult.discount ?? 0),
+                total: Number(rpcResult.total ?? 0),
+                initial_payment: Number(
+                    rpcResult.payment_amount ?? deliveryData.initial_payment ?? 0
+                ),
+                payment_id: (rpcResult.payment_id as string | null | undefined) ?? null,
+                order_status: updatedOrder.status,
+                items: deliveryData.items.map((i) => ({
+                    item_id: i.item_id,
+                    quantity: i.quantity,
+                    unit_price: i.unit_price,
+                })),
+            });
         }
 
-        // Return the updated order
-        return this.getOrderById(orderId);
+        const paymentId = rpcResult.payment_id as string | undefined;
+        if (
+            deliveryData.initial_payment &&
+            deliveryData.initial_payment > 0 &&
+            paymentId &&
+            updatedOrder
+        ) {
+            const factoryId =
+                (updatedOrder.sales_order_items?.[0]?.products as { factory_id?: string } | undefined)
+                    ?.factory_id ||
+                (updatedOrder.sales_order_items?.[0]?.caps as { factory_id?: string } | undefined)
+                    ?.factory_id ||
+                MAIN_FACTORY_ID;
+
+            eventBus.emit(SystemEvents.SALES_PAYMENT_RECORDED, {
+                payment_id: paymentId,
+                order_id: orderId,
+                customer_id: updatedOrder.customer_id,
+                amount: Number(deliveryData.initial_payment),
+                payment_mode: deliveryData.payment_method || 'cash',
+                userId: deliveryData.user_id,
+                factory_id: factoryId,
+            });
+            logger.info('Sales payment event emitted for initial payment', { orderId, paymentId });
+        }
+
+        return updatedOrder ?? (await this.getOrderById(orderId));
     }
 
     async recordPayment(orderId: string, paymentData: {
@@ -914,9 +942,9 @@ export class SalesOrderService {
             throw new Error('Order not found');
         }
 
-        if (order.status !== 'delivered') {
+        if (order.status !== 'delivered' && order.status !== 'partially_delivered') {
             logger.warn('Attempted to record payment for an order not in delivered status', { orderId, currentStatus: order.status, paymentData });
-            throw new Error('Can only record payments for delivered orders');
+            throw new Error('Can only record payments for delivered or partially delivered orders');
         }
 
         if (!order.balance_due || order.balance_due <= 0) {
@@ -1111,8 +1139,8 @@ export class SalesOrderService {
             // Unreserve stock first (only for non-backordered)
             for (const item of order.sales_order_items) {
                 if (item.quantity_reserved && item.quantity_reserved > 0) {
-                    const factoryId = (item.products as any)?.factory_id || MAIN_FACTORY_ID;
-                    await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId);
+                    const factoryId = (item.products as any)?.factory_id || (item.caps as any)?.factory_id || MAIN_FACTORY_ID;
+                    await this.unreserveStock(item.product_id, item.quantity_reserved, item.unit_type, factoryId, item.cap_id);
                 }
             }
             logger.info('Stock unreserved for deleted reserved order', { orderId: id });

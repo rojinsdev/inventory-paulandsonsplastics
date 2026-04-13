@@ -8,6 +8,8 @@ export enum SystemEvents {
     SALES_ORDER_STATUS_CHANGED = 'sales_order.status_changed',
     SALES_ORDER_ITEMS_PREPARED = 'sales_order.items_prepared',
     SALES_PAYMENT_RECORDED = 'sales_order.payment_recorded',
+    /** After process_partial_dispatch RPC (all payment modes, including credit-only). */
+    SALES_DISPATCH_BATCH_RECORDED = 'sales_order.dispatch_batch_recorded',
     SALES_ORDER_STATUS_UPDATED = 'sales.order_status_updated',
 
     // Production Module
@@ -21,6 +23,9 @@ export enum SystemEvents {
     // Purchase Module
     PURCHASE_CREATED = 'purchase.created',
     PURCHASE_PAYMENT_RECORDED = 'purchase.payment_recorded',
+
+    /** Emitted after each cash_flow_logs row (or batch for shared categories). */
+    CASH_FLOW_LOGGED = 'cash_flow.logged',
 
     // Inventory Module
     STOCK_ADJUSTED = 'inventory.stock_adjusted',
@@ -153,6 +158,32 @@ export interface EventPayloads {
         customer_id: string;
         factory_id: string;
     };
-    
-    // Add more as needed during implementation
+
+    [SystemEvents.SALES_DISPATCH_BATCH_RECORDED]: {
+        dispatch_id: string;
+        order_id: string;
+        customer_id: string;
+        user_id: string;
+        payment_mode: string;
+        subtotal: number;
+        discount: number;
+        total: number;
+        initial_payment: number;
+        payment_id?: string | null;
+        order_status: string;
+        items: Array<{ item_id: string; quantity: number; unit_price: number }>;
+    };
+
+    [SystemEvents.CASH_FLOW_LOGGED]: {
+        log_id: string;
+        date: string;
+        category_id: string;
+        category_name: string;
+        factory_id: string | null;
+        amount: number;
+        payment_mode: string;
+        reference_id: string | null;
+        notes: string | null;
+        is_automatic: boolean;
+    };
 }

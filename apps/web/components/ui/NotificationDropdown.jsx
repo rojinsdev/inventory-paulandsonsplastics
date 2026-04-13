@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, Package, AlertTriangle, Lightbulb, CheckCircle, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import styles from './NotificationDropdown.module.css';
@@ -14,7 +14,7 @@ export default function NotificationDropdown() {
     const dropdownRef = useRef(null);
     const router = useRouter();
 
-    const fetchNotifications = async () => {
+    const fetchNotifications = useCallback(async () => {
         try {
             const data = await fetchAPI('/notifications');
             setNotifications(data);
@@ -23,14 +23,17 @@ export default function NotificationDropdown() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
         fetchNotifications();
-        // Refresh every 5 minutes
-        const interval = setInterval(fetchNotifications, 5 * 60 * 1000);
+        const interval = setInterval(fetchNotifications, 60 * 1000);
         return () => clearInterval(interval);
-    }, []);
+    }, [fetchNotifications]);
+
+    useEffect(() => {
+        if (isOpen) fetchNotifications();
+    }, [isOpen, fetchNotifications]);
 
     // Close on click outside
     useEffect(() => {

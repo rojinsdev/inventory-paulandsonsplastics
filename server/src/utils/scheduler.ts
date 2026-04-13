@@ -4,6 +4,7 @@ import { config } from '../config/env';
 import logger from './logger';
 import { purchaseService } from '../modules/purchases/purchase.service';
 import { salesOrderService } from '../modules/sales-orders/sales-order.service';
+import { googleSheetsService } from '../modules/integrations/google-sheets.service';
 
 export class Scheduler {
     static init() {
@@ -26,6 +27,21 @@ export class Scheduler {
                 logger.error('❌ Failed to run Daily Dues & Overdue Check:', error);
             }
         });
+
+        // 3. Google Sheets mirror — customer & supplier balance snapshots
+        // Schedule when flag is on; runDailySnapshots() no-ops if credentials/spreadsheet are not ready yet.
+        if (config.sheets.enabled) {
+            cron.schedule(config.sheets.snapshotCron, async () => {
+                logger.info('🕒 Running Google Sheets daily snapshots (customers & suppliers)...');
+                try {
+                    await googleSheetsService.runDailySnapshots();
+                    logger.info('✅ Google Sheets snapshots completed');
+                } catch (error) {
+                    logger.error('❌ Google Sheets snapshots failed:', error);
+                }
+            });
+            logger.info(`📅 Google Sheets snapshot cron scheduled: ${config.sheets.snapshotCron}`);
+        }
 
         logger.info('📅 Scheduler initialized: Daily health & Daily dues check active');
     }

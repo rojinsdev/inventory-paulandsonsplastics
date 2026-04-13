@@ -1,0 +1,16 @@
+---
+description: When the user asks a question or expresses doubt, explain first; do not change code unless they ask for a fix.
+alwaysApply: true
+---
+
+# Clarify doubts before changing code
+
+When the user asks **why** something happens, raises a **doubt**, or phrases something as a **question** (not an explicit request to implement or fix):
+
+1. **Answer first** — explain behavior, intent, tradeoffs, and how it relates to the rest of the system (e.g. client vs server, backorder flow).
+2. **Do not edit the codebase** in that turn unless they clearly ask you to change, fix, remove, or implement something.
+3. If a code change would help, **offer it as an optional next step** (“If you want this aligned with backorders, we can remove X”) and wait for confirmation.
+
+Explicit implementation language (“fix this”, “remove the validation”, “change it to…”) still means implement.
+
+This avoids jumping to patches when the user wanted understanding only.

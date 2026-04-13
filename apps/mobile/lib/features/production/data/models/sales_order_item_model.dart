@@ -73,11 +73,20 @@ class SalesOrderItem {
     if (productionRequests is List && productionRequests.isNotEmpty) {
       final productId = itemJson['product_id'];
       final capId = itemJson['cap_id'];
-      final innerId = itemJson['inner_id'];
+      final innerId = itemJson['inner_id']; // may be null
       try {
         final req = productionRequests.firstWhere(
-          (r) => (productId != null && r['product_id'] == productId && r['inner_id'] == innerId) ||
-                 (capId != null && r['cap_id'] == capId),
+          (r) {
+            if (productId != null && r['product_id'] == productId) {
+              // Match inner_id: both must be null or both must be equal
+              final rInnerId = r['inner_id'];
+              final innerMatch = (innerId == null && rInnerId == null) ||
+                  (innerId != null && innerId == rInnerId);
+              return innerMatch;
+            }
+            if (capId != null && r['cap_id'] == capId) return true;
+            return false;
+          },
         );
         prodStatus = req['status'] as String?;
       } catch (_) {
@@ -116,5 +125,11 @@ class SalesOrderItem {
       notes: orderJson['notes'] as String?,
       productionStatus: prodStatus,
     );
+  }
+
+  /// Same filter as [OrderPreparationScreen] — lines eligible to show for packing.
+  bool get showsInOrderPreparation {
+    final isReady = !isBackordered || productionStatus == 'prepared';
+    return !isPrepared && isReady;
   }
 }

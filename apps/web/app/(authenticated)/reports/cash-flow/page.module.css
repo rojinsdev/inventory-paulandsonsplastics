@@ -65,8 +65,10 @@
 .periodBtn.active {
     background: var(--surface-elevated);
     color: var(--primary);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
     font-weight: 600;
+}
+
+.active {
 }
 
 .periodButtons {
@@ -272,6 +274,7 @@
     padding: 1.5rem;
     display: flex;
     flex-direction: column;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -311,7 +314,6 @@
 }
 
 :root[class~="dark"] .chartCard {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .chartCard.fullWidth {
@@ -338,6 +340,15 @@
     min-height: 250px;
     display: flex;
     flex-direction: column;
+}
+
+.chartClickable {
+    cursor: pointer;
+}
+
+.chartClickable:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
 }
 
 /* Ledger Specifics */
@@ -382,14 +393,17 @@
 
 .datePicker:focus {
     border-color: var(--primary);
-    outline: none;
+    box-shadow: 0 0 0 4px var(--primary-alpha, rgba(37, 99, 235, 0.1));
 }
 
 .ledgerTableContainer {
     flex-grow: 1;
-    overflow-y: auto;
-    max-height: 350px;
     margin-bottom: 1rem;
+}
+
+.ledgerCard {
+    grid-column: 1 / -1;
+    width: 100%;
 }
 
 .tableHead {
@@ -529,6 +543,20 @@
     padding: 2rem;
 }
 
+.modalBackdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    padding: 2rem;
+}
+
 .modal {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -536,8 +564,133 @@
     width: 100%;
     max-width: 520px;
     padding: 2.5rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     animation: modalIn 0.3s ease-out;
+}
+
+.categoryManagerModal {
+    max-width: 960px;
+    width: 92vw;
+    max-height: 84vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal.categoryManagerModal {
+    border: none;
+}
+
+.categoryManagerForm {
+    flex: 1;
+    overflow: hidden;
+    padding: 2.25rem;
+    gap: 1.35rem;
+}
+
+.categoryManagerForm .formGrid {
+    gap: 1.25rem;
+}
+
+.segmentBtn {
+    min-height: 44px;
+}
+
+.categoryManagerSection {
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+    margin-top: 0.25rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.categoryManagerSectionHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.categoryManagerSectionTitle {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.categoryManagerSectionMeta {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+.categoryManagerEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 1.25rem;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    border: 1px dashed var(--border);
+    border-radius: 0.75rem;
+    background: var(--surface-elevated);
+}
+
+.categoryManagerList {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    overflow: auto;
+    padding-right: 0.25rem;
+    flex: 1;
+    min-height: 360px;
+}
+
+.categoryManagerRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.85rem;
+    background: var(--surface-elevated);
+}
+
+.categoryManagerRowActive {
+    border-color: var(--primary);
+    background: var(--surface);
+}
+
+.categoryManagerRowMain {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.categoryManagerRowTitle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-main);
+}
+
+.categoryManagerRowSub {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.categoryManagerRowActions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
 }
 
 .modalLandscape {
@@ -545,6 +698,70 @@
     min-height: 520px;
     display: flex;
     flex-direction: column;
+}
+
+.chartModal {
+    max-width: 1100px;
+    width: 96vw;
+    padding: 2rem;
+}
+
+.chartModalBody {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 2rem;
+    align-items: start;
+}
+
+.chartModalCanvas {
+    min-height: 420px;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    padding: 1rem;
+    background: var(--surface-elevated);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chartModalStats {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.chartStatCard {
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    background: var(--surface-elevated);
+}
+
+.chartStatLabel {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 700;
+}
+
+.chartStatValue {
+    margin-top: 0.4rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.chartStatSub {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+    .chartModalBody {
+        grid-template-columns: 1fr;
+    }
 }
 
 .modalColumns {
@@ -605,11 +822,9 @@
 
 /* Status Colors */
 .healthyStatus {
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
 }
 
 .criticalStatus {
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.1);
 }
 
 .inflowBorder {
@@ -713,6 +928,69 @@
     padding: 0.4rem;
     border-radius: 0.5rem;
     cursor: pointer;
+}
+
+.closeBtn:hover {
+    border-color: var(--primary);
+    color: var(--text-main);
+    background: var(--surface-hover);
+}
+
+/* Category Manager (minimal) */
+.categoryManagerBody {
+    padding: 1.75rem 2.5rem 2.25rem;
+}
+
+.categoryManagerForm {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    background: var(--surface-elevated);
+}
+
+.splitToggle {
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    padding: 0.85rem 0.9rem;
+    background: var(--surface);
+}
+
+.splitToggleActive {
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.splitLabel {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-main);
+    cursor: pointer;
+}
+
+.splitLabel input {
+    cursor: pointer;
+}
+
+.splitHint {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.splitBadge {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
 }
 
 .form {
@@ -852,7 +1130,6 @@ select.input {
 }
 
 .submitBtn:hover {
-    filter: brightness(1.1);
 }
 
 .spin {
@@ -905,6 +1182,7 @@ select.input {
 .activeItem {
     background: #ffffff !important;
     border-color: var(--primary) !important;
+    box-shadow: 0 10px 18px rgba(15, 23, 42, 0.12);
 }
 
 .inflowItem { border-left-color: var(--success) !important; }
@@ -1080,184 +1358,52 @@ select.input {
     border: 2px solid var(--error) !important;
 }
 
-/* Category Manager Modal Specifics */
-.managerModal {
-    max-width: 96vw !important;
-    width: 96vw;
-    height: 92vh;
-    display: flex;
-    flex-direction: column;
-    padding: 0 !important;
-    background: #ffffff;
-    border-radius: 32px;
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.15);
-    border: 2px solid var(--border);
-    overflow: hidden;
-}
-
-.managerHeader {
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.managerBody {
-    display: grid;
-    grid-template-columns: 420px 1fr;
-    flex: 1;
-    overflow: hidden;
-    height: 100%;
-    background: #ffffff;
-}
-
-/* Navigator Sidebar */
-.navigator {
-    border-right: 1px solid var(--border);
-    background: var(--slate-50);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.navHeader {
-    padding: 3rem;
-    display: flex;
-    flex-direction: column;
-    gap: 2rem;
-    background: #ffffff;
-    border-bottom: 2px solid var(--border);
-}
-
-.segmentedControl {
-    display: flex;
-    background: #e2e8f0;
-    padding: 4px;
-    border-radius: 12px;
-    gap: 4px;
-}
-
 .segmentBtn {
     flex: 1;
-    padding: 0.55rem 0.75rem;
+    padding: 0.45rem 0.6rem;
     border: none;
     background: transparent;
-    color: #64748b;
-    font-size: 0.8125rem;
-    font-weight: 800;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
     border-radius: 10px;
     cursor: pointer;
     transition: all 0.2s;
 }
 
-.segmentBtn.active {
-    background: #ffffff;
-    color: #0f172a;
-    box-shadow: 0 6px 12px rgba(15, 23, 42, 0.15);
+.segmentBtnActive {
+    background: var(--surface-elevated);
+    color: var(--text-main);
+    border: 1px solid var(--border);
 }
 
-.activeInflowSegment.active {
-    color: var(--success);
-}
-
-.activeExpenseSegment.active {
-    color: var(--error);
-}
-
-.searchWrapper {
-    position: relative;
+.actionButton {
     display: flex;
-    align-items: center;
-}
-
-.searchIcon {
-    position: absolute;
-    left: 12px;
-    color: var(--text-muted);
-}
-
-.searchInput {
-    width: 100%;
-    height: 40px;
-    padding: 0 12px 0 36px;
-    border-radius: 10px;
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    font-size: 0.875rem;
-    background: #ffffff;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.searchInput:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.navScrollArea {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.categoryItem {
-    padding: 2.5rem 3rem;
-    border-bottom: 2px solid var(--border);
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    position: relative;
-    background: #ffffff;
-}
-
-.categoryItem:hover {
-    background: #f8fafc;
-}
-
-.categoryItem.activeItem {
-    background: #f1f5f9;
-    border-right: 4px solid var(--primary);
-}
-
-.categoryItem.inflowItem.activeItem {
-    border-right-color: var(--success);
-}
-
-.categoryItem.expenseItem.activeItem {
-    border-right-color: var(--warning);
-}
-
-/* Editor Workspace */
-.workspace {
-    padding: 8rem 7rem;
-    overflow-y: auto;
-    background: #ffffff;
-    display: flex;
-    flex-direction: column;
-}
-
-.editorSurface {
-    width: 100%;
-    max-width: 1000px;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 6rem;
-}
-
-.emptyWorkspace {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background-color: var(--slate-100);
+    border: 1px solid var(--border);
+    border-radius: 0.5rem;
     color: var(--text-muted);
-    gap: 1rem;
-    opacity: 0.7;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+:root[class~="dark"] .actionButton {
+    background-color: var(--surface-elevated);
+}
+
+.actionButton:hover {
+    background-color: var(--slate-200);
+    border-color: var(--primary);
+    color: var(--text-main);
+}
+
+:root[class~="dark"] .actionButton:hover {
+    background-color: var(--surface-hover);
 }
 
 .proLabel {
@@ -1306,8 +1452,8 @@ select.input {
 
 .footerActions {
     margin-top: auto;
-    padding-top: 2rem;
-    border-top: 1px solid rgba(15, 23, 42, 0.1);
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1321,6 +1467,66 @@ select.input {
 .primaryActions {
     display: flex;
     gap: 1rem;
+}
+
+.secondaryButton {
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 0.45rem 1rem;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.2s;
+}
+
+.secondaryButton:hover {
+    color: var(--text-main);
+    border-color: var(--primary);
+    background: var(--surface-hover);
+}
+
+.primaryButton {
+    background: var(--primary);
+    border: 1px solid var(--primary);
+    padding: 0.45rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: white;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.primaryButton:hover {
+    filter: brightness(1.05);
+}
+
+.primaryButtonLoading {
+    opacity: 0.8;
+}
+
+.dangerButton {
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    padding: 0.45rem 1rem;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    color: var(--error);
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dangerButton:hover {
+    background: rgba(239, 68, 68, 0.08);
 }
 
 .ghostRed {
@@ -1493,39 +1699,49 @@ select.input {
 .shareToggle {
     display: flex;
     align-items: flex-start;
-    gap: 24px;
-    padding: 2.5rem;
-    background: #f8fafc;
-    border: 2px solid var(--border);
-    border-radius: 20px;
+    gap: 1rem;
+    padding: 0.85rem 1rem;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
     transition: all 0.2s;
     cursor: pointer;
 }
 
 .shareToggle:hover {
-    background: #f1f5f9;
+    background: var(--surface-hover);
 }
 
 .shareToggle.active {
     border-color: var(--success);
-    background: #f0fdf4;
+    background: rgba(16, 185, 129, 0.08);
 }
 
 .shareLabel {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
 }
 
 .shareTitle {
     font-size: 0.875rem;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--text-main);
 }
 
 .shareDesc {
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+.toggleControl {
+    padding-top: 2px;
+}
+
+.toggleCheckbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary);
 }
 
 .categoryFormInline {
@@ -1587,217 +1803,47 @@ select.input {
     border-color: var(--border);
 }
 
-.ledgerCard {
-    grid-column: 1 / -1;
-}
-
-/* Category Manager Refinements */
-.managerModalRefined {
-    max-width: 900px !important;
-    min-height: 600px !important;
-}
-
-.categoryNav {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    border-right: 1px solid var(--border);
-    padding-right: 1.5rem;
-}
-
-.navControls {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-}
-
-.categoryItemsList {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    overflow-y: auto;
-    max-height: 400px;
-    padding-right: 0.5rem;
-}
-
-.newItemBtn {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 1rem;
-    background: var(--surface-hover);
-    border: 1px dashed var(--primary);
-    border-radius: 0.75rem;
-    color: var(--primary);
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 0.5rem;
-}
-
-.newItemBtn:hover {
-    background: var(--primary);
-    color: white;
-}
-
-.categoryListItem {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.categoryListItem:hover {
-    border-color: var(--primary);
-    background: var(--surface-hover);
-}
-
-.categoryListItem.activeItem {
-    border-color: var(--primary);
-    background: rgba(var(--primary-rgb, 124, 58, 237), 0.05);
-    box-shadow: 0 0 0 1px var(--primary);
-}
-
-.catInfo {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.catNameText {
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: var(--text-main);
-}
-
-.catAmountText {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-.editorPane {
-    display: flex;
-    flex-direction: column;
-    padding-left: 1rem;
-}
-
-.emptyEditor {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    text-align: center;
-    gap: 1rem;
-    padding: 3rem;
-    opacity: 0.6;
-}
-
-.checkboxCard {
-    background: var(--surface-elevated);
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-    padding: 1rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-}
-
-.checkboxCard:hover {
-    border-color: var(--primary);
-}
-
-.checkboxCard.checked {
-    border-color: var(--success);
-    background: rgba(16, 185, 129, 0.05);
-}
-
-.checkboxGroup {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.customCheckbox {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--border);
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    transition: all 0.2s;
-}
-
-.customCheckbox.checked {
-    background: var(--success);
-    border-color: var(--success);
-}
-
-.checkMark {
-    width: 5px;
-    height: 10px;
-    border: solid white;
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
-    margin-bottom: 2px;
-}
-
-.checkboxInfo {
-    display: flex;
-    flex-direction: column;
-}
-
-.checkTitle {
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: var(--text-main);
-}
-
-.checkDesc {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-.editorActions {
-    display: flex;
-    align-items: center;
-    margin-top: auto;
-    padding-top: 1.5rem;
+.managerFooter {
+    padding: 0.75rem 1rem;
     border-top: 1px solid var(--border);
+    background: var(--surface-elevated);
 }
 
-.deleteLink {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    color: var(--error);
-    background: none;
-    border: none;
-    font-size: 0.875rem;
+.footerCloseButton {
+    width: 100%;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-main);
     font-weight: 600;
+    font-size: 0.8125rem;
     cursor: pointer;
-    opacity: 0.8;
-    transition: opacity 0.2s;
+    transition: all 0.2s;
 }
 
-.deleteLink:hover {
-    opacity: 1;
+.footerCloseButton:hover {
+    border-color: var(--primary);
+    background: var(--surface-hover);
 }
 
-.loadingCenter {
-    display: flex;
-    justify-content: center;
-    padding: 2rem;
-    color: var(--primary);
+@media (max-width: 900px) {
+    .managerBody {
+        grid-template-columns: 1fr;
+    }
+
+    .navigator {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+
+    .workspace {
+        padding: 1.5rem;
+    }
+
+    .fieldGrid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Response Design */

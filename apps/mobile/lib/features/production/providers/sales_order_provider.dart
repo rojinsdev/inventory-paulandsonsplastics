@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../auth/data/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../data/models/sales_order_item_model.dart';
 import '../data/sales_order_repository.dart';
@@ -10,7 +12,21 @@ final salesOrderRepositoryProvider = Provider.autoDispose((ref) {
 
 final pendingOrdersProvider = StateNotifierProvider.autoDispose<
     PendingOrdersNotifier, AsyncValue<List<SalesOrderItem>>>((ref) {
-  return PendingOrdersNotifier(ref.watch(salesOrderRepositoryProvider));
+  final notifier =
+      PendingOrdersNotifier(ref.watch(salesOrderRepositoryProvider));
+
+  void kick() {
+    final factoryId = ref.read(authStateProvider).valueOrNull?.factoryId;
+    Future.microtask(() => notifier.fetchPending(factoryId: factoryId));
+  }
+
+  kick();
+  ref.listen<AsyncValue<User?>>(authStateProvider, (prev, next) {
+    if (next.isLoading) return;
+    notifier.fetchPending(factoryId: next.valueOrNull?.factoryId);
+  });
+
+  return notifier;
 });
 
 class PendingOrdersNotifier

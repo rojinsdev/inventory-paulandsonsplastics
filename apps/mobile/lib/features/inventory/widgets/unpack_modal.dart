@@ -20,11 +20,16 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
   String _toState = 'packed';
   bool _isProcessing = false;
 
-  String get _unitLabel {
-    final ut = widget.stock.unitType ?? 'bundle';
-    final label = ut == 'bundle' ? 'bundle' : ut;
-    return label[0].toUpperCase() + label.substring(1);
-  }
+  StockCombination? get _finishedCombo => InventoryStockComboHelper.unpackSourceCombo(
+        widget.stock,
+        'finished',
+      );
+
+  String get _finishedSingularLabel =>
+      InventoryStockComboHelper.finishedUnitSingularLabel(_finishedCombo);
+
+  String get _finishedPluralLabel =>
+      InventoryStockComboHelper.finishedUnitPluralLabel(_finishedCombo);
 
   int get _availableStock =>
       _fromState == 'finished' ? widget.stock.bundledQty : widget.stock.packedQty;
@@ -56,13 +61,21 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
 
     setState(() => _isProcessing = true);
     try {
+      final src = InventoryStockComboHelper.unpackSourceCombo(
+        widget.stock,
+        _fromState,
+      );
+      final apiUnitType = _fromState == 'finished'
+          ? InventoryStockComboHelper.apiFinishedUnitType(src)
+          : 'packet';
+
       await ref.read(inventoryOperationProvider.notifier).unpack(
             widget.stock.productId ?? '',
             qty,
             _fromState,
             _toState,
-            unitType: widget.stock.unitType ?? 'bundle',
-            capId: widget.stock.capId,
+            unitType: apiUnitType,
+            capId: src?.capId,
           );
 
       if (mounted) {
@@ -92,21 +105,21 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
     final qty = int.tryParse(_quantityController.text) ?? 0;
     int multiplier = 0;
     if (_fromState == 'finished') {
-      final unitType = widget.stock.unitType ?? 'bundle';
+      final t = InventoryStockComboHelper.apiFinishedUnitType(_finishedCombo);
       if (_toState == 'packed') {
-        if (unitType == 'bundle') {
+        if (t == 'bundle') {
           multiplier = widget.stock.packetsPerBundle ?? 50;
-        } else if (unitType == 'bag') {
+        } else if (t == 'bag') {
           multiplier = widget.stock.packetsPerBag ?? 0;
-        } else if (unitType == 'box') {
+        } else if (t == 'box') {
           multiplier = widget.stock.packetsPerBox ?? 0;
         }
       } else {
-        if (unitType == 'bundle') {
+        if (t == 'bundle') {
           multiplier = widget.stock.itemsPerBundle ?? 600;
-        } else if (unitType == 'bag') {
+        } else if (t == 'bag') {
           multiplier = widget.stock.itemsPerBag ?? 0;
-        } else if (unitType == 'box') {
+        } else if (t == 'box') {
           multiplier = widget.stock.itemsPerBox ?? 0;
         }
       }
@@ -179,7 +192,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               Text(
-                'Available: $_availableStock ${_fromState == 'finished' ? _unitLabel : 'Packet'}s',
+                'Available: $_availableStock ${_fromState == 'finished' ? _finishedPluralLabel : 'Packets'}',
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: (_availableStock == 0)
                       ? colorScheme.error
@@ -193,7 +206,7 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
           Row(
             children: [
               _SourceChip(
-                label: _unitLabel,
+                label: _finishedSingularLabel,
                 isSelected: _fromState == 'finished',
                 onSelected: () => setState(() {
                   _fromState = 'finished';
@@ -265,7 +278,8 @@ class _UnpackModalState extends ConsumerState<UnpackModal> {
                 borderRadius: BorderRadius.circular(20),
                 borderSide: BorderSide.none,
               ),
-              suffixText: _fromState == 'finished' ? _unitLabel : 'Packets',
+              suffixText:
+                  _fromState == 'finished' ? _finishedSingularLabel : 'Packets',
             ),
           ),
 

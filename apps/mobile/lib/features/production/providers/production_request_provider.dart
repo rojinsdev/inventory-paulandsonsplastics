@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../auth/data/user_model.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../data/models/production_request_model.dart';
 import '../data/production_request_repository.dart';
@@ -12,7 +14,20 @@ final productionRequestRepositoryProvider =
 final productionRequestsProvider = StateNotifierProvider<
     ProductionRequestNotifier, AsyncValue<List<ProductionRequest>>>((ref) {
   final repository = ref.watch(productionRequestRepositoryProvider);
-  return ProductionRequestNotifier(repository);
+  final notifier = ProductionRequestNotifier(repository);
+
+  void kick() {
+    final factoryId = ref.read(authStateProvider).valueOrNull?.factoryId;
+    Future.microtask(() => notifier.fetchRequests(factoryId: factoryId));
+  }
+
+  kick();
+  ref.listen<AsyncValue<User?>>(authStateProvider, (prev, next) {
+    if (next.isLoading) return;
+    notifier.fetchRequests(factoryId: next.valueOrNull?.factoryId);
+  });
+
+  return notifier;
 });
 
 class ProductionRequestNotifier
@@ -20,9 +35,7 @@ class ProductionRequestNotifier
   final ProductionRequestRepository _repository;
 
   ProductionRequestNotifier(this._repository)
-      : super(const AsyncValue.loading()) {
-    fetchRequests();
-  }
+      : super(const AsyncValue.loading());
 
   Future<void> fetchRequests({String? factoryId}) async {
     state = const AsyncValue.loading();

@@ -18,52 +18,66 @@ export function registerNotificationHandlers() {
             const { order_id, items, delivery_date } = payload;
             const shortOrderId = order_id.slice(-6).toUpperCase();
 
-            // Find all factories involved in this order
             const factoryIds = new Set<string>();
             for (const item of items) {
-                // If the payload has factory_id from product, use it. 
-                // Otherwise, default or fetch it.
-                // In our current RPC, items have product_id.
-                const { data: product } = await supabase
-                    .from('products')
-                    .select('factory_id')
-                    .eq('id', item.product_id)
-                    .single();
-                
-                factoryIds.add(product?.factory_id || MAIN_FACTORY_ID);
+                if (item.product_id) {
+                    const { data: product } = await supabase
+                        .from('products')
+                        .select('factory_id')
+                        .eq('id', item.product_id)
+                        .single();
+                    factoryIds.add(product?.factory_id || MAIN_FACTORY_ID);
+                } else if (item.cap_id) {
+                    const { data: cap } = await supabase
+                        .from('caps')
+                        .select('factory_id')
+                        .eq('id', item.cap_id)
+                        .single();
+                    factoryIds.add(cap?.factory_id || MAIN_FACTORY_ID);
+                } else {
+                    factoryIds.add(MAIN_FACTORY_ID);
+                }
             }
 
+            const pushData = { order_id, type: 'sales_order' };
+
             for (const factoryId of factoryIds) {
-                // Get managers for this factory
                 const { data: managers } = await supabase
                     .from('user_profiles')
                     .select('id')
                     .eq('role', 'production_manager')
                     .eq('factory_id', factoryId);
 
-                if (managers) {
-                    for (const manager of managers) {
-                        try {
-                            await supabase.from('notifications').insert({
-                                user_id: manager.id,
-                                title: 'New Sales Order Needs Preparation',
-                                message: `Order #${shortOrderId} has items from your factory. Delivery scheduled for ${delivery_date || 'ASAP'}.`,
-                                type: 'sales_order_preparation',
-                                metadata: { order_id }
-                            });
-                        } catch (notifyError) {
-                            logger.error('[NotificationHandler] Failed internal notification', { managerId: manager.id, orderId: order_id });
-                        }
+                for (const manager of managers ?? []) {
+                    try {
+                        await supabase.from('notifications').insert({
+                            user_id: manager.id,
+                            title: 'New Sales Order Needs Preparation',
+                            message: `Order #${shortOrderId} has items from your factory. Delivery scheduled for ${delivery_date || 'ASAP'}.`,
+                            type: 'sales_order_preparation',
+                            metadata: { order_id }
+                        });
+                    } catch (notifyError) {
+                        logger.error('[NotificationHandler] Failed internal notification', { managerId: manager.id, orderId: order_id });
                     }
+                }
 
-                    // Mobile Push to Managers and Admins
-                    await pushNotificationService.sendToRole(['production_manager', 'admin'], {
+                await pushNotificationService.sendToRole(
+                    'production_manager',
+                    {
                         title: 'New Sales Order Received',
                         body: `Order #${shortOrderId} requires items from your factory.`,
-                        data: { order_id, type: 'sales_order' }
-                    }, factoryId);
-                }
+                        data: pushData
+                    },
+                    factoryId
+                );
             }
+
+            await pushNotificationService.sendToRole('admin', {
+                title: 'New Sales Order Received',
+                body: `Order #${shortOrderId} was placed.`,
+                data: pushData
+            });
         } catch (error) {
             logger.error('[NotificationHandler] Error in SALES_ORDER_CREATED handler', { error, orderId: payload.order_id });
         }

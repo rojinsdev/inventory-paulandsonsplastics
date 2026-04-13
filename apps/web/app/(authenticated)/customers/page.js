@@ -177,6 +177,7 @@ export default function CustomersPage() {
                         </button>
                     </div>
                 ) : (
+                    <div className={styles.tableScroll}>
                     <table className="table">
                         <thead>
                             <tr>
@@ -252,6 +253,7 @@ export default function CustomersPage() {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </div>
 

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../core/widgets/multi_select_downtime_reason.dart';
 import '../../production/providers/master_data_provider.dart';
 import '../../production/providers/production_provider.dart';
 import '../data/models/machine_model.dart';
@@ -31,7 +30,6 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
   String? _selectedMachineId;
   String? _selectedTemplateId;
   String? _selectedProductId; // Represents the specific variant (Color)
-  List<String> _selectedDowntimeReasons = [];
   int _shiftNumber = 1; // 1 = Day (8AM-8PM), 2 = Night (8PM-8AM)
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
@@ -87,42 +85,43 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
           
           if (hour != null && minute != null) {
             setState(() {
-              _startTime = TimeOfDay(hour: hour, minute: minute);
-
-              // Auto-adjust end time if it's now before or same as start time
-              final startMinutes = _startTime.hour * 60 + _startTime.minute;
-              var endMinutes = _endTime.hour * 60 + _endTime.minute;
-
-              if (_shiftNumber == 2 && endMinutes < 480) {
-                endMinutes += 24 * 60; // Handle overnight for comparison
+              final newStart = TimeOfDay(hour: hour, minute: minute);
+              
+              // 1. Boundary check: If last session ended at or after shift boundary,
+              // don't apply sticky start; keep default shift start.
+              bool isAtShiftEnd = false;
+              if (_shiftNumber == 1) {
+                // Shift 1 boundary: 8:00 PM (20:00)
+                if (hour >= 20) isAtShiftEnd = true;
+              } else {
+                // Shift 2 boundary: 8:00 AM (08:00)
+                if (hour >= 8 && hour < 20) isAtShiftEnd = true;
               }
 
-              final effectiveStartMinutes =
-                  (_shiftNumber == 2 && startMinutes < 480)
-                      ? startMinutes + 24 * 60
-                      : startMinutes;
+              if (isAtShiftEnd) {
+                // Keep default shift times if the shift is effectively over
+                return;
+              }
 
-              if (effectiveStartMinutes >= endMinutes) {
-                // Move end time to at least 1 hour after start, or shift end
-                int nextHour = (_startTime.hour + 1) % 24;
-                
-                // If adding 1 hour crosses the boundary, use the boundary
-                // BUT if we are already AT the boundary, this is a problematic session
-                if (_shiftNumber == 1) {
-                  _endTime = TimeOfDay(hour: nextHour > 20 ? 20 : nextHour, minute: _startTime.minute);
-                } else {
-                  // Shift 2: 20:00 to 08:00
-                  bool isPastBoundary = nextHour > 8 && nextHour < 20;
-                  _endTime = TimeOfDay(hour: isPastBoundary ? 8 : nextHour, minute: _startTime.minute);
-                }
-                
-                // Final safety: if they are still same, add 1 minute for UI clarity
-                if (_startTime.hour == _endTime.hour && _startTime.minute == _endTime.minute) {
-                   _endTime = TimeOfDay(
-                     hour: _endTime.hour, 
-                     minute: (_endTime.minute + 15) % 60
-                   );
-                }
+              _startTime = newStart;
+
+              // 2. Adjust end time to shift boundary (don't force short sessions)
+              if (_shiftNumber == 1) {
+                _endTime = const TimeOfDay(hour: 20, minute: 0);
+              } else {
+                _endTime = const TimeOfDay(hour: 8, minute: 0);
+              }
+
+              // Final safety: ensuring duration > 0
+              final startMins = _startTime.hour * 60 + _startTime.minute;
+              var endMins = _endTime.hour * 60 + _endTime.minute;
+              if (_shiftNumber == 2 && endMins < 480) endMins += 24 * 60;
+              final effStartMins = (_shiftNumber == 2 && startMins < 480) ? startMins + 24 * 60 : startMins;
+
+              if (effStartMins >= endMins) {
+                // If we're already at/past boundary, this shouldn't happen due to isAtShiftEnd,
+                // but if it does, fallback to 15 min or default.
+                _endTime = TimeOfDay(hour: (_startTime.hour + 1) % 24, minute: _startTime.minute);
               }
             });
           }
@@ -273,8 +272,8 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                 double.tryParse(_actualCycleTimeController.text) ?? 0.0,
             actualWeightGrams: (double.tryParse(_actualWeightController.text) ?? 0.0),
             downtimeMinutes: downtimeMinutes,
-            downtimeReason: _selectedDowntimeReasons.isNotEmpty
-                ? _selectedDowntimeReasons.join(', ')
+            downtimeReason: _downtimeReasonController.text.isNotEmpty
+                ? _downtimeReasonController.text
                 : null,
             date: _selectedDate,
             saveAndAddAnother: saveAndAddAnother,
@@ -936,40 +935,27 @@ class _ProductionEntryScreenState extends ConsumerState<ProductionEntryScreen> {
                       ? ((shiftDurationSeconds - actualProductionTimeSeconds) / 60).floor().clamp(0, 1440)
                       : 0;
                   
-                  final isRequired = shouldCalculate && downtimeMinutes > 30;
+                  final isRequired = shouldCalculate && downtimeMinutes >= 30;
 
-                  return Column(
-                    children: [
-                      MultiSelectDowntimeReason(
-                        initialValues: _selectedDowntimeReasons,
-                        labelText: isRequired ? 'Downtime Reasons (Required: ${downtimeMinutes}m)' : 'Downtime Reasons (Optional: ${downtimeMinutes}m)',
-                        helperText: isRequired ? 'Reason required for downtime > 30 mins' : null,
-                        helperStyle: TextStyle(color: isRequired ? Theme.of(context).colorScheme.error : null),
-                        onSelectionChanged: (selected) {
-                          setState(() {
-                            _selectedDowntimeReasons = selected;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      if (_selectedDowntimeReasons.contains('Other')) ...[
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _downtimeReasonController,
-                          decoration: const InputDecoration(
-                            labelText: 'Specify Other Reason',
-                            prefixIcon: Icon(Icons.edit_note),
-                          ),
-                          maxLines: 2,
-                          validator: (val) {
-                            if (isRequired && (val == null || val.trim().isEmpty)) {
-                              return 'Please specify the reason';
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
-                    ],
+                  return TextFormField(
+                    controller: _downtimeReasonController,
+                    decoration: InputDecoration(
+                      labelText: isRequired
+                          ? 'Downtime Reason (Required: ${downtimeMinutes}m)'
+                          : 'Downtime Reason (Optional)',
+                      prefixIcon: const Icon(Icons.report_problem_outlined),
+                      helperText: isRequired
+                          ? 'Reason required for downtime ≥ 30 mins'
+                          : null,
+                      helperStyle: isRequired ? TextStyle(color: Theme.of(context).colorScheme.error) : null,
+                    ),
+                    maxLines: 2,
+                    validator: (val) {
+                      if (isRequired && (val == null || val.trim().isEmpty)) {
+                        return 'Please enter a reason for the downtime';
+                      }
+                      return null;
+                    },
                   );
                 },
               ),

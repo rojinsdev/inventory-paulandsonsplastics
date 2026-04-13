@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { innerService } from './inner.service';
 import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 
 export class InnerController {
     create = async (req: AuthRequest, res: Response) => {
@@ -49,9 +50,10 @@ export class InnerController {
         }
     }
 
-    getBalances = async (req: Request, res: Response) => {
+    getBalances = async (req: AuthRequest, res: Response) => {
         try {
-            const factoryId = req.query.factory_id as string;
+            const resolved = resolveAuthorizedFactoryId(req);
+            const factoryId = resolved || (req.query.factory_id as string | undefined);
             const balances = await innerService.getInnerStockBalances(factoryId);
             res.json(balances);
         } catch (error: any) {
@@ -69,9 +71,10 @@ export class InnerController {
         }
     }
 
-    listTemplates = async (req: Request, res: Response) => {
+    listTemplates = async (req: AuthRequest, res: Response) => {
         try {
-            const factoryId = req.query.factory_id as string | undefined;
+            const resolved = resolveAuthorizedFactoryId(req);
+            const factoryId = resolved || (req.query.factory_id as string | undefined);
             const templates = await innerService.getTemplates(factoryId);
             res.json(templates);
         } catch (error: any) {
@@ -79,10 +82,12 @@ export class InnerController {
         }
     }
 
-    getTemplate = async (req: Request, res: Response) => {
+    getTemplate = async (req: AuthRequest, res: Response) => {
         try {
             const { id } = req.params;
-            const template = await innerService.getTemplateById(id);
+            const resolved = resolveAuthorizedFactoryId(req);
+            const factoryId = resolved || (req.query.factory_id as string | undefined);
+            const template = await innerService.getTemplateById(id, factoryId);
             res.json(template);
         } catch (error: any) {
             res.status(500).json({ error: error.message });

@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { cashFlowController } from './cash-flow.controller';
+import { authenticate, requireRole } from '../../middleware/auth';
 
 const router = Router();
+
+router.use(authenticate);
+router.use(requireRole('admin'));
 
 router.get('/daily', (req, res) => cashFlowController.getDailySheet(req, res));
 router.get('/analytics', (req, res) => cashFlowController.getMonthlyAnalytics(req, res));

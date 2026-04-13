@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
     ArrowLeft, 
@@ -16,18 +16,28 @@ import {
     Briefcase,
     Package,
     ShieldCheck,
-    CreditCard
+    CreditCard,
+    Factory,
 } from 'lucide-react';
 import Link from 'next/link';
 import { suppliersAPI, purchasesAPI } from '@/lib/api';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { useFactory } from '@/contexts/FactoryContext';
 import styles from './SupplierProfile.module.css';
 
+function defaultFactoryId(selectedFactory, factoriesList) {
+    if (typeof selectedFactory === 'string' && selectedFactory) return selectedFactory;
+    if (selectedFactory && typeof selectedFactory === 'object' && selectedFactory.id) return selectedFactory.id;
+    return factoriesList?.[0]?.id || '';
+}
+
 export default function SupplierProfile({ supplierId }) {
+    const { selectedFactory, factories } = useFactory();
     const queryClient = useQueryClient();
     const [activeTab, setActiveTab] = useState('overview');
     const [recordPaymentModal, setRecordPaymentModal] = useState(false);
     const [paymentFormData, setPaymentFormData] = useState({
+        factory_id: '',
         amount: '',
         payment_date: new Date().toISOString().split('T')[0],
         payment_mode: 'Bank Transfer',
@@ -62,6 +72,7 @@ export default function SupplierProfile({ supplierId }) {
             queryClient.invalidateQueries({ queryKey: ['suppliers'] });
             setRecordPaymentModal(false);
             setPaymentFormData({
+                factory_id: defaultFactoryId(selectedFactory, factories),
                 amount: '',
                 payment_date: new Date().toISOString().split('T')[0],
                 payment_mode: 'Bank Transfer',
@@ -71,11 +82,26 @@ export default function SupplierProfile({ supplierId }) {
         onError: (err) => alert(err.message)
     });
 
+    useEffect(() => {
+        if (!recordPaymentModal) return;
+        const def = defaultFactoryId(selectedFactory, factories);
+        setPaymentFormData((prev) => ({
+            ...prev,
+            factory_id:
+                prev.factory_id && factories?.some((f) => f.id === prev.factory_id) ? prev.factory_id : def,
+        }));
+    }, [recordPaymentModal, selectedFactory, factories]);
+
     const handleRecordPayment = (e) => {
         e.preventDefault();
+        const factory_id = paymentFormData.factory_id || defaultFactoryId(selectedFactory, factories);
+        if (!factory_id) {
+            return alert('Select which factory this payment is for.');
+        }
         paymentMutation.mutate({
             ...paymentFormData,
-            factory_id: supplier?.factory_id
+            amount: Number(paymentFormData.amount),
+            factory_id,
         });
     };
 
@@ -411,9 +437,33 @@ export default function SupplierProfile({ supplierId }) {
                         </div>
                         <form onSubmit={handleRecordPayment}>
                             <div className={styles.modalBody}>
-                                <div className="bg-amber-50 border border-amber-200 p-4 rounded-lg mb-6 text-sm text-amber-800 flex items-center gap-3">
+                                <div className={styles.outstandingNotice}>
                                     <CreditCard size={18} />
                                     <span>Current outstanding balance: <strong>{formatCurrency(pendingBalance)}</strong></span>
+                                </div>
+
+                                <div className={styles.inputGroup}>
+                                    <label className={cn(styles.flex, styles.itemsCenter, 'gap-2')}>
+                                        <Factory size={14} />
+                                        Factory *
+                                    </label>
+                                    <select
+                                        className={styles.inputField}
+                                        value={paymentFormData.factory_id || defaultFactoryId(selectedFactory, factories)}
+                                        onChange={(e) =>
+                                            setPaymentFormData((p) => ({ ...p, factory_id: e.target.value }))
+                                        }
+                                        required
+                                    >
+                                        {(factories || []).map((f) => (
+                                            <option key={f.id} value={f.id}>
+                                                {f.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-muted text-xs mt-1 leading-snug">
+                                        Choose the factory this payment applies to; it does not depend on the supplier record.
+                                    </p>
                                 </div>
                                 
                                 <div className={styles.inputGroup}>
@@ -471,7 +521,7 @@ export default function SupplierProfile({ supplierId }) {
                                 <button
                                     type="button"
                                     onClick={() => setRecordPaymentModal(false)}
-                                    className="px-4 py-2 text-gray-500 hover:text-gray-700 transition"
+                                    className={styles.cancelButton}
                                 >
                                     Cancel
                                 </button>

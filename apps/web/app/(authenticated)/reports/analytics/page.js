@@ -14,7 +14,6 @@ import {
     RefreshCw,
     X,
     IndianRupee,
-    ChevronRight,
 } from 'lucide-react';
 import { PieChart } from '@mui/x-charts/PieChart';
 import { LineChart } from '@mui/x-charts/LineChart';
@@ -40,7 +39,7 @@ export default function AnalyticsPage() {
     const [showCustomDateRange, setShowCustomDateRange] = useState(false);
     const [customStartDate, setCustomStartDate] = useState('');
     const [customEndDate, setCustomEndDate] = useState('');
-    const { selectedFactory } = useFactory(); // Use Global Context
+    const { selectedFactory, setSelectedFactory, factories } = useFactory(); // Use Global Context
 
     // State for all analytics data
     const [summary, setSummary] = useState(null);
@@ -49,7 +48,6 @@ export default function AnalyticsPage() {
     const [downtimeBreakdown, setDowntimeBreakdown] = useState(null);
     const [machineEfficiency, setMachineEfficiency] = useState(null);
     const [shiftComparison, setShiftComparison] = useState(null);
-    const [actionRequired, setActionRequired] = useState([]);
 
     const getDateRange = useCallback(() => {
         const today = new Date();
@@ -107,7 +105,7 @@ export default function AnalyticsPage() {
                 params.factory_id = selectedFactory;
             }
 
-            const [summaryData, cycleData, weightData, downtimeData, efficiencyData, shiftData, actionData] =
+            const [summaryData, cycleData, weightData, downtimeData, efficiencyData, shiftData] =
                 await Promise.all([
                     analyticsAPI.getSummary(params),
                     analyticsAPI.getCycleTimeLoss(params),
@@ -115,7 +113,6 @@ export default function AnalyticsPage() {
                     analyticsAPI.getDowntimeBreakdown(params),
                     analyticsAPI.getMachineEfficiency(params),
                     analyticsAPI.getShiftComparison(params),
-                    analyticsAPI.getActionRequired(params),
                 ]);
 
             setSummary(summaryData);
@@ -124,7 +121,6 @@ export default function AnalyticsPage() {
             setDowntimeBreakdown(downtimeData);
             setMachineEfficiency(efficiencyData);
             setShiftComparison(shiftData);
-            setActionRequired(actionData);
         } catch (error) {
             console.error('Failed to fetch analytics:', error);
         } finally {
@@ -133,7 +129,6 @@ export default function AnalyticsPage() {
     }, [getDateRange, selectedFactory]);
 
     const handleCustomDateApply = useCallback(() => {
-        setShowCustomDateRange(false);
         fetchAllAnalytics();
     }, [fetchAllAnalytics]);
 
@@ -172,6 +167,13 @@ export default function AnalyticsPage() {
                             onClick={() => {
                                 setTimePeriod(period.value);
                                 if (period.value === 'custom') {
+                                    const today = new Date();
+                                    const end = today.toISOString().split('T')[0];
+                                    const start = new Date(today);
+                                    start.setDate(today.getDate() - 7);
+                                    const startStr = start.toISOString().split('T')[0];
+                                    if (!customStartDate) setCustomStartDate(startStr);
+                                    if (!customEndDate) setCustomEndDate(end);
                                     setShowCustomDateRange(true);
                                 } else {
                                     setShowCustomDateRange(false);
@@ -191,24 +193,42 @@ export default function AnalyticsPage() {
             {showCustomDateRange && (
                 <div className={styles.customDateRange}>
                     <div className={styles.customDateContent}>
-                        <label>
-                            Start Date:
+                        <div className={styles.filterGroup}>
+                            <div className={styles.filterLabel}>Start</div>
                             <input
                                 type="date"
+                                className={styles.filterInput}
                                 value={customStartDate}
                                 onChange={(e) => setCustomStartDate(e.target.value)}
                                 max={new Date().toISOString().split('T')[0]}
                             />
-                        </label>
-                        <label>
-                            End Date:
+                        </div>
+                        <div className={styles.filterGroup}>
+                            <div className={styles.filterLabel}>End</div>
                             <input
                                 type="date"
+                                className={styles.filterInput}
                                 value={customEndDate}
                                 onChange={(e) => setCustomEndDate(e.target.value)}
                                 max={new Date().toISOString().split('T')[0]}
                             />
-                        </label>
+                        </div>
+
+                        <div className={styles.filterGroup}>
+                            <div className={styles.filterLabel}>Factory</div>
+                            <select
+                                className={styles.filterInput}
+                                value={selectedFactory || ''}
+                                onChange={(e) => setSelectedFactory(e.target.value || null)}
+                            >
+                                <option value="">All factories</option>
+                                {(factories || []).map((f) => (
+                                    <option key={f.id} value={f.id}>
+                                        {f.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <button
                             className={styles.applyButton}
                             onClick={handleCustomDateApply}
@@ -222,6 +242,7 @@ export default function AnalyticsPage() {
                                 setShowCustomDateRange(false);
                                 setTimePeriod('7');
                             }}
+                            title="Exit custom range"
                         >
                             <X size={16} />
                         </button>
@@ -287,36 +308,8 @@ export default function AnalyticsPage() {
 
             {/* Charts Grid */}
             <div className={styles.chartsGrid}>
-                {/* Action Required - New Panel */}
-                <div className={styles.chartCard}>
-                    <div className={styles.chartHeader}>
-                        <h3 className={styles.chartTitle}>Action Required</h3>
-                        <span className={styles.chartSubtitle}>Immediate diagnostic focus</span>
-                    </div>
-                    {actionRequired?.length > 0 ? (
-                        <div className={styles.actionItems}>
-                            {actionRequired.map(item => (
-                                <div key={item.id} className={`${styles.actionItem} ${styles[item.severity]}`}>
-                                    <div className={styles.actionIcon}>
-                                        <AlertTriangle size={18} />
-                                    </div>
-                                    <div className={styles.actionContent}>
-                                        <p className={styles.actionReason}>{item.reason}</p>
-                                        <p className={styles.actionDetail}>
-                                            {item.date} • {item.machine_name} • {item.product_name}
-                                        </p>
-                                    </div>
-                                    <ChevronRight size={16} />
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className={styles.emptyState}>No urgent issues detected</div>
-                    )}
-                </div>
-
                 {/* Downtime Breakdown - Pie Chart */}
-                <div className={styles.chartCard}>
+                <div className={`${styles.chartCard} ${styles.fullWidth}`}>
                     <div className={styles.chartHeader}>
                         <h3 className={styles.chartTitle}>Downtime Breakdown</h3>
                         <span className={styles.chartSubtitle}>By reason</span>
@@ -337,7 +330,7 @@ export default function AnalyticsPage() {
                                             cornerRadius: 4,
                                         },
                                     ]}
-                                    height={250}
+                                    height={320}
                                 />
                             </div>
                         ) : (

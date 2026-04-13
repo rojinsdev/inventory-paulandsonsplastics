@@ -9,6 +9,17 @@ import { useGuide } from '@/contexts/GuideContext';
 import { formatDate, cn, formatCurrency } from '@/lib/utils';
 import styles from './page.module.css';
 
+/** Units still deliverable on a line (prepared − shipped, or reserved − shipped when marked prepared but quantity_prepared not updated). */
+function dispatchableRemaining(item) {
+    const shipped = Number(item.quantity_shipped) || 0;
+    const prep = Number(item.quantity_prepared) || 0;
+    const res = Number(item.quantity_reserved) || 0;
+    const fromPrep = prep - shipped;
+    if (fromPrep > 0) return fromPrep;
+    if (item.is_prepared && res > shipped) return res - shipped;
+    return 0;
+}
+
 export default function DeliveriesPage() {
     const { setPageTitle } = useUI();
     const { registerGuide } = useGuide();
@@ -97,16 +108,22 @@ export default function DeliveriesPage() {
     const handleOpenDeliveryModal = (order) => {
         setSelectedOrder(order);
         // Initialize form with product prices
-        const items = order.sales_order_items.map(item => ({
-            item_id: item.id,
-            product_id: item.product_id,
-            quantity: item.quantity,
-            quantity_prepared: item.quantity_prepared || 0,
-            quantity_shipped: item.quantity_shipped || 0,
-            dispatch_quantity: (item.quantity_prepared || 0) - (item.quantity_shipped || 0),
-            unit_type: item.unit_type,
-            unit_price: item.unit_price || getProductPrice(item.product_id)
-        }));
+        const items = order.sales_order_items.map(item => {
+            const maxDispatch = dispatchableRemaining(item);
+            return {
+                item_id: item.id,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                quantity_prepared: item.quantity_prepared || 0,
+                quantity_reserved: item.quantity_reserved || 0,
+                quantity_shipped: item.quantity_shipped || 0,
+                is_prepared: item.is_prepared,
+                max_dispatch: maxDispatch,
+                dispatch_quantity: maxDispatch,
+                unit_type: item.unit_type,
+                unit_price: item.unit_price || getProductPrice(item.product_id)
+            };
+        });
         setDeliveryForm({
             items,
             discount_type: 'percentage',
@@ -135,22 +152,20 @@ export default function DeliveriesPage() {
             items: prev.items.map(item => {
                 if (item.item_id === itemId) {
                     const qty = parseInt(newQty) || 0;
-                    const max = item.quantity_prepared - item.quantity_shipped;
-                    return { ...item, dispatch_quantity: Math.min(qty, max) };
+                    const max = item.max_dispatch ?? dispatchableRemaining(item);
+                    return { ...item, dispatch_quantity: Math.min(Math.max(0, qty), max) };
                 }
                 return item;
             })
         }));
     };
 
-    // Filter orders to only show those with pending (prepared but not shipped) items
+    // Lines ready to dispatch: prepared − shipped, or (when RPC left quantity_prepared at 0) reserved − shipped on prepared lines
     const displayOrders = useMemo(() => {
         if (!orders) return [];
-        return orders.filter(order => {
-            return order.sales_order_items?.some(item => 
-                (item.quantity_prepared || 0) > (item.quantity_shipped || 0)
-            );
-        });
+        return orders.filter(order =>
+            order.sales_order_items?.some(item => dispatchableRemaining(item) > 0)
+        );
     }, [orders]);
 
     // Calculate totals
@@ -292,7 +307,12 @@ export default function DeliveriesPage() {
                                             </div>
                                             <div className={styles.itemStatus}>
                                                 <span className={styles.shippedQty}>Shipped: {item.quantity_shipped || 0}</span>
-                                                <span className={styles.prepQty}>Prep: {item.quantity_prepared || 0}</span>
+                                                <span className={styles.prepQty}>
+                                                    Prep: {item.quantity_prepared || 0}
+                                                    {(item.quantity_reserved || 0) > 0 && (
+                                                        <> · Res: {item.quantity_reserved}</>
+                                                    )}
+                                                </span>
                                             </div>
                                         </div>
                                     ))}
@@ -318,140 +338,270 @@ export default function DeliveriesPage() {
 
             {/* Process Delivery Modal */}
             {showDeliveryModal && selectedOrder && (
-                <div className={styles.modalOverlay} onClick={() => setShowDeliveryModal(false)}>
-                    <div className={styles.deliveryModal} onClick={(e) => e.stopPropagation()}>
+                <div
+                    className={styles.modalOverlay}
+                    onClick={() => setShowDeliveryModal(false)}
+                    role="presentation"
+                >
+                    <div
+                        className={styles.deliveryModal}
+                        onClick={(e) => e.stopPropagation()}
+                        role="dialog"
+                        aria-labelledby="delivery-modal-title"
+                        aria-modal="true"
+                    >
                         <div className={styles.modalHeader}>
-                            <div>
-                                <h2 className={styles.modalTitle}>Process Delivery</h2>
-                                <p className={styles.modalSubtitle}>
-                                    Order #{selectedOrder.id?.slice(-6).toUpperCase()} - {getCustomerName(selectedOrder.customer_id)}
-                                </p>
+                            <div className={styles.modalHeaderMain}>
+                                <div className={styles.modalIconWrap} aria-hidden>
+                                    <Truck size={22} strokeWidth={1.75} />
+                                </div>
+                                <div>
+                                    <h2 id="delivery-modal-title" className={styles.modalTitle}>
+                                        Process delivery
+                                    </h2>
+                                    <div className={styles.modalMetaRow}>
+                                        <span className={styles.orderBadge}>
+                                            #{selectedOrder.id?.slice(-6).toUpperCase()}
+                                        </span>
+                                        <span className={styles.modalMetaDot} aria-hidden>
+                                            ·
+                                        </span>
+                                        <span className={styles.modalCustomer}>
+                                            {getCustomerName(selectedOrder.customer_id)}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
-                            <button className={styles.closeButton} onClick={() => setShowDeliveryModal(false)}>
+                            <button
+                                type="button"
+                                className={styles.closeButton}
+                                onClick={() => setShowDeliveryModal(false)}
+                                aria-label="Close"
+                            >
                                 <X size={20} />
                             </button>
                         </div>
 
                         <div className={styles.modalBody}>
-                            {/* Left Column - Pricing */}
                             <div className={styles.modalLeft}>
-                                {/* Product Pricing */}
                                 <div className={styles.section}>
-                                    <h3 className={styles.sectionTitle}>Product Pricing</h3>
-                                    <div className={styles.pricingTable}>
-                                        <div className={styles.pricingHeader}>
-                                            <span>Product</span>
-                                            <span>Order/Prep</span>
-                                            <span>Dispatch</span>
-                                            <span>Unit Price</span>
-                                            <span>Total</span>
-                                        </div>
-                                        {deliveryForm.items.map((item) => (
-                                            <div key={item.item_id} className={styles.pricingRow}>
-                                                <div className={styles.productInfo}>
-                                                    <span className={styles.productName}>{getProductName(item.product_id)}</span>
-                                                    <span className={styles.productMeta}>{item.unit_type}</span>
-                                                </div>
-                                                <div className={styles.qtyStats}>
-                                                    <span className={styles.orderQty}>Ord: {item.quantity}</span>
-                                                    <span className={styles.prepQty}>Prep: {item.quantity_prepared}</span>
-                                                </div>
-                                                <div className={styles.dispatchQty}>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.qtyInput}
-                                                        value={item.dispatch_quantity}
-                                                        onChange={(e) => handleItemDispatchQuantityChange(item.item_id, e.target.value)}
-                                                        min="0"
-                                                        max={item.quantity_prepared - item.quantity_shipped}
-                                                    />
-                                                </div>
-                                                <div className={styles.prefixWrapper}>
-                                                    <input
-                                                        type="number"
-                                                        className={styles.priceInput}
-                                                        value={item.unit_price}
-                                                        onChange={(e) => handleItemPriceChange(item.item_id, e.target.value)}
-                                                        step="0.01"
-                                                        min="0"
-                                                    />
-                                                </div>
-                                                <span className={styles.itemTotal}>{formatCurrency(item.unit_price * item.dispatch_quantity)}</span>
+                                    <div className={styles.sectionHead}>
+                                        <h3 className={styles.sectionTitle}>Line items &amp; pricing</h3>
+                                        <p className={styles.sectionHint}>
+                                            Confirm dispatch quantities and unit prices before payment.
+                                        </p>
+                                    </div>
+                                    <div className={styles.lineItemsScroll}>
+                                        <div className={styles.pricingTable}>
+                                            <div className={styles.pricingHeader}>
+                                                <span>Product</span>
+                                                <span>Order / prep</span>
+                                                <span>Dispatch</span>
+                                                <span>Unit price</span>
+                                                <span className={styles.pricingHeadNum}>Line total</span>
                                             </div>
-                                        ))}
+                                            {deliveryForm.items.map((item) => (
+                                                <div key={item.item_id} className={styles.pricingRow}>
+                                                    <div className={styles.productInfo}>
+                                                        <span className={styles.cellLabel}>Product</span>
+                                                        <span className={styles.productName}>
+                                                            {getProductName(item.product_id)}
+                                                        </span>
+                                                        <span className={styles.productMeta}>{item.unit_type}</span>
+                                                    </div>
+                                                    <div className={styles.qtyStats}>
+                                                        <span className={styles.cellLabel}>Order / prep</span>
+                                                        <span className={styles.orderQty}>Ord: {item.quantity}</span>
+                                                        <span className={styles.prepQty}>
+                                                            Prep: {item.quantity_prepared}
+                                                            {(item.quantity_reserved || 0) > 0 && (
+                                                                <> · Res: {item.quantity_reserved}</>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                    <div className={styles.dispatchQty}>
+                                                        <span className={styles.cellLabel}>Dispatch qty</span>
+                                                        <input
+                                                            type="number"
+                                                            className={styles.qtyInput}
+                                                            value={item.dispatch_quantity}
+                                                            onChange={(e) =>
+                                                                handleItemDispatchQuantityChange(
+                                                                    item.item_id,
+                                                                    e.target.value
+                                                                )
+                                                            }
+                                                            min="0"
+                                                            max={item.max_dispatch ?? 0}
+                                                            aria-label="Dispatch quantity"
+                                                        />
+                                                    </div>
+                                                    <div className={styles.priceCell}>
+                                                        <span className={styles.cellLabel}>Unit price</span>
+                                                        <div className={styles.prefixWrapper}>
+                                                            <input
+                                                                type="number"
+                                                                className={styles.priceInput}
+                                                                value={item.unit_price}
+                                                                onChange={(e) =>
+                                                                    handleItemPriceChange(item.item_id, e.target.value)
+                                                                }
+                                                                step="0.01"
+                                                                min="0"
+                                                                aria-label="Unit price"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <span className={styles.itemTotal}>
+                                                        <span className={styles.cellLabel}>Line total</span>
+                                                        <span className={styles.itemTotalValue}>
+                                                            {formatCurrency(item.unit_price * item.dispatch_quantity)}
+                                                        </span>
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Discount */}
                                 <div className={styles.section}>
-                                    <h3 className={styles.sectionTitle}>Discount (Optional)</h3>
+                                    <div className={styles.sectionHead}>
+                                        <h3 className={styles.sectionTitle}>Discount (optional)</h3>
+                                        <p className={styles.sectionHint}>Apply before totals on the right.</p>
+                                    </div>
                                     <div className={styles.discountRow}>
-                                        <div className={styles.discountToggle}>
+                                        <div className={styles.discountToggle} role="group" aria-label="Discount type">
                                             <button
-                                                className={cn(styles.toggleButton, deliveryForm.discount_type === 'percentage' && styles.active)}
-                                                onClick={() => setDeliveryForm(prev => ({ ...prev, discount_type: 'percentage' }))}
+                                                type="button"
+                                                className={cn(
+                                                    styles.toggleButton,
+                                                    deliveryForm.discount_type === 'percentage' && styles.active
+                                                )}
+                                                onClick={() =>
+                                                    setDeliveryForm((prev) => ({
+                                                        ...prev,
+                                                        discount_type: 'percentage'
+                                                    }))
+                                                }
                                             >
-                                                <Percent size={16} />
+                                                <Percent size={16} strokeWidth={2} />
                                                 Percentage
                                             </button>
                                             <button
-                                                className={cn(styles.toggleButton, deliveryForm.discount_type === 'fixed' && styles.active)}
-                                                onClick={() => setDeliveryForm(prev => ({ ...prev, discount_type: 'fixed' }))}
+                                                type="button"
+                                                className={cn(
+                                                    styles.toggleButton,
+                                                    deliveryForm.discount_type === 'fixed' && styles.active
+                                                )}
+                                                onClick={() =>
+                                                    setDeliveryForm((prev) => ({ ...prev, discount_type: 'fixed' }))
+                                                }
                                             >
-                                                <IndianRupee size={16} />
-                                                Fixed Amount
+                                                <IndianRupee size={16} strokeWidth={2} />
+                                                Fixed amount
                                             </button>
                                         </div>
-                                        <div className={styles.prefixWrapper} style={deliveryForm.discount_type === 'percentage' ? { '--prefix': '"%"' } : {}}>
-                                            <input
-                                                type="number"
-                                                className={styles.discountInput}
-                                                placeholder={deliveryForm.discount_type === 'percentage' ? 'Enter %' : 'Enter amount'}
-                                                value={deliveryForm.discount_value}
-                                                onChange={(e) => setDeliveryForm(prev => ({ ...prev, discount_value: parseFloat(e.target.value) || 0 }))}
-                                                step="0.01"
-                                                min="0"
-                                            />
+                                        <div
+                                            className={styles.discountValueWrap}
+                                            style={
+                                                deliveryForm.discount_type === 'percentage'
+                                                    ? { '--prefix': '"%"' }
+                                                    : {}
+                                            }
+                                        >
+                                            <label className={styles.srOnly} htmlFor="delivery-discount-input">
+                                                Discount value
+                                            </label>
+                                            <div className={styles.prefixWrapper}>
+                                                <input
+                                                    id="delivery-discount-input"
+                                                    type="number"
+                                                    className={styles.discountInput}
+                                                    placeholder={
+                                                        deliveryForm.discount_type === 'percentage'
+                                                            ? 'e.g. 5'
+                                                            : 'Amount'
+                                                    }
+                                                    value={deliveryForm.discount_value}
+                                                    onChange={(e) =>
+                                                        setDeliveryForm((prev) => ({
+                                                            ...prev,
+                                                            discount_value: parseFloat(e.target.value) || 0
+                                                        }))
+                                                    }
+                                                    step="0.01"
+                                                    min="0"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Payment Details */}
                                 <div className={styles.section}>
-                                    <h3 className={styles.sectionTitle}>Payment Details</h3>
+                                    <div className={styles.sectionHead}>
+                                        <h3 className={styles.sectionTitle}>Payment</h3>
+                                        <p className={styles.sectionHint}>Terms and how the customer is paying.</p>
+                                    </div>
                                     <div className={styles.paymentMode}>
-                                        <label className={styles.radioLabel}>
+                                        <label
+                                            className={cn(
+                                                styles.radioLabel,
+                                                deliveryForm.payment_mode === 'cash' && styles.radioLabelChecked
+                                            )}
+                                        >
                                             <input
                                                 type="radio"
                                                 name="payment_mode"
                                                 value="cash"
                                                 checked={deliveryForm.payment_mode === 'cash'}
-                                                onChange={(e) => setDeliveryForm(prev => ({ ...prev, payment_mode: e.target.value }))}
+                                                onChange={(e) =>
+                                                    setDeliveryForm((prev) => ({
+                                                        ...prev,
+                                                        payment_mode: e.target.value
+                                                    }))
+                                                }
                                             />
-                                            <span>Cash Payment</span>
+                                            <span>Cash payment</span>
                                         </label>
-                                        <label className={styles.radioLabel}>
+                                        <label
+                                            className={cn(
+                                                styles.radioLabel,
+                                                deliveryForm.payment_mode === 'credit' && styles.radioLabelChecked
+                                            )}
+                                        >
                                             <input
                                                 type="radio"
                                                 name="payment_mode"
                                                 value="credit"
                                                 checked={deliveryForm.payment_mode === 'credit'}
-                                                onChange={(e) => setDeliveryForm(prev => ({ ...prev, payment_mode: e.target.value }))}
+                                                onChange={(e) =>
+                                                    setDeliveryForm((prev) => ({
+                                                        ...prev,
+                                                        payment_mode: e.target.value
+                                                    }))
+                                                }
                                             />
-                                            <span>Credit Payment</span>
+                                            <span>Credit payment</span>
                                         </label>
                                     </div>
 
                                     {deliveryForm.payment_mode === 'credit' && (
                                         <div className={styles.creditFields}>
                                             <label className={styles.fieldLabel}>
-                                                <Calendar size={16} />
-                                                Credit Deadline
+                                                <span className={styles.fieldLabelText}>
+                                                    <Calendar size={16} strokeWidth={2} aria-hidden />
+                                                    Credit deadline
+                                                </span>
                                                 <input
                                                     type="date"
                                                     className={styles.dateInput}
                                                     value={deliveryForm.credit_deadline}
-                                                    onChange={(e) => setDeliveryForm(prev => ({ ...prev, credit_deadline: e.target.value }))}
+                                                    onChange={(e) =>
+                                                        setDeliveryForm((prev) => ({
+                                                            ...prev,
+                                                            credit_deadline: e.target.value
+                                                        }))
+                                                    }
                                                     min={new Date().toISOString().split('T')[0]}
                                                 />
                                             </label>
@@ -460,14 +610,19 @@ export default function DeliveriesPage() {
 
                                     <div className={styles.paymentFields}>
                                         <label className={styles.fieldLabel}>
-                                            Initial Payment
+                                            <span className={styles.fieldLabelText}>Initial payment</span>
                                             <div className={styles.prefixWrapper}>
                                                 <input
                                                     type="number"
                                                     className={styles.input}
-                                                    placeholder="Enter amount"
+                                                    placeholder="0.00"
                                                     value={deliveryForm.initial_payment}
-                                                    onChange={(e) => setDeliveryForm(prev => ({ ...prev, initial_payment: parseFloat(e.target.value) || 0 }))}
+                                                    onChange={(e) =>
+                                                        setDeliveryForm((prev) => ({
+                                                            ...prev,
+                                                            initial_payment: parseFloat(e.target.value) || 0
+                                                        }))
+                                                    }
                                                     step="0.01"
                                                     min="0"
                                                     max={calculations.total}
@@ -475,11 +630,16 @@ export default function DeliveriesPage() {
                                             </div>
                                         </label>
                                         <label className={styles.fieldLabel}>
-                                            Payment Method
+                                            <span className={styles.fieldLabelText}>Payment method</span>
                                             <select
                                                 className={styles.select}
                                                 value={deliveryForm.payment_method}
-                                                onChange={(e) => setDeliveryForm(prev => ({ ...prev, payment_method: e.target.value }))}
+                                                onChange={(e) =>
+                                                    setDeliveryForm((prev) => ({
+                                                        ...prev,
+                                                        payment_method: e.target.value
+                                                    }))
+                                                }
                                             >
                                                 <option value="Cash">Cash</option>
                                                 <option value="Bank Transfer">Bank Transfer</option>
@@ -490,54 +650,75 @@ export default function DeliveriesPage() {
                                     </div>
                                 </div>
 
-                                {/* Notes */}
                                 <div className={styles.section}>
-                                    <label className={styles.fieldLabel}>
-                                        Notes (Optional)
+                                    <div className={styles.sectionHead}>
+                                        <h3 className={styles.sectionTitle}>Notes (optional)</h3>
+                                    </div>
+                                    <label className={styles.fieldLabelFlat}>
                                         <textarea
                                             className={styles.textarea}
                                             rows={3}
-                                            placeholder="Add any delivery notes..."
+                                            placeholder="Delivery notes for the record…"
                                             value={deliveryForm.notes}
-                                            onChange={(e) => setDeliveryForm(prev => ({ ...prev, notes: e.target.value }))}
+                                            onChange={(e) =>
+                                                setDeliveryForm((prev) => ({ ...prev, notes: e.target.value }))
+                                            }
                                         />
                                     </label>
                                 </div>
                             </div>
 
-                            {/* Right Column - Summary */}
-                            <div className={styles.modalRight}>
+                            <aside className={styles.modalRight}>
                                 <div className={styles.summaryCard}>
-                                    <h3 className={styles.summaryTitle}>Order Summary</h3>
-                                    <div className={styles.summaryRow}>
-                                        <span>Subtotal</span>
-                                        <span>{formatCurrency(calculations.subtotal)}</span>
-                                    </div>
-                                    {calculations.discountAmount > 0 && (
-                                        <div className={cn(styles.summaryRow, styles.discount)}>
-                                            <span>Discount ({deliveryForm.discount_type === 'percentage' ? `${deliveryForm.discount_value}%` : 'Fixed'})</span>
-                                            <span>-{formatCurrency(calculations.discountAmount)}</span>
+                                    <h3 className={styles.summaryTitle}>Summary</h3>
+                                    <div className={styles.summaryBody}>
+                                        <div className={styles.summaryRow}>
+                                            <span>Subtotal</span>
+                                            <span className={styles.summaryAmount}>
+                                                {formatCurrency(calculations.subtotal)}
+                                            </span>
                                         </div>
-                                    )}
-                                    <div className={cn(styles.summaryRow, styles.total)}>
-                                        <span>Total Amount</span>
-                                        <span>{formatCurrency(calculations.total)}</span>
+                                        {calculations.discountAmount > 0 && (
+                                            <div className={cn(styles.summaryRow, styles.discount)}>
+                                                <span>
+                                                    Discount (
+                                                    {deliveryForm.discount_type === 'percentage'
+                                                        ? `${deliveryForm.discount_value}%`
+                                                        : 'Fixed'}
+                                                    )
+                                                </span>
+                                                <span className={styles.summaryAmount}>
+                                                    −{formatCurrency(calculations.discountAmount)}
+                                                </span>
+                                            </div>
+                                        )}
+                                        <div className={cn(styles.summaryRow, styles.total)}>
+                                            <span>Total</span>
+                                            <span className={styles.summaryTotal}>
+                                                {formatCurrency(calculations.total)}
+                                            </span>
+                                        </div>
+                                        {deliveryForm.initial_payment > 0 && (
+                                            <>
+                                                <div className={styles.summaryRow}>
+                                                    <span>Paid now</span>
+                                                    <span className={styles.summaryAmount}>
+                                                        {formatCurrency(deliveryForm.initial_payment)}
+                                                    </span>
+                                                </div>
+                                                <div className={cn(styles.summaryRow, styles.balance)}>
+                                                    <span>Balance due</span>
+                                                    <span className={styles.summaryBalance}>
+                                                        {formatCurrency(calculations.balance)}
+                                                    </span>
+                                                </div>
+                                            </>
+                                        )}
                                     </div>
-                                    {deliveryForm.initial_payment > 0 && (
-                                        <>
-                                            <div className={styles.summaryRow}>
-                                                <span>Amount Paid</span>
-                                                <span>{formatCurrency(deliveryForm.initial_payment)}</span>
-                                            </div>
-                                            <div className={cn(styles.summaryRow, styles.balance)}>
-                                                <span>Balance Due</span>
-                                                <span>{formatCurrency(calculations.balance)}</span>
-                                            </div>
-                                        </>
-                                    )}
                                 </div>
 
                                 <button
+                                    type="button"
                                     className={styles.submitButton}
                                     onClick={handleSubmitDelivery}
                                     disabled={deliveryMutation.isPending}
@@ -545,16 +726,16 @@ export default function DeliveriesPage() {
                                     {deliveryMutation.isPending ? (
                                         <>
                                             <Loader2 size={18} className={styles.spinner} />
-                                            Processing...
+                                            Processing…
                                         </>
                                     ) : (
                                         <>
-                                            <CheckCircle size={18} />
-                                            Confirm Delivery
+                                            <CheckCircle size={18} strokeWidth={2} />
+                                            Confirm delivery
                                         </>
                                     )}
                                 </button>
-                            </div>
+                            </aside>
                         </div>
                     </div>
                 </div>

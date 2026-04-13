@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { AuthRequest } from '../../middleware/auth';
 import { notificationService } from './notification.service';
 import { pushNotificationService } from './push-notification.service';
 
@@ -6,7 +7,8 @@ export class NotificationController {
     async getNotifications(req: Request, res: Response) {
         try {
             const factoryId = req.query.factory_id as string | undefined;
-            const notifications = await notificationService.getActiveNotifications(factoryId);
+            const userId = (req as AuthRequest).user?.id;
+            const notifications = await notificationService.getActiveNotifications(factoryId, userId);
             return res.json(notifications);
         } catch (error: any) {
             console.error('Error fetching notifications:', error);

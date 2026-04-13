@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Package, Loader2, X, RefreshCw } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Loader2, X, RefreshCw, Search } from 'lucide-react';
 import { productsAPI, inventoryAPI, productTemplatesAPI, capsAPI, innersAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { useGuide } from '@/contexts/GuideContext';
@@ -30,6 +30,7 @@ export default function ProductsPage() {
     const { registerGuide } = useGuide();
     const { selectedFactory, factories } = useFactory();
 
+    const [tubSearch, setTubSearch] = useState('');
     const [modalOpen, setModalOpen] = useState(false);
     const [isTemplateMode, setIsTemplateMode] = useState(true);
     const [editingProduct, setEditingProduct] = useState(null);
@@ -94,6 +95,21 @@ export default function ProductsPage() {
     });
 
     const error = queryError?.message;
+
+    const filteredProducts = useMemo(() => {
+        const q = tubSearch.trim().toLowerCase();
+        if (!q) return products;
+        return products.filter((p) => {
+            const rm = (p.raw_materials?.name || '').toLowerCase();
+            return (
+                (p.name || '').toLowerCase().includes(q) ||
+                (p.sku || '').toLowerCase().includes(q) ||
+                (p.size || '').toLowerCase().includes(q) ||
+                (p.color || '').toLowerCase().includes(q) ||
+                rm.includes(q)
+            );
+        });
+    }, [products, tubSearch]);
 
     // Query for raw materials (factory-specific)
     const { data: rawMaterialsResponse, isLoading: rawMaterialsLoading } = useQuery({
@@ -426,7 +442,34 @@ export default function ProductsPage() {
                             <span>Add First Tub</span>
                         </button>
                     </div>
+                ) : filteredProducts.length === 0 ? (
+                    <div className={styles.emptyState}>
+                        <Search size={40} className={styles.emptySearchIcon} />
+                        <p>No tubs match your search</p>
+                        <p className={styles.emptyHint}>
+                            Try another name, SKU, size, color, or raw material
+                        </p>
+                        <button
+                            type="button"
+                            className={styles.secondaryButton}
+                            onClick={() => setTubSearch('')}
+                        >
+                            Clear search
+                        </button>
+                    </div>
                 ) : (
+                    <>
+                        <div className={styles.tableToolbar}>
+                            <Search size={18} className={styles.toolbarSearchIcon} aria-hidden />
+                            <input
+                                type="search"
+                                className={styles.toolbarSearchInput}
+                                placeholder="Search name, SKU, size, color, raw material…"
+                                value={tubSearch}
+                                onChange={(e) => setTubSearch(e.target.value)}
+                                aria-label="Search tubs"
+                            />
+                        </div>
                     <div className={styles.tableWrapper}>
                         <table className={styles.table}>
                             <thead>
@@ -444,7 +487,7 @@ export default function ProductsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {products.map((product) => (
+                                {filteredProducts.map((product) => (
                                     <tr key={product.id}>
                                         <td className={styles.nameCell}>{product.name}</td>
                                         <td className={styles.skuCell}>{product.sku || '—'}</td>
@@ -495,6 +538,7 @@ export default function ProductsPage() {
                             </tbody>
                         </table>
                     </div>
+                    </>
                 )}
             </div>
 

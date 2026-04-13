@@ -8,6 +8,17 @@ class ProductionRepository {
 
   ProductionRepository(this._apiClient);
 
+  /// Extracts a human-readable message from a DioException.
+  /// The server always sends { "message": "..." } for operational errors.
+  String _extractError(DioException e) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final msg = data['message'] ?? data['error'];
+      if (msg is String && msg.isNotEmpty) return msg;
+    }
+    return e.message ?? 'An unexpected error occurred';
+  }
+
   Future<String?> getLastSessionEndTime({
     required String machineId,
     required DateTime date,
@@ -71,10 +82,7 @@ class ProductionRepository {
         data: payload,
       );
     } catch (e) {
-      if (e is DioException) {
-        final errorMsg = e.response?.data['error'] ?? e.message;
-        throw Exception(errorMsg);
-      }
+      if (e is DioException) throw Exception(_extractError(e));
       rethrow;
     }
   }
@@ -119,16 +127,14 @@ class ProductionRepository {
         data: payload,
       );
     } catch (e) {
-      if (e is DioException) {
-        final errorMsg = e.response?.data['error'] ?? e.message;
-        throw Exception(errorMsg);
-      }
+      if (e is DioException) throw Exception(_extractError(e));
       rethrow;
     }
   }
 
   Future<void> submitInnerProduction({
     required String innerId,
+    required String machineId,
     required int shiftNumber,
     required String startTime,
     required String endTime,
@@ -144,6 +150,7 @@ class ProductionRepository {
     try {
       final payload = {
         'inner_id': innerId,
+        'machine_id': machineId,
         'shift_number': shiftNumber,
         'start_time': startTime,
         'end_time': endTime,
@@ -164,10 +171,7 @@ class ProductionRepository {
         data: payload,
       );
     } catch (e) {
-      if (e is DioException) {
-        final errorMsg = e.response?.data['error'] ?? e.message;
-        throw Exception(errorMsg);
-      }
+      if (e is DioException) throw Exception(_extractError(e));
       rethrow;
     }
   }
@@ -200,10 +204,7 @@ class ProductionRepository {
 
       return ProductionHistoryResponse.fromJson(response.data);
     } catch (e) {
-      if (e is DioException) {
-        final errorMsg = e.response?.data['error'] ?? e.message;
-        throw Exception(errorMsg);
-      }
+      if (e is DioException) throw Exception(_extractError(e));
       rethrow;
     }
   }

@@ -170,7 +170,7 @@ export default function OrderCalendarModal({ isOpen, onClose }) {
                                         <div className={styles.orderInfo}>
                                             <div className={styles.infoRow}>
                                                 <User size={14} />
-                                                <span>{order.customers?.name || 'Unknown Customer'}</span>
+                                                <span>{order.customer?.name || order.customer_name || 'Unknown Customer'}</span>
                                             </div>
                                             <div className={styles.infoRow}>
                                                 <Package size={14} />

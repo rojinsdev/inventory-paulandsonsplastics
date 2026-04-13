@@ -40,6 +40,14 @@ class _MultiSelectDowntimeReasonState extends State<MultiSelectDowntimeReason> {
     _selectedItems = List.from(widget.initialValues);
   }
 
+  @override
+  void didUpdateWidget(MultiSelectDowntimeReason oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialValues != oldWidget.initialValues) {
+      _selectedItems = List.from(widget.initialValues);
+    }
+  }
+
   void _showMultiSelect() async {
     final List<String>? results = await showDialog(
       context: context,
@@ -81,7 +89,7 @@ class _MultiSelectDowntimeReasonState extends State<MultiSelectDowntimeReason> {
               )
             : Wrap(
                 spacing: 8.0,
-                runSpacing: -8.0,
+                runSpacing: 8.0,
                 children: _selectedItems
                     .map((item) => Chip(
                           labelPadding: const EdgeInsets.symmetric(horizontal: 4),

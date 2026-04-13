@@ -49,6 +49,7 @@ const menuSections = [
                     { label: 'Sales Orders', href: '/orders' },
                     { label: 'Deliveries', href: '/deliveries' },
                     { label: 'Payments', href: '/payments' },
+                    { label: 'Sales History', href: '/sales-history' },
                 ],
             },
             {
@@ -116,6 +117,7 @@ const menuSections = [
                     { label: 'User Management', href: '/users' },
                     { label: 'Initial Stock Loading', href: '/config/initial-stock' },
                     { label: 'System Settings', href: '/system-settings' },
+                    { label: 'System Health', href: '/system-health' },
                     { label: 'Audit Logs', href: '/audit-logs' },
                     { label: 'System Info', href: '/system-info' },
                 ],

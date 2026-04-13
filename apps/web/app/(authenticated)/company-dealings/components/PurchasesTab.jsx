@@ -10,16 +10,22 @@ import {
     Search,
     Calendar,
     Tag,
-    User,
     Database,
     AlertCircle,
     CheckCircle2,
-    CalendarDays
+    CalendarDays,
+    Factory as FactoryIcon,
 } from 'lucide-react';
 import { purchasesAPI, suppliersAPI, inventoryAPI, cashFlowAPI, productTemplatesAPI, productsAPI } from '@/lib/api';
 import { useFactory } from '@/contexts/FactoryContext';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
 import styles from '../CompanyDealings.module.css';
+
+function resolveDefaultFactoryId(selectedFactory, factoriesList) {
+    if (typeof selectedFactory === 'string' && selectedFactory) return selectedFactory;
+    if (selectedFactory && typeof selectedFactory === 'object' && selectedFactory.id) return selectedFactory.id;
+    return factoriesList?.[0]?.id || '';
+}
 
 export default function PurchasesTab({ suppliers = [] }) {
     const queryClient = useQueryClient();
@@ -30,6 +36,7 @@ export default function PurchasesTab({ suppliers = [] }) {
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
     const [formData, setFormData] = useState({
+        factory_id: '',
         supplier_id: '',
         purchase_type: 'raw_material', // raw_material, finished_product, other
         item_id: '', // for raw material OR product variant
@@ -53,19 +60,19 @@ export default function PurchasesTab({ suppliers = [] }) {
         queryFn: () => purchasesAPI.getAll(),
     });
 
+    const effectiveFactoryId = formData.factory_id || resolveDefaultFactoryId(selectedFactory, factories);
+
     const { data: rawMaterialsData = { rawMaterials: [] } } = useQuery({
-        queryKey: ['rawMaterials'],
-        queryFn: () => inventoryAPI.getRawMaterials(),
+        queryKey: ['rawMaterials', 'purchase-modal', effectiveFactoryId],
+        queryFn: () =>
+            inventoryAPI.getRawMaterials({
+                factory_id: effectiveFactoryId,
+                size: 500,
+                page: 1,
+            }),
+        enabled: modalOpen && !!effectiveFactoryId,
     });
     const rawMaterials = rawMaterialsData.rawMaterials || [];
-
-    // Safer factory ID resolution to prevent sending "undefined" as a string
-    const effectiveFactoryId = selectedFactory?.id || (factories && factories.length > 0 ? factories[0].id : null);
-
-    // Debugging factory ID
-    React.useEffect(() => {
-        console.log('📡 PurchasesTab: effectiveFactoryId:', effectiveFactoryId);
-    }, [effectiveFactoryId]);
 
     const { data: productTemplates = [] } = useQuery({
         queryKey: ['productTemplates', effectiveFactoryId],
@@ -80,10 +87,13 @@ export default function PurchasesTab({ suppliers = [] }) {
     });
 
     React.useEffect(() => {
-        if (modalOpen) {
-            console.log('📡 PurchasesTab: Modal Open. Templates:', productTemplates?.length, 'Products:', products?.length);
-        }
-    }, [modalOpen, productTemplates, products]);
+        if (!modalOpen) return;
+        const def = resolveDefaultFactoryId(selectedFactory, factories);
+        setFormData((prev) => {
+            if (prev.factory_id && factories?.some((f) => f.id === prev.factory_id)) return prev;
+            return { ...prev, factory_id: def };
+        });
+    }, [modalOpen, selectedFactory, factories]);
 
     // Mutations
     const purchaseMutation = useMutation({
@@ -101,6 +111,7 @@ export default function PurchasesTab({ suppliers = [] }) {
 
     const resetForm = () => {
         setFormData({
+            factory_id: resolveDefaultFactoryId(selectedFactory, factories),
             supplier_id: '',
             purchase_type: 'raw_material',
             item_id: '',
@@ -171,9 +182,8 @@ export default function PurchasesTab({ suppliers = [] }) {
         if (formData.purchase_type === 'finished_product' && !formData.item_id) return alert('Please select a product variant');
         if (formData.purchase_type === 'other' && !formData.description) return alert('Please enter a description');
         
-        // Factory Validation
-        const factoryId = selectedFactory || factories[0]?.id;
-        if (!factoryId) return alert('Please select a factory before creating a purchase.');
+        const factoryId = formData.factory_id || resolveDefaultFactoryId(selectedFactory, factories);
+        if (!factoryId) return alert('Please select which factory this purchase is for.');
 
         // Cast types for the backend
         const submissionData = {
@@ -188,7 +198,7 @@ export default function PurchasesTab({ suppliers = [] }) {
             rate: Number(formData.rate || 0),
             total_amount: Number(formData.total_amount || 0),
             paid_amount: Number(formData.paid_amount || 0),
-            factory_id: factoryId
+            factory_id: factoryId,
         };
         
         purchaseMutation.mutate(submissionData);
@@ -326,6 +336,44 @@ export default function PurchasesTab({ suppliers = [] }) {
                         </div>
                         <form onSubmit={handleSubmit}>
                             <div className={cn("modal-body", styles.spaceY5)}>
+                                <div className={cn(styles.formGroup, styles.colSpan2)}>
+                                    <label className={cn("form-label", styles.textXs, styles.uppercase, styles.trackingWider, styles.fontBold, styles.textMuted)}>
+                                        <span className={cn(styles.flex, styles.itemsCenter, styles.gap2)}>
+                                            <FactoryIcon size={14} />
+                                            Factory for this purchase *
+                                        </span>
+                                    </label>
+                                    <select
+                                        className="select"
+                                        value={formData.factory_id || effectiveFactoryId}
+                                        onChange={(e) => {
+                                            const fid = e.target.value;
+                                            setFormData((prev) => ({
+                                                ...prev,
+                                                factory_id: fid,
+                                                item_id: '',
+                                                cap_id: '',
+                                                description: prev.purchase_type === 'other' ? prev.description : '',
+                                            }));
+                                            setSelectedTemplateId('');
+                                        }}
+                                        required
+                                    >
+                                        {factories?.length ? (
+                                            factories.map((f) => (
+                                                <option key={f.id} value={f.id}>
+                                                    {f.name}
+                                                </option>
+                                            ))
+                                        ) : (
+                                            <option value="">No factories configured</option>
+                                        )}
+                                    </select>
+                                    <p className={cn(styles.textSmallest, styles.textMuted, styles.mt05)}>
+                                        Suppliers are not tied to one factory; pick the site this stock or expense belongs to. Raw materials and products listed below match this factory.
+                                    </p>
+                                </div>
+
                                 <div className={styles.purchaseTypeToggle}>
                                     <button 
                                         type="button"

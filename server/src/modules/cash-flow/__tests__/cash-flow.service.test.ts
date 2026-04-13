@@ -1,6 +1,10 @@
 import { CashFlowService } from '../cash-flow.service';
 import { supabase } from '../../../config/supabase';
 
+jest.mock('../../../core/eventBus', () => ({
+    eventBus: { emit: jest.fn() },
+}));
+
 // Mock the module
 jest.mock('../../../config/supabase', () => ({
     supabase: {
@@ -49,10 +53,63 @@ describe('CashFlowService - Shared Costs', () => {
                     })
                 };
             }
-            // For the insert call
             if (table === 'cash_flow_logs') {
                 return {
-                    insert: jest.fn().mockResolvedValue({ error: null })
+                    insert: jest.fn().mockReturnValue({
+                        select: jest.fn().mockResolvedValue({
+                            data: [
+                                {
+                                    id: 'log-1',
+                                    date: '2026-01-01',
+                                    category_id: 'cat-shared',
+                                    factory_id: 'f1',
+                                    amount: 250,
+                                    payment_mode: 'Cash',
+                                    reference_id: null,
+                                    notes: '(Shared Cost Split)',
+                                    is_automatic: false,
+                                    cash_flow_categories: { name: 'Test' },
+                                },
+                                {
+                                    id: 'log-2',
+                                    date: '2026-01-01',
+                                    category_id: 'cat-shared',
+                                    factory_id: 'f2',
+                                    amount: 250,
+                                    payment_mode: 'Cash',
+                                    reference_id: null,
+                                    notes: '(Shared Cost Split)',
+                                    is_automatic: false,
+                                    cash_flow_categories: { name: 'Test' },
+                                },
+                                {
+                                    id: 'log-3',
+                                    date: '2026-01-01',
+                                    category_id: 'cat-shared',
+                                    factory_id: 'f3',
+                                    amount: 250,
+                                    payment_mode: 'Cash',
+                                    reference_id: null,
+                                    notes: '(Shared Cost Split)',
+                                    is_automatic: false,
+                                    cash_flow_categories: { name: 'Test' },
+                                },
+                                {
+                                    id: 'log-4',
+                                    date: '2026-01-01',
+                                    category_id: 'cat-shared',
+                                    factory_id: 'f4',
+                                    amount: 250,
+                                    payment_mode: 'Cash',
+                                    reference_id: null,
+                                    notes: '(Shared Cost Split)',
+                                    is_automatic: false,
+                                    cash_flow_categories: { name: 'Test' },
+                                },
+                            ],
+                            error: null,
+                        }),
+                    }),
                 };
             }
             return createChain({});

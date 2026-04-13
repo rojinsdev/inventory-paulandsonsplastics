@@ -57,18 +57,20 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
       : super(const AsyncValue.data(null));
 
   Future<void> pack(String productId, int quantity,
-      {String? capId}) async {
+      {String? capId, String? innerId, bool includeInner = true}) async {
     state = const AsyncValue.loading();
     try {
       await _repository.pack(
         productId: productId,
         packetsCreated: quantity,
         capId: capId,
+        innerId: innerId,
+        includeInner: includeInner,
       );
 
-      // AUTO-REFRESH: Invalidate relevant data providers
       _ref.invalidate(inventoryStockProvider);
       _ref.invalidate(capStockProvider);
+      _ref.invalidate(innerStockProvider);
 
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -77,7 +79,11 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> bundle(String productId, int quantity,
-      {String unitType = 'bundle', String source = 'packed', String? capId}) async {
+      {String unitType = 'bundle',
+      String source = 'packed',
+      String? capId,
+      String? innerId,
+      bool includeInner = true}) async {
     state = const AsyncValue.loading();
     try {
       await _repository.bundle(
@@ -86,11 +92,13 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
         unitType: unitType,
         source: source,
         capId: capId,
+        innerId: innerId,
+        includeInner: includeInner,
       );
 
-      // AUTO-REFRESH: Invalidate relevant data providers
       _ref.invalidate(inventoryStockProvider);
       _ref.invalidate(capStockProvider);
+      _ref.invalidate(innerStockProvider);
 
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -117,9 +125,9 @@ class InventoryOperationNotifier extends StateNotifier<AsyncValue<void>> {
         capId: capId,
       );
 
-      // AUTO-REFRESH: Invalidate relevant data providers
       _ref.invalidate(inventoryStockProvider);
       _ref.invalidate(capStockProvider);
+      _ref.invalidate(innerStockProvider);
 
       state = const AsyncValue.data(null);
     } catch (e, st) {
@@ -164,13 +172,137 @@ class StockCombination {
 
   factory StockCombination.fromJson(Map<String, dynamic> json) {
     return StockCombination(
-      capId: json['cap_id'] as String?,
+      capId: json['cap_id']?.toString(),
       capColor: json['cap_color'] as String?,
       capName: json['cap_name'] as String?,
       unitType: json['unit_type'] as String?,
       packedQty: ((json['packed_qty'] ?? 0) as num).toInt(),
       bundledQty: ((json['bundled_qty'] ?? 0) as num).toInt(),
     );
+  }
+}
+
+/// Shared logic for stock overview rows: API emits separate combinations per `unit_type`
+/// (e.g. `packet` vs `bundle`); use these helpers so UI counts match bundling / pack flows.
+class InventoryStockComboHelper {
+  InventoryStockComboHelper._();
+
+  static bool isPacketCombo(StockCombination c) {
+    final u = (c.unitType ?? '').toLowerCase();
+    return u.isEmpty || u == 'packet';
+  }
+
+  static bool isFinishedUnitCombo(StockCombination c) {
+    final u = (c.unitType ?? '').toLowerCase();
+    return u == 'bundle' || u == 'bag' || u == 'box';
+  }
+
+  static List<StockCombination> packetCombos(InventoryStock item) {
+    return item.combinations.where(isPacketCombo).toList();
+  }
+
+  static List<StockCombination> finishedUnitCombos(InventoryStock item) {
+    return item.combinations.where(isFinishedUnitCombo).toList();
+  }
+
+  /// Picks the packet row for a selected cap variant, or the no-cap row.
+  static StockCombination? packetComboForSelectedCap(
+    InventoryStock item,
+    String? selectedCapVariantId,
+  ) {
+    final rows = packetCombos(item);
+    if (selectedCapVariantId != null) {
+      for (final c in rows) {
+        if (c.capId == selectedCapVariantId) return c;
+      }
+    }
+    for (final c in rows) {
+      if (c.capId == null) return c;
+    }
+    return null;
+  }
+
+  static String comboLabel(StockCombination c) {
+    if (c.capId == null) {
+      return 'No cap on record';
+    }
+    final name = (c.capName ?? 'Cap').trim();
+    final color = (c.capColor ?? '—').trim();
+    return '$name · $color';
+  }
+
+  static String unitTypeLabel(String? unitType) {
+    final u = (unitType ?? '').toLowerCase();
+    switch (u) {
+      case 'bundle':
+        return 'Bundles';
+      case 'bag':
+        return 'Bags';
+      case 'box':
+        return 'Boxes';
+      default:
+        return 'Units';
+    }
+  }
+
+  /// Drives unpack API and finished-unit UI. Prefers a row with stock in the relevant bucket.
+  static StockCombination? unpackSourceCombo(
+    InventoryStock item,
+    String fromState,
+  ) {
+    final fs = fromState.toLowerCase();
+    if (fs == 'finished') {
+      final withQty = finishedUnitCombos(item)
+          .where((c) => c.bundledQty > 0)
+          .toList();
+      if (withQty.isNotEmpty) return withQty.first;
+      final all = finishedUnitCombos(item);
+      return all.isNotEmpty ? all.first : null;
+    }
+    if (fs == 'packed') {
+      final withQty =
+          packetCombos(item).where((c) => c.packedQty > 0).toList();
+      if (withQty.isNotEmpty) return withQty.first;
+      final all = packetCombos(item);
+      return all.isNotEmpty ? all.first : null;
+    }
+    return null;
+  }
+
+  /// `unit_type` for POST /inventory/unpack when [from_state] is `finished`.
+  static String apiFinishedUnitType(StockCombination? combo) {
+    final u = (combo?.unitType ?? '').toLowerCase();
+    if (u == 'bag' || u == 'box') return u;
+    return 'bundle';
+  }
+
+  static String finishedUnitSingularLabel(StockCombination? combo) {
+    switch (apiFinishedUnitType(combo)) {
+      case 'bag':
+        return 'Bag';
+      case 'box':
+        return 'Box';
+      default:
+        return 'Bundle';
+    }
+  }
+
+  static String finishedUnitPluralLabel(StockCombination? combo) {
+    return unitTypeLabel(apiFinishedUnitType(combo));
+  }
+
+  /// Third summary column on stock cards (total [InventoryStock.bundledQty]).
+  static String bundledSummaryColumnLabel(InventoryStock item) {
+    final withStock =
+        finishedUnitCombos(item).where((c) => c.bundledQty > 0).toList();
+    if (withStock.isEmpty) {
+      return 'Finished';
+    }
+    final keys = withStock.map((c) => apiFinishedUnitType(c)).toSet();
+    if (keys.length == 1) {
+      return unitTypeLabel(withStock.first.unitType);
+    }
+    return 'Finished';
   }
 }
 
@@ -212,7 +344,8 @@ class InventoryStock {
     this.itemsPerBox,
   }) : _combinations = combinations;
 
-  /// Convenience getters for backward compatibility
+  /// First combination row only; do not use for unpack — use
+  /// [InventoryStockComboHelper.unpackSourceCombo] instead.
   String? get unitType => combinations.isNotEmpty ? combinations.first.unitType : null;
   String? get capId => combinations.isNotEmpty ? combinations.first.capId : null;
   String? get capName => combinations.isNotEmpty ? combinations.first.capName : null;

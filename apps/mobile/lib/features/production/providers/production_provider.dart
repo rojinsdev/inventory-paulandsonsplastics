@@ -121,6 +121,7 @@ class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<bool>> {
 
   Future<void> submitInner({
     required String innerId,
+    required String machineId,
     required int shiftNumber,
     required String startTime,
     required String endTime,
@@ -137,6 +138,7 @@ class ProductionSubmissionNotifier extends StateNotifier<AsyncValue<bool>> {
     try {
       await _repository.submitInnerProduction(
         innerId: innerId,
+        machineId: machineId,
         shiftNumber: shiftNumber,
         startTime: startTime,
         endTime: endTime,

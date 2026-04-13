@@ -56,6 +56,9 @@ export class PurchaseController {
     async create(req: AuthRequest, res: Response) {
         // Normalize frontend data to backend schema
         const purchase_type = req.body.purchase_type;
+        const trimDate = (v: unknown) =>
+            typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined;
+
         const normalizedData = {
             ...req.body,
             item_type: purchase_type === 'raw_material' ? 'Raw Material' : 
@@ -70,7 +73,9 @@ export class PurchaseController {
             quantity: req.body.quantity ? Number(req.body.quantity) : undefined,
             unit_count: req.body.unit_count ? Number(req.body.unit_count) : undefined,
             rate_per_kg: req.body.rate ? Number(req.body.rate) : (req.body.rate_per_kg ? Number(req.body.rate_per_kg) : undefined),
-            balance_due: req.body.balance_due ?? (Number(req.body.total_amount || 0) - Number(req.body.paid_amount || 0))
+            balance_due: req.body.balance_due ?? (Number(req.body.total_amount || 0) - Number(req.body.paid_amount || 0)),
+            purchase_date: trimDate(req.body.purchase_date),
+            due_date: trimDate(req.body.due_date),
         };
 
         const validatedData = createPurchaseSchema.parse(normalizedData);

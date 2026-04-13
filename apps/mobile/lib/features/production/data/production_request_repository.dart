@@ -35,7 +35,17 @@ class ProductionRequestRepository {
         data: {'status': status},
       );
 
-      return ProductionRequest.fromJson(response.data);
+      final raw = response.data;
+      if (raw is! Map) {
+        throw Exception('Invalid production request update response');
+      }
+      var body = Map<String, dynamic>.from(raw);
+      // Older API returned { success, request } for prepared/completed
+      final nested = body['request'];
+      if (nested is Map) {
+        body = Map<String, dynamic>.from(nested);
+      }
+      return ProductionRequest.fromJson(body);
     } catch (e) {
       if (e is DioException) {
         throw Exception(e.response?.data['message'] ??

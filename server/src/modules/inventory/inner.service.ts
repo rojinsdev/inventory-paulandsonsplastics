@@ -131,15 +131,24 @@ export class InnerService {
         return { success: true };
     }
 
+    /**
+     * Same as caps: physical stock is on inner_stock_balances.factory_id, not necessarily inners.factory_id.
+     */
     async getInnerStockBalances(factoryId?: string) {
         let query = supabase
-            .from('inners')
+            .from('inner_stock_balances')
             .select(`
                 id,
-                color,
+                inner_id,
                 factory_id,
-                template:inner_templates (name, ideal_weight_grams),
-                balance:inner_stock_balances(id, quantity)
+                quantity,
+                state,
+                unit_type,
+                inners(
+                    id,
+                    color,
+                    inner_templates(name, ideal_weight_grams)
+                )
             `);
 
         if (factoryId) {
@@ -149,18 +158,64 @@ export class InnerService {
         const { data, error } = await query;
 
         if (error) throw new Error(error.message);
-        
-        // Map to match the flattened structure expected by the frontend
-        return (data || []).map((item: any) => ({
-            id: item.balance?.[0]?.id || `temp-${item.id}`,
-            inner_id: item.id,
-            factory_id: item.factory_id,
-            quantity: item.balance?.[0]?.quantity || 0,
-            inners: {
-                color: item.color,
-                inner_templates: item.template
+
+        const aggregated = new Map<
+            string,
+            { id: string; inner_id: string; factory_id: string; quantity: number; inners: any }
+        >();
+
+        for (const row of data || []) {
+            if (!row.inners) continue;
+            const key = `${row.inner_id}:${row.factory_id}`;
+            const qty = Number(row.quantity) || 0;
+            const existing = aggregated.get(key);
+            if (!existing) {
+                aggregated.set(key, {
+                    id: row.id as string,
+                    inner_id: row.inner_id as string,
+                    factory_id: row.factory_id as string,
+                    quantity: qty,
+                    inners: row.inners
+                });
+            } else {
+                existing.quantity += qty;
             }
-        }));
+        }
+
+        return Array.from(aggregated.values());
+    }
+
+    private async buildInnerStockQuantityMap(
+        innerIds: string[],
+        factoryId?: string
+    ): Promise<Map<string, number>> {
+        const map = new Map<string, number>();
+        const unique = [...new Set(innerIds.filter(Boolean))];
+        if (unique.length === 0) return map;
+
+        let q = supabase.from('inner_stock_balances').select('inner_id, quantity').in('inner_id', unique);
+        if (factoryId) {
+            q = q.eq('factory_id', factoryId);
+        }
+
+        const { data, error } = await q;
+        if (error) throw new Error(error.message);
+
+        for (const row of data || []) {
+            const id = row.inner_id as string;
+            const qty = Number(row.quantity) || 0;
+            map.set(id, (map.get(id) ?? 0) + qty);
+        }
+        return map;
+    }
+
+    private attachInnerTemplateVariantStock(templates: any[], qtyMap: Map<string, number>) {
+        for (const t of templates) {
+            for (const v of t.variants || []) {
+                const id = v.id as string | undefined;
+                v.stock = { quantity: id ? qtyMap.get(id) ?? 0 : 0 };
+            }
+        }
     }
 
     // --- Template Management ---
@@ -215,10 +270,7 @@ export class InnerService {
             .from('inner_templates')
             .select(`
                 *,
-                variants:inners(
-                    *,
-                    stock:inner_stock_balances(quantity)
-                ),
+                variants:inners(*),
                 mapped_tub_templates:product_templates(id, name)
             `);
 
@@ -228,24 +280,33 @@ export class InnerService {
 
         const { data, error } = await query;
         if (error) throw new Error(error.message);
-        return data;
+        const list = data || [];
+        const innerIds: string[] = [];
+        for (const t of list) {
+            for (const v of t.variants || []) {
+                if (v?.id) innerIds.push(v.id as string);
+            }
+        }
+        const qtyMap = await this.buildInnerStockQuantityMap(innerIds, factoryId);
+        this.attachInnerTemplateVariantStock(list, qtyMap);
+        return list;
     }
 
-    async getTemplateById(id: string) {
+    async getTemplateById(id: string, factoryId?: string) {
         const { data, error } = await supabase
             .from('inner_templates')
             .select(`
                 *,
-                variants:inners(
-                    *,
-                    stock:inner_stock_balances(quantity)
-                ),
+                variants:inners(*),
                 mapped_tub_templates:product_templates(id, name)
             `)
             .eq('id', id)
             .single();
 
         if (error) throw new Error(error.message);
+        const innerIds = (data.variants || []).map((v: { id?: string }) => v.id).filter(Boolean) as string[];
+        const qtyMap = await this.buildInnerStockQuantityMap(innerIds, factoryId);
+        this.attachInnerTemplateVariantStock([data], qtyMap);
         return data;
     }
 

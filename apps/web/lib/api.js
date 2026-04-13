@@ -134,8 +134,15 @@ export async function fetchAPI(endpoint, options = {}) {
             const errorData = await response.json().catch(() => ({}));
             let errorMessage = errorData.message || errorData.error;
 
-            // Handle Zod validation errors (array of issues)
-            if (Array.isArray(errorMessage)) {
+            // Zod issues from API (Express errorHandler)
+            if (Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+                errorMessage = errorData.errors
+                    .map((err) => {
+                        const path = Array.isArray(err.path) ? err.path.join('.') : '';
+                        return path ? `${path}: ${err.message}` : err.message;
+                    })
+                    .join('; ');
+            } else if (Array.isArray(errorMessage)) {
                 errorMessage = errorMessage.map(err => `${err.path.join('.')}: ${err.message}`).join(', ');
             } else if (typeof errorMessage === 'object' && errorMessage !== null) {
                 errorMessage = JSON.stringify(errorMessage);
@@ -196,6 +203,8 @@ export const productTemplatesAPI = {
 
 // ============ INVENTORY ============
 export const inventoryAPI = {
+    /** Full stock overview + optional raw balance rows (same source as mobile inventory hub). */
+    getOverview: (params) => fetchAPI('/inventory/overview', { params }),
     getStock: (params) => fetchAPI(`/inventory/stock${params ? '?' + new URLSearchParams(params) : ''}`),
     getAvailable: (params) => fetchAPI(`/inventory/available${params ? '?' + new URLSearchParams(params) : ''}`),
     getAvailableStock: (params) => fetchAPI(`/inventory/available${params ? '?' + new URLSearchParams(params) : ''}`),
@@ -279,6 +288,18 @@ export const analyticsAPI = {
     getMachineEfficiency: (params) => fetchAPI(`/analytics/machine-efficiency${params ? '?' + new URLSearchParams(params) : ''}`),
     getShiftComparison: (params) => fetchAPI(`/analytics/shift-comparison${params ? '?' + new URLSearchParams(params) : ''}`),
     getActionRequired: (params) => fetchAPI(`/analytics/action-required${params ? '?' + new URLSearchParams(params) : ''}`),
+};
+
+// ============ SYSTEM HEALTH ============
+export const systemAPI = {
+    getHealthSummary: () => fetchAPI('/system/health'),
+    getRecentErrors: (hours = 24) => fetchAPI(`/system/errors?hours=${hours}`),
+    validateStockConsistency: (params) => fetchAPI(`/system/validate/stock${params ? '?' + new URLSearchParams(params) : ''}`),
+    validateOrderConsistency: (orderId) => fetchAPI(`/system/validate/order/${orderId}`),
+    resolveError: (errorId, notes) => fetchAPI(`/system/errors/${errorId}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({ resolution_notes: notes })
+    }),
 };
 
 // ============ REPORTS ============

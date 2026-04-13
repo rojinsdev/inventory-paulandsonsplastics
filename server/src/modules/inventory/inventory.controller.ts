@@ -8,6 +8,8 @@ const packSchema = z.object({
     product_id: z.string().uuid(),
     packets_created: z.number().int().positive(),
     cap_id: z.string().uuid().optional(),
+    inner_id: z.string().uuid().optional(),
+    include_inner: z.boolean().optional().default(true),
 });
 
 const bundleSchema = z.object({
@@ -16,6 +18,8 @@ const bundleSchema = z.object({
     unit_type: z.enum(['bundle', 'bag', 'box']).default('bundle'),
     source: z.enum(['packed', 'semi_finished']).optional().default('packed'),
     cap_id: z.string().uuid().optional(),
+    inner_id: z.string().uuid().optional(),
+    include_inner: z.boolean().optional().default(true),
 });
 
 const unpackSchema = z.object({
@@ -30,14 +34,31 @@ const unpackSchema = z.object({
 
 export class InventoryController {
     async pack(req: AuthRequest, res: Response) {
-        const { product_id, packets_created, cap_id } = packSchema.parse(req.body);
-        await inventoryService.packItems(product_id, packets_created, cap_id, undefined, req.user?.id);
+        const { product_id, packets_created, cap_id, inner_id, include_inner } = packSchema.parse(req.body);
+        await inventoryService.packItems(
+            product_id,
+            packets_created,
+            cap_id,
+            inner_id,
+            req.user?.id,
+            include_inner
+        );
         res.status(200).json({ message: 'Packing successful' });
     }
 
     async bundle(req: AuthRequest, res: Response) {
-        const { product_id, units_created, unit_type, source, cap_id } = bundleSchema.parse(req.body);
-        await inventoryService.bundlePackets(product_id, units_created, unit_type, source, cap_id, undefined, req.user?.id);
+        const { product_id, units_created, unit_type, source, cap_id, inner_id, include_inner } =
+            bundleSchema.parse(req.body);
+        await inventoryService.bundlePackets(
+            product_id,
+            units_created,
+            unit_type,
+            source,
+            cap_id,
+            inner_id,
+            req.user?.id,
+            include_inner
+        );
         res.status(200).json({ message: 'Bundling successful' });
     }
 
@@ -66,7 +87,11 @@ export class InventoryController {
 
     async getStockOverview(req: AuthRequest, res: Response) {
         const resolvedFactoryId = resolveAuthorizedFactoryId(req);
-        const stock = await inventoryService.getStockOverview(resolvedFactoryId || req.query.factory_id as string);
+        const includeCombinations = req.query.include_combinations === 'true';
+        const stock = await inventoryService.getStockOverview(
+            resolvedFactoryId || req.query.factory_id as string,
+            includeCombinations
+        );
         res.json(stock);
     }
 

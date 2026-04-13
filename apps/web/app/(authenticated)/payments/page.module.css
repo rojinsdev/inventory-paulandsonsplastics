@@ -170,11 +170,14 @@
     background: var(--surface-elevated);
     border: 1px solid var(--border);
     border-radius: 1.25rem;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
 }
 
 .table {
     width: 100%;
+    min-width: 960px;
     border-collapse: collapse;
 }
 
@@ -667,6 +670,7 @@
     .tableContainer {
         background: transparent;
         border: none;
+        overflow-x: auto;
     }
 
     .table thead {

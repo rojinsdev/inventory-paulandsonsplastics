@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class MainNavigation extends StatelessWidget {
+import '../../features/production/providers/production_request_provider.dart';
+import '../../features/production/providers/sales_order_provider.dart';
+
+class MainNavigation extends ConsumerStatefulWidget {
   final StatefulNavigationShell navigationShell;
 
   const MainNavigation({
@@ -9,15 +13,42 @@ class MainNavigation extends StatelessWidget {
     required this.navigationShell,
   });
 
+  @override
+  ConsumerState<MainNavigation> createState() => _MainNavigationState();
+}
+
+class _MainNavigationState extends ConsumerState<MainNavigation>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.invalidate(productionRequestsProvider);
+      ref.invalidate(pendingOrdersProvider);
+    }
+  }
+
   void _onTap(int index) {
-    navigationShell.goBranch(
+    widget.navigationShell.goBranch(
       index,
-      initialLocation: index == navigationShell.currentIndex,
+      initialLocation: index == widget.navigationShell.currentIndex,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final navigationShell = widget.navigationShell;
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(

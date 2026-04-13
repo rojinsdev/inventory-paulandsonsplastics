@@ -5,6 +5,7 @@ const mockDB: { [table: string]: any[] } = {
     sales_orders: [],
     sales_order_items: [],
     production_requests: [],
+    customers: [],
     customer_balances: [],
     raw_materials: [],
     purchases: [],
@@ -17,7 +18,8 @@ const mockDB: { [table: string]: any[] } = {
     product_templates: [],
     cap_stock_balances: [],
     inner_stock_balances: [],
-    inventory_transactions: []
+    inventory_transactions: [],
+    caps: [],
 };
 
 const mockLogAction = jest.fn().mockResolvedValue(null);
@@ -160,13 +162,11 @@ const setupMocks = () => {
     });
 
     supabase.rpc.mockImplementation((fnName: string, args: any) => {
-        console.log(`[MOCK RPC] Calling ${fnName} with args:`, args);
         if (fnName === 'adjust_raw_material_stock') {
             const { p_material_id, p_weight_change } = args;
             const rm = mockDB.raw_materials.find(r => r.id === p_material_id);
             if (rm) {
                 rm.stock_weight_kg += p_weight_change;
-                console.log(`[MOCK RPC] Updated raw material ${p_material_id} weight by ${p_weight_change}. New: ${rm.stock_weight_kg}`);
             }
             return Promise.resolve({ data: null, error: null });
         }
@@ -193,7 +193,6 @@ const setupMocks = () => {
                 mockDB.stock_balances.push(balance);
             }
             balance.quantity += p_quantity_change;
-            console.log(`[MOCK RPC] Updated stock for ${p_product_id} (${p_state}) by ${p_quantity_change}. New: ${balance.quantity}`);
             return Promise.resolve({ data: null, error: null });
         }
         if (fnName === 'adjust_stock_by_id') {
@@ -201,7 +200,6 @@ const setupMocks = () => {
             const balance = mockDB.stock_balances.find(b => b.id === p_id);
             if (balance) {
                 balance.quantity += p_quantity_change;
-                console.log(`[MOCK RPC] Updated stock balance ${p_id} by ${p_quantity_change}. New: ${balance.quantity}`);
             }
             return Promise.resolve({ data: null, error: null });
         }
@@ -253,17 +251,43 @@ const setupMocks = () => {
                 if (rm) {
                     const consumption = (actual_qty * (product.weight_grams || 0)) / 1000;
                     rm.stock_weight_kg -= consumption;
-                    console.log(`[MOCK RPC] Deducted RM ${consumption}kg. Remaining: ${rm.stock_weight_kg}`);
                 }
             }
 
-            return Promise.resolve({ data: { log_id: logEntry.id }, error: null });
+            return Promise.resolve({ data: logEntry.id, error: null });
         }
 
         if (fnName === 'create_order_atomic') {
             const { p_customer_id, p_delivery_date, p_notes, p_user_id, p_items, p_order_date } = args;
+
+            const statesForAvailability = ['semi_finished', 'packed', 'finished'];
+
+            for (const item of p_items) {
+                if (item.quantity == null || item.quantity <= 0) {
+                    return Promise.resolve({
+                        data: null,
+                        error: { message: 'Invalid quantity: Quantity must be positive.' },
+                    });
+                }
+                if (!item.product_id && !item.cap_id) {
+                    return Promise.resolve({
+                        data: null,
+                        error: { message: 'Invalid item: must have either product_id or cap_id' },
+                    });
+                }
+                const ut = item.unit_type || 'bundle';
+                if (item.product_id && ['packet', 'bundle'].includes(ut) && !item.cap_id) {
+                    return Promise.resolve({
+                        data: null,
+                        error: {
+                            message: `Cap selection is required for ${ut} orders. Please select a cap for the product.`,
+                        },
+                    });
+                }
+            }
+
             const orderId = `order-${Math.random().toString(36).substr(2, 9)}`;
-            
+
             mockDB.sales_orders.push({
                 id: orderId,
                 customer_id: p_customer_id,
@@ -271,34 +295,49 @@ const setupMocks = () => {
                 notes: p_notes,
                 created_by: p_user_id,
                 status: 'pending',
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                order_date: p_order_date,
             });
 
             for (const item of p_items) {
                 const itemId = `item-${Math.random().toString(36).substr(2, 9)}`;
-                const isCap = !!item.cap_id;
-                
+                const isCap = !!item.cap_id && !item.product_id;
+                const unitType = item.unit_type || (isCap ? 'loose' : 'bundle');
+
                 let factoryId = 'fact-1';
                 let hasStock = false;
+                let availableTotal = 0;
 
                 if (isCap) {
-                    const cap = mockDB.caps?.find(c => c.id === item.cap_id);
+                    const cap = (mockDB.caps || []).find((c: any) => c.id === item.cap_id);
                     factoryId = cap?.factory_id || factoryId;
-                    const balance = mockDB.cap_stock_balances.find(b => 
-                        b.cap_id === item.cap_id && b.state === 'finished' && b.factory_id === factoryId
+                    const capStates = ['semi_finished', 'finished'];
+                    const avail = (mockDB.cap_stock_balances || []).filter(
+                        (b: any) =>
+                            b.cap_id === item.cap_id &&
+                            capStates.includes(b.state) &&
+                            (b.factory_id === factoryId || b.factory_id == null) &&
+                            (b.unit_type || 'loose') === (unitType || 'loose')
                     );
-                    hasStock = balance && balance.quantity >= item.quantity;
+                    availableTotal = avail.reduce((s: number, b: any) => s + Number(b.quantity || 0), 0);
+                    hasStock = availableTotal >= item.quantity;
                 } else {
-                    const product = mockDB.products.find(p => p.id === item.product_id);
+                    const product = mockDB.products.find((p: any) => p.id === item.product_id);
                     factoryId = product?.factory_id || factoryId;
-                    const balance = mockDB.stock_balances.find(b => 
-                        b.product_id === item.product_id && b.state === 'finished' && b.factory_id === factoryId
+                    const avail = (mockDB.stock_balances || []).filter(
+                        (b: any) =>
+                            b.product_id === item.product_id &&
+                            statesForAvailability.includes(b.state) &&
+                            (b.factory_id === factoryId || b.factory_id == null) &&
+                            (b.unit_type || unitType) === unitType &&
+                            (item.cap_id == null || (b.cap_id || null) === (item.cap_id || null))
                     );
-                    hasStock = balance && balance.quantity >= item.quantity;
+                    availableTotal = avail.reduce((s: number, b: any) => s + Number(b.quantity || 0), 0);
+                    hasStock = availableTotal >= item.quantity;
                 }
-                
+
                 const isBackordered = !hasStock;
-                
+
                 mockDB.sales_order_items.push({
                     id: itemId,
                     order_id: orderId,
@@ -307,119 +346,361 @@ const setupMocks = () => {
                     item_type: isCap ? 'cap' : 'product',
                     quantity: item.quantity,
                     quantity_reserved: 0,
-                    unit_type: item.unit_type || 'bundle',
-                    is_backordered: isBackordered
+                    quantity_prepared: 0,
+                    quantity_shipped: 0,
+                    unit_type: unitType,
+                    is_backordered: isBackordered,
+                    is_prepared: false,
+                    include_inner: item.include_inner || false,
+                    inner_id: item.inner_id || null,
                 });
 
+                // Mirrors create_order_atomic: one production_requests row per backordered line (shortfall only)
+                if (isBackordered) {
+                    const shortfall = Math.max(0, item.quantity - availableTotal);
+                    if (isCap) {
+                        mockDB.production_requests.push({
+                            cap_id: item.cap_id,
+                            factory_id: factoryId,
+                            quantity: shortfall,
+                            unit_type: unitType,
+                            sales_order_id: orderId,
+                            status: 'pending',
+                            product_id: null,
+                            inner_id: null,
+                        });
+                    } else {
+                        mockDB.production_requests.push({
+                            product_id: item.product_id,
+                            cap_id: item.cap_id || null,
+                            inner_id: item.inner_id || null,
+                            factory_id: factoryId,
+                            quantity: shortfall,
+                            unit_type: unitType,
+                            sales_order_id: orderId,
+                            status: 'pending',
+                        });
+                    }
+                }
             }
-            return Promise.resolve({ data: { order_id: orderId }, error: null });
+
+            return Promise.resolve({
+                data: { success: true, order_id: orderId, total_amount: 0 },
+                error: null,
+            });
         }
 
         if (fnName === 'prepare_order_items_atomic') {
             const { p_order_id, p_items, p_user_id } = args;
-            let updatedCount = 0;
+            const order = mockDB.sales_orders.find((o: any) => o.id === p_order_id);
+            if (!order) {
+                return Promise.resolve({ data: null, error: { message: `Order not found: ${p_order_id}` } });
+            }
+            if (!['pending', 'reserved'].includes(order.status)) {
+                return Promise.resolve({
+                    data: null,
+                    error: {
+                        message: `Cannot prepare order in status: ${order.status}. Order must be pending or reserved.`,
+                    },
+                });
+            }
+
+            let totalReserved = 0;
 
             for (const item of p_items) {
                 const itemId = item.item_id;
                 const qty = item.quantity;
-                
-                const soi = mockDB.sales_order_items.find(i => i.id === itemId);
-                if (soi) {
-                    soi.quantity_prepared = (soi.quantity_prepared || 0) + qty;
-                    soi.quantity_reserved = (soi.quantity_reserved || 0) + qty;
-                    soi.is_prepared = soi.quantity_prepared >= soi.quantity;
-                    
-                    const isCap = !!soi.cap_id;
-                    const factoryId = 'fact-1'; // Simplified
-
-                    if (isCap) {
-                        let balance = mockDB.cap_stock_balances.find(b => b.cap_id === soi.cap_id && b.state === 'finished');
-                        if (balance) balance.quantity -= qty;
-                        
-                        let reserved = mockDB.cap_stock_balances.find(b => b.cap_id === soi.cap_id && b.state === 'reserved');
-                        if (reserved) {
-                            reserved.quantity += qty;
-                        } else {
-                            mockDB.cap_stock_balances.push({ cap_id: soi.cap_id, state: 'reserved', quantity: qty, factory_id: factoryId });
-                        }
-                    } else {
-                        const stateMapping: any = { 'loose': 'semi_finished', 'packet': 'packed', 'bundle': 'finished' };
-                        const sourceState = stateMapping[soi.unit_type] || 'finished';
-                        
-                        let balance = mockDB.stock_balances.find(b => b.product_id === soi.product_id && b.state === sourceState);
-                        if (balance) balance.quantity -= qty;
-                        
-                        let reserved = mockDB.stock_balances.find(b => b.product_id === soi.product_id && b.state === 'reserved' && b.unit_type === soi.unit_type);
-                        if (reserved) {
-                            reserved.quantity += qty;
-                        } else {
-                            mockDB.stock_balances.push({ 
-                                product_id: soi.product_id, state: 'reserved', quantity: qty, factory_id: factoryId, unit_type: soi.unit_type 
-                            });
-                        }
-                    }
-                    updatedCount++;
+                if (qty == null || qty <= 0) {
+                    return Promise.resolve({
+                        data: null,
+                        error: { message: 'Invalid quantity: Quantity must be positive.' },
+                    });
                 }
+
+                const soi = mockDB.sales_order_items.find(
+                    (i: any) => i.id === itemId && i.order_id === p_order_id
+                );
+                if (!soi) {
+                    return Promise.resolve({
+                        data: null,
+                        error: { message: `Order item not found or does not belong to this order: ${itemId}` },
+                    });
+                }
+
+                const factoryId = 'fact-1';
+                const isCapOnly = !soi.product_id && !!soi.cap_id;
+
+                if (isCapOnly) {
+                    const capStates = ['semi_finished', 'finished'];
+                    const available = (mockDB.cap_stock_balances || []).filter(
+                        (b: any) =>
+                            b.cap_id === soi.cap_id &&
+                            capStates.includes(b.state) &&
+                            (b.factory_id === factoryId || b.factory_id == null) &&
+                            (b.unit_type || 'loose') === (soi.unit_type || 'loose')
+                    );
+                    const sumAvail = available.reduce((s: number, b: any) => s + Number(b.quantity || 0), 0);
+                    if (sumAvail < qty) {
+                        return Promise.resolve({
+                            data: null,
+                            error: {
+                                message: `Insufficient cap stock for cap ${soi.cap_id}. Required: ${qty}, Available: ${sumAvail}`,
+                            },
+                        });
+                    }
+                    let remaining = qty;
+                    for (const b of available.sort((a: any, c: any) => Number(c.quantity) - Number(a.quantity))) {
+                        if (remaining <= 0) break;
+                        const take = Math.min(remaining, Number(b.quantity));
+                        b.quantity = Number(b.quantity) - take;
+                        remaining -= take;
+                    }
+                    let reserved = mockDB.cap_stock_balances.find(
+                        (b: any) =>
+                            b.cap_id === soi.cap_id &&
+                            b.state === 'reserved' &&
+                            (b.unit_type || 'loose') === (soi.unit_type || 'loose')
+                    );
+                    if (reserved) {
+                        reserved.quantity = Number(reserved.quantity) + qty;
+                    } else {
+                        mockDB.cap_stock_balances.push({
+                            cap_id: soi.cap_id,
+                            state: 'reserved',
+                            quantity: qty,
+                            factory_id: factoryId,
+                            unit_type: soi.unit_type || 'loose',
+                        });
+                    }
+                } else {
+                    const stateMapping: Record<string, string> = {
+                        loose: 'semi_finished',
+                        packet: 'packed',
+                        bundle: 'finished',
+                    };
+                    const sourceState = stateMapping[soi.unit_type || 'bundle'] || 'finished';
+                    const available = (mockDB.stock_balances || []).filter(
+                        (b: any) =>
+                            b.product_id === soi.product_id &&
+                            b.state === sourceState &&
+                            (b.factory_id === factoryId || b.factory_id == null) &&
+                            (b.unit_type || soi.unit_type) === (soi.unit_type || 'bundle') &&
+                            (soi.cap_id == null || (b.cap_id || null) === (soi.cap_id || null))
+                    );
+                    const sumAvail = available.reduce((s: number, b: any) => s + Number(b.quantity || 0), 0);
+                    if (sumAvail < qty) {
+                        return Promise.resolve({
+                            data: null,
+                            error: {
+                                message: `Insufficient physical stock for product ${soi.product_id}. Required: ${qty}, Available: ${sumAvail} in state ${sourceState}.`,
+                            },
+                        });
+                    }
+                    let remaining = qty;
+                    for (const b of available.sort((a: any, c: any) => Number(c.quantity) - Number(a.quantity))) {
+                        if (remaining <= 0) break;
+                        const take = Math.min(remaining, Number(b.quantity));
+                        b.quantity = Number(b.quantity) - take;
+                        remaining -= take;
+                    }
+                    let reserved = mockDB.stock_balances.find(
+                        (b: any) =>
+                            b.product_id === soi.product_id &&
+                            b.state === 'reserved' &&
+                            (b.unit_type || soi.unit_type) === (soi.unit_type || 'bundle') &&
+                            (soi.cap_id == null || (b.cap_id || null) === (soi.cap_id || null))
+                    );
+                    if (reserved) {
+                        reserved.quantity = Number(reserved.quantity) + qty;
+                    } else {
+                        mockDB.stock_balances.push({
+                            product_id: soi.product_id,
+                            state: 'reserved',
+                            quantity: qty,
+                            factory_id: factoryId,
+                            unit_type: soi.unit_type || 'bundle',
+                            cap_id: soi.cap_id || null,
+                            inner_id: soi.inner_id || null,
+                        });
+                    }
+                }
+
+                soi.quantity_prepared = (soi.quantity_prepared || 0) + qty;
+                soi.quantity_reserved = (soi.quantity_reserved || 0) + qty;
+                soi.is_prepared = soi.quantity_prepared >= soi.quantity;
+                totalReserved += qty;
             }
-            const order = mockDB.sales_orders.find(o => o.id === p_order_id);
-            if (order) order.status = 'reserved';
-            return Promise.resolve({ data: { updated_count: updatedCount }, error: null });
+
+            const allPrepared = mockDB.sales_order_items
+                .filter((i: any) => i.order_id === p_order_id)
+                .every((i: any) => i.is_prepared);
+            if (allPrepared) {
+                order.status = 'reserved';
+            }
+
+            return Promise.resolve({
+                data: {
+                    success: true,
+                    order_id: p_order_id,
+                    reserved_count: totalReserved,
+                    message: `Successfully reserved ${totalReserved} items`,
+                },
+                error: null,
+            });
         }
 
         if (fnName === 'process_partial_dispatch') {
-            const { p_order_id, p_items, p_user_id } = args;
-            const batchId = `batch-${Math.random().toString(36).substr(2, 9)}`;
-            
-            for (const item of p_items) {
-                const soi = mockDB.sales_order_items.find(i => i.id === item.item_id);
-                if (!soi) continue;
+            const {
+                p_order_id,
+                p_items,
+                p_user_id,
+                p_payment_mode,
+                p_discount_type,
+            } = args;
+            const order = mockDB.sales_orders.find((o: any) => o.id === p_order_id);
+            if (!order) {
+                return Promise.resolve({ data: null, error: { message: `Order ${p_order_id} not found` } });
+            }
+            if (!['reserved', 'partially_delivered'].includes(order.status)) {
+                return Promise.resolve({
+                    data: null,
+                    error: {
+                        message: `Cannot dispatch order in status: ${order.status}. Order must be reserved or partially delivered.`,
+                    },
+                });
+            }
+            const payMode = p_payment_mode || 'cash';
+            if (!['cash', 'credit'].includes(payMode)) {
+                return Promise.resolve({
+                    data: null,
+                    error: { message: `Invalid payment mode: ${payMode}. Must be cash or credit.` },
+                });
+            }
+            const discType = p_discount_type || 'fixed';
+            if (!['percentage', 'fixed'].includes(discType)) {
+                return Promise.resolve({
+                    data: null,
+                    error: { message: `Invalid discount type: ${discType}. Must be percentage or fixed.` },
+                });
+            }
 
-                const prepared = soi.quantity_prepared || 0;
+            for (const item of p_items) {
+                if (item.quantity == null || item.quantity <= 0) {
+                    return Promise.resolve({
+                        data: null,
+                        error: { message: 'Invalid quantity: Quantity must be positive.' },
+                    });
+                }
+                if (item.unit_price == null || item.unit_price < 0) {
+                    return Promise.resolve({
+                        data: null,
+                        error: { message: 'Invalid unit price: Price must be non-negative.' },
+                    });
+                }
+
+                const soi = mockDB.sales_order_items.find(
+                    (i: any) => i.id === item.item_id && i.order_id === p_order_id
+                );
+                if (!soi) {
+                    return Promise.resolve({
+                        data: null,
+                        error: {
+                            message: `Order item ${item.item_id} not found or does not belong to order ${p_order_id}`,
+                        },
+                    });
+                }
+
+                const reservedQty = soi.quantity_reserved || 0;
                 const shipped = soi.quantity_shipped || 0;
-                
-                if (item.quantity > (prepared - shipped)) {
-                    throw new Error(`Cannot dispatch ${item.quantity} for item ${item.item_id}. Only ${prepared - shipped} prepared.`);
+                const canShip = reservedQty - shipped;
+
+                if (item.quantity > canShip) {
+                    return Promise.resolve({
+                        data: null,
+                        error: {
+                            message: `Cannot dispatch ${item.quantity} for item ${item.item_id}. Only ${canShip} available (reserved: ${reservedQty}, already shipped: ${shipped})`,
+                        },
+                    });
                 }
 
                 soi.quantity_shipped = shipped + item.quantity;
-                
-                // Deduct from reserved stock (Product or Cap)
-                if (soi.cap_id) {
-                    const reserved = mockDB.cap_stock_balances.find(b => 
-                        b.cap_id === soi.cap_id && b.state === 'reserved'
+
+                const capOnly = !soi.product_id && !!soi.cap_id;
+                if (capOnly) {
+                    let remaining = item.quantity;
+                    const reservedRows = (mockDB.cap_stock_balances || []).filter(
+                        (b: any) =>
+                            b.cap_id === soi.cap_id &&
+                            b.state === 'reserved' &&
+                            (b.unit_type || 'loose') === (soi.unit_type || 'loose')
                     );
-                    if (reserved) reserved.quantity -= item.quantity;
+                    const sumRes = reservedRows.reduce((s: number, b: any) => s + Number(b.quantity || 0), 0);
+                    if (sumRes < item.quantity) {
+                        return Promise.resolve({
+                            data: null,
+                            error: {
+                                message: `Failed to deduct all reserved stock for item ${item.item_id}. Remaining: ${item.quantity}`,
+                            },
+                        });
+                    }
+                    for (const b of reservedRows.sort((a: any, c: any) => Number(c.quantity) - Number(a.quantity))) {
+                        if (remaining <= 0) break;
+                        const take = Math.min(remaining, Number(b.quantity));
+                        b.quantity = Number(b.quantity) - take;
+                        remaining -= take;
+                    }
                 } else {
-                    const reserved = mockDB.stock_balances.find(b => 
-                        b.product_id === soi.product_id && b.state === 'reserved'
+                    let remaining = item.quantity;
+                    const reservedRows = (mockDB.stock_balances || []).filter(
+                        (b: any) =>
+                            b.product_id === soi.product_id &&
+                            b.state === 'reserved' &&
+                            (b.unit_type || soi.unit_type) === (soi.unit_type || 'bundle') &&
+                            (soi.cap_id == null || (b.cap_id || null) === (soi.cap_id || null))
                     );
-                    if (reserved) reserved.quantity -= item.quantity;
+                    const sumRes = reservedRows.reduce((s: number, b: any) => s + Number(b.quantity || 0), 0);
+                    if (sumRes < item.quantity) {
+                        return Promise.resolve({
+                            data: null,
+                            error: {
+                                message: `Failed to deduct all reserved stock for item ${item.item_id}. Remaining: ${item.quantity}`,
+                            },
+                        });
+                    }
+                    for (const b of reservedRows.sort((a: any, c: any) => Number(c.quantity) - Number(a.quantity))) {
+                        if (remaining <= 0) break;
+                        const take = Math.min(remaining, Number(b.quantity));
+                        b.quantity = Number(b.quantity) - take;
+                        remaining -= take;
+                    }
                 }
             }
 
-            const order = mockDB.sales_orders.find(o => o.id === p_order_id);
-            if (order) {
-                const allDone = mockDB.sales_order_items
-                    .filter(i => i.order_id === p_order_id)
-                    .every(i => (i.quantity_shipped || 0) >= i.quantity);
-                order.status = allDone ? 'delivered' : 'partially_delivered';
-            }
+            const allDone = mockDB.sales_order_items
+                .filter((i: any) => i.order_id === p_order_id)
+                .every((i: any) => (i.quantity_shipped || 0) >= i.quantity);
+            order.status = allDone ? 'delivered' : 'partially_delivered';
 
-            return Promise.resolve({ data: batchId, error: null });
+            const batchId = `batch-${Math.random().toString(36).substr(2, 9)}`;
+            return Promise.resolve({
+                data: {
+                    success: true,
+                    dispatch_id: batchId,
+                    payment_id: null,
+                    message: 'Dispatch processed successfully',
+                },
+                error: null,
+            });
         }
 
         return Promise.resolve({ data: null, error: null });
     });
 
     inventoryService.adjustRawMaterial.mockImplementation((id: string, data: any) => {
-        console.log(`[MOCK INVENTORY] adjustRawMaterial called for ${id} with ${data.quantity}kg`);
         if (mockDB.raw_materials) {
             const rm = mockDB.raw_materials.find(r => r.id === id);
             if (rm) {
                 rm.stock_weight_kg = (rm.stock_weight_kg || 0) + data.quantity;
-                console.log(`[MOCK INVENTORY] Updated ${id} weight to ${rm.stock_weight_kg}`);
-            } else {
-                console.log(`[MOCK INVENTORY] Raw material ${id} NOT FOUND in mockDB`);
             }
         }
         return Promise.resolve(null);
@@ -485,9 +766,9 @@ describe('Business Chain Integration Tests', () => {
     });
 
     it('should create a production request when a backordered item is ordered', async () => {
-        // Seed: Product and 0 stock
-        mockDB.products = [{ id: 'prod-1', name: 'Test Product', selling_price: 100 }];
-        mockDB.stock_balances = []; // No stock for this product
+        // Seed: Product and 0 loose (semi_finished) stock — packet/bundle would require cap_id in real RPC
+        mockDB.products = [{ id: 'prod-1', name: 'Test Product', selling_price: 100, factory_id: 'fact-1' }];
+        mockDB.stock_balances = [];
 
         const orderData = {
             customer_id: 'cust-1',
@@ -496,10 +777,10 @@ describe('Business Chain Integration Tests', () => {
                     product_id: 'prod-1',
                     quantity: 10,
                     unit_price: 100,
-                    unit_type: 'packet' as const
-                }
+                    unit_type: 'loose' as const,
+                },
             ],
-            user_id: 'user-1'
+            user_id: 'user-1',
         };
 
         // Execute
@@ -524,7 +805,6 @@ describe('Business Chain Integration Tests', () => {
         );
         expect(mockSendToRole).toHaveBeenCalled();
         
-        console.log('✅ CHAIN SUCCESS: Sales Order -> Production Request & Side Effects triggered.');
     });
 
     it('Chain 1: Procurement -> Raw Material Stock -> Cash Flow', async () => {
@@ -559,7 +839,6 @@ describe('Business Chain Integration Tests', () => {
         // Verify: SIDE EFFECTS (Finance)
         expect(mockLogEntry).toHaveBeenCalled();
         
-        console.log('✅ CHAIN SUCCESS: Procurement -> Stock & Automated Finance updated.');
     });
 
     it('Chain 2: Production -> Raw Material Consumption -> Stock Update', async () => {
@@ -577,7 +856,7 @@ describe('Business Chain Integration Tests', () => {
         }];
         mockDB.product_templates = [{ id: 'tpl-1' }];
         mockDB.machine_products = [{ machine_id: 'mac-1', product_template_id: 'tpl-1', ideal_cycle_time_seconds: 30 }];
-        mockDB.raw_materials = [{ id: 'rw-1', name: 'Plastic', stock_weight_kg: 100 }];
+        mockDB.raw_materials = [{ id: 'rw-1', name: 'Plastic', stock_weight_kg: 100, factory_id: 'fac-1' }];
 
         const productionData = {
             machine_id: 'mac-1',
@@ -611,7 +890,6 @@ describe('Business Chain Integration Tests', () => {
         // The service updates raw_materials weight
         expect(mockDB.raw_materials[0].stock_weight_kg).toBe(90); // 100 - 10
 
-        console.log('✅ CHAIN SUCCESS: Production -> Material consumed & Stock produced.');
     });
 
     test('Chain 4: Sales Order -> Fulfillment (Preparation/Reservation)', async () => {
@@ -620,6 +898,7 @@ describe('Business Chain Integration Tests', () => {
 
         // 1. Seed customer and product
         mockDB.customers = [{ id: 'cust-1', name: 'Standard Corp' }];
+        mockDB.caps = [{ id: 'cap-a', name: 'Cap A', factory_id: 'fact-1' }];
         mockDB.products = [{ 
             id: 'prod-1', 
             name: 'Product A', 
@@ -630,7 +909,7 @@ describe('Business Chain Integration Tests', () => {
             items_per_bundle: 100 
         }];
         
-        // 2. Seed stock (Finished)
+        // 2. Seed stock (Finished, tub+cap combination)
         mockDB.stock_balances = [{
             id: 'bal-1',
             product_id: 'prod-1',
@@ -638,20 +917,18 @@ describe('Business Chain Integration Tests', () => {
             state: 'finished',
             quantity: 100,
             unit_type: 'bundle',
-            cap_id: null,
+            cap_id: 'cap-a',
             inner_id: null
         }];
 
         // 3. Create Sales Order (Manual Preparation Flow)
         const order = await salesOrderService.createOrder({
             customer_id: 'cust-1',
-            items: [{ product_id: 'prod-1', quantity: 20, unit_type: 'bundle', unit_price: 10 }],
+            items: [{ product_id: 'prod-1', cap_id: 'cap-a', quantity: 20, unit_type: 'bundle', unit_price: 10 }],
             user_id: 'user-1'
         });
 
-        console.log('Order created:', order.id, 'Status:', order.status);
         const item = order.sales_order_items[0];
-        console.log('Order Item:', item.id, 'Reserved:', item.quantity_reserved);
         expect(order.status).toBe('pending');
         expect(item.quantity_reserved).toBe(0); // Should NOT be reserved yet
         expect(item.is_backordered).toBe(false);
@@ -661,26 +938,24 @@ describe('Business Chain Integration Tests', () => {
             await salesOrderService.prepareOrderItems(order.id, [{ itemId: item.id, quantity: 20 }], 'user-1');
             await waitForEvents();
         } catch (e: any) {
-            console.error('prepareOrderItems failed:', e.message);
             throw e;
         }
 
         // 5. Verify Reservation
         const updatedOrder = await salesOrderService.getOrderById(order.id);
-        console.log('Updated Order Status:', updatedOrder.status);
         expect(updatedOrder.status).toBe('reserved');
         expect(updatedOrder.sales_order_items[0].quantity_reserved).toBe(20);
 
         // 6. Verify Stock Movement
-        const finishedStock = mockDB.stock_balances.find(b => b.state === 'finished');
-        const reservedStock = mockDB.stock_balances.find(b => b.state === 'reserved');
-
-        console.log('Stock - Finished:', finishedStock?.quantity, 'Reserved:', reservedStock?.quantity);
+        const finishedStock = mockDB.stock_balances.find(
+            (b: any) => b.state === 'finished' && b.product_id === 'prod-1' && b.cap_id === 'cap-a'
+        );
+        const reservedStock = mockDB.stock_balances.find(
+            (b: any) => b.state === 'reserved' && b.product_id === 'prod-1' && b.cap_id === 'cap-a'
+        );
 
         expect(finishedStock.quantity).toBe(80); // 100 - 20
         expect(reservedStock.quantity).toBe(20);
-
-        console.log('✅ CHAIN SUCCESS: Sales Order -> Prepared & Reserved.');
     });
 
     test('Chain 5: Fulfillment -> Dispatch (Delivery)', async () => {
@@ -707,7 +982,8 @@ describe('Business Chain Integration Tests', () => {
             factory_id: 'fact-1',
             state: 'reserved',
             quantity: 20,
-            unit_type: 'bundle'
+            unit_type: 'bundle',
+            cap_id: null,
         }];
 
         // 3. Perform Delivery
@@ -730,7 +1006,6 @@ describe('Business Chain Integration Tests', () => {
             expect.objectContaining({ new_status: 'delivered' })
         );
 
-        console.log('✅ CHAIN SUCCESS: Reserved Stock -> Delivered & Audited.');
     });
 
     test('Chain 6: Customer Payment -> Balance Update', async () => {
@@ -768,7 +1043,6 @@ describe('Business Chain Integration Tests', () => {
         expect(mockDB.payments.length).toBe(1);
         expect(mockLogEntry).toHaveBeenCalled();
 
-        console.log('✅ CHAIN SUCCESS: Customer Payment -> Balance & Finance updated.');
     });
 
     test('Chain 7: Production Request -> Mark as Prepared (Manual Flow)', async () => {
@@ -812,7 +1086,6 @@ describe('Business Chain Integration Tests', () => {
             { status: 'prepared' }
         );
 
-        console.log('✅ CHAIN SUCCESS: Production Request marked as Prepared (Audited).');
     });
 
     test('Chain 8: Standalone Cap Fulfillment', async () => {
@@ -876,28 +1149,248 @@ describe('Business Chain Integration Tests', () => {
         const deliveredOrder = mockDB.sales_orders.find(o => o.id === orderId);
         expect(deliveredOrder?.status).toBe('delivered');
 
-        console.log('✅ CHAIN SUCCESS: Standalone Cap Fulfillment -> Manual Reservation -> Dispatch.');
     });
 
-    test('Chain 9: Manual Reservation Enforcement (Dispatch blocked if not reserved)', async () => {
+    test('Chain 9: Dispatch blocked when nothing reserved (reserved qty = 0)', async () => {
         setupMocks();
         const { salesOrderService } = require('../sales-order.service');
 
         const orderId = `order-blocked`;
         const itemId = `item-blocked`;
-        mockDB.sales_orders.push({ id: orderId, status: 'pending', customer_id: 'c-1' });
-        mockDB.sales_order_items.push({ 
-            id: itemId, order_id: orderId, product_id: 'p-1', quantity: 50, quantity_reserved: 0, quantity_prepared: 0, unit_type: 'bundle' 
+        // Order is "reserved" in workflow sense is wrong here — line has zero reserved stock
+        mockDB.sales_orders.push({ id: orderId, status: 'reserved', customer_id: 'c-1' });
+        mockDB.sales_order_items.push({
+            id: itemId,
+            order_id: orderId,
+            product_id: 'p-1',
+            quantity: 50,
+            quantity_reserved: 0,
+            quantity_shipped: 0,
+            unit_type: 'bundle',
         });
 
-        // Attempting to dispatch item with 0 reserved/prepared should fail
-        await expect(salesOrderService.processDelivery(orderId, {
-            items: [{ item_id: itemId, quantity: 50, unit_price: 100 }],
-            payment_mode: 'cash',
-            user_id: 'u-1'
-        })).rejects.toThrow(/prepared/i);
-            
-        console.log('✅ CHAIN SUCCESS: Manual Reservation Enforcement (Blocked Dispatch).');
+        await expect(
+            salesOrderService.processDelivery(orderId, {
+                items: [{ item_id: itemId, quantity: 50, unit_price: 100 }],
+                payment_mode: 'cash',
+                user_id: 'u-1',
+            })
+        ).rejects.toThrow(/Only 0 available|reserved/i);
+    });
+
+    describe('Sales chain edge cases (RPC-aligned mocks)', () => {
+        it('rejects createOrder when packet line has product but no cap_id', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.products = [{ id: 'p1', factory_id: 'fact-1', selling_price: 1 }];
+            mockDB.stock_balances = [];
+
+            await expect(
+                salesOrderService.createOrder({
+                    customer_id: 'c1',
+                    items: [{ product_id: 'p1', quantity: 1, unit_type: 'packet' }],
+                    user_id: 'u1',
+                })
+            ).rejects.toThrow(/Cap selection is required/i);
+        });
+
+        it('rejects createOrder when bundle line has product but no cap_id', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.products = [{ id: 'p1', factory_id: 'fact-1', selling_price: 1 }];
+
+            await expect(
+                salesOrderService.createOrder({
+                    customer_id: 'c1',
+                    items: [{ product_id: 'p1', quantity: 1, unit_type: 'bundle' }],
+                    user_id: 'u1',
+                })
+            ).rejects.toThrow(/Cap selection is required/i);
+        });
+
+        it('allows createOrder for loose tub without cap_id', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.products = [{ id: 'p1', factory_id: 'fact-1', selling_price: 1 }];
+            mockDB.stock_balances = [
+                {
+                    product_id: 'p1',
+                    factory_id: 'fact-1',
+                    state: 'semi_finished',
+                    quantity: 50,
+                    unit_type: 'loose',
+                    cap_id: null,
+                },
+            ];
+
+            const order = await salesOrderService.createOrder({
+                customer_id: 'c1',
+                items: [{ product_id: 'p1', quantity: 5, unit_type: 'loose', unit_price: 1 }],
+                user_id: 'u1',
+            });
+            expect(order.sales_order_items[0].is_backordered).toBe(false);
+        });
+
+        it('rejects createOrder when quantity is zero', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.products = [{ id: 'p1', factory_id: 'fact-1', selling_price: 1 }];
+
+            await expect(
+                salesOrderService.createOrder({
+                    customer_id: 'c1',
+                    items: [{ product_id: 'p1', cap_id: 'cap-z', quantity: 0, unit_type: 'bundle' }],
+                    user_id: 'u1',
+                })
+            ).rejects.toThrow(/Invalid quantity/i);
+        });
+
+        it('prepareOrderItems fails when order status is delivered', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.sales_orders = [{ id: 'o1', customer_id: 'c1', status: 'delivered' }];
+            mockDB.sales_order_items = [
+                {
+                    id: 'i1',
+                    order_id: 'o1',
+                    product_id: 'p1',
+                    cap_id: 'cap1',
+                    quantity: 1,
+                    unit_type: 'bundle',
+                },
+            ];
+
+            await expect(
+                salesOrderService.prepareOrderItems('o1', [{ itemId: 'i1', quantity: 1 }], 'u1')
+            ).rejects.toThrow(/Cannot prepare order in status/i);
+        });
+
+        it('prepareOrderItems fails when not enough physical stock for tub+cap', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.sales_orders = [{ id: 'o1', customer_id: 'c1', status: 'pending' }];
+            mockDB.sales_order_items = [
+                {
+                    id: 'i1',
+                    order_id: 'o1',
+                    product_id: 'p1',
+                    cap_id: 'cap1',
+                    quantity: 100,
+                    unit_type: 'bundle',
+                },
+            ];
+            mockDB.stock_balances = [
+                {
+                    product_id: 'p1',
+                    factory_id: 'fact-1',
+                    state: 'finished',
+                    quantity: 5,
+                    unit_type: 'bundle',
+                    cap_id: 'cap1',
+                },
+            ];
+
+            await expect(
+                salesOrderService.prepareOrderItems('o1', [{ itemId: 'i1', quantity: 100 }], 'u1')
+            ).rejects.toThrow(/Insufficient physical stock/i);
+        });
+
+        it('processDelivery fails when payment_mode is invalid', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.sales_orders = [{ id: 'o1', customer_id: 'c1', status: 'reserved' }];
+            mockDB.sales_order_items = [
+                {
+                    id: 'i1',
+                    order_id: 'o1',
+                    product_id: 'p1',
+                    quantity: 10,
+                    quantity_reserved: 10,
+                    quantity_shipped: 0,
+                    unit_type: 'bundle',
+                    cap_id: null,
+                },
+            ];
+            mockDB.stock_balances = [
+                {
+                    product_id: 'p1',
+                    state: 'reserved',
+                    quantity: 10,
+                    unit_type: 'bundle',
+                    cap_id: null,
+                    factory_id: 'fact-1',
+                },
+            ];
+
+            await expect(
+                salesOrderService.processDelivery('o1', {
+                    items: [{ item_id: 'i1', quantity: 10, unit_price: 1 }],
+                    payment_mode: 'crypto' as any,
+                    user_id: 'u1',
+                })
+            ).rejects.toThrow(/Invalid payment mode/i);
+        });
+
+        it('partial dispatch sets order to partially_delivered then delivered when completed', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.sales_orders = [{ id: 'o1', customer_id: 'c1', status: 'reserved' }];
+            mockDB.sales_order_items = [
+                {
+                    id: 'i1',
+                    order_id: 'o1',
+                    product_id: 'p1',
+                    quantity: 10,
+                    quantity_reserved: 10,
+                    quantity_shipped: 0,
+                    unit_type: 'bundle',
+                    cap_id: null,
+                },
+            ];
+            mockDB.stock_balances = [
+                {
+                    product_id: 'p1',
+                    state: 'reserved',
+                    quantity: 10,
+                    unit_type: 'bundle',
+                    cap_id: null,
+                    factory_id: 'fact-1',
+                },
+            ];
+
+            await salesOrderService.processDelivery('o1', {
+                items: [{ item_id: 'i1', quantity: 4, unit_price: 10 }],
+                payment_mode: 'cash',
+                user_id: 'u1',
+            });
+            let o = mockDB.sales_orders.find((x: any) => x.id === 'o1');
+            expect(o.status).toBe('partially_delivered');
+
+            await salesOrderService.processDelivery('o1', {
+                items: [{ item_id: 'i1', quantity: 6, unit_price: 10 }],
+                payment_mode: 'cash',
+                user_id: 'u1',
+            });
+            o = mockDB.sales_orders.find((x: any) => x.id === 'o1');
+            expect(o.status).toBe('delivered');
+        });
+
+        it('cap-only order with enough finished stock is not backordered', async () => {
+            setupMocks();
+            const { salesOrderService } = require('../sales-order.service');
+            mockDB.caps = [{ id: 'cap-x', factory_id: 'fact-1' }];
+            mockDB.cap_stock_balances = [
+                { cap_id: 'cap-x', state: 'finished', quantity: 200, factory_id: 'fact-1', unit_type: 'loose' },
+            ];
+
+            const order = await salesOrderService.createOrder({
+                customer_id: 'c1',
+                items: [{ cap_id: 'cap-x', quantity: 50, unit_type: 'loose' }],
+                user_id: 'u1',
+            });
+            const soi = order.sales_order_items[0];
+            expect(soi.is_backordered).toBe(false);
+        });
     });
 });
 

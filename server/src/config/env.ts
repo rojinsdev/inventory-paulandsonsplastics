@@ -16,6 +16,11 @@ const envSchema = z.object({
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
     SENTRY_DSN: z.string().url().optional(),
+    SHEETS_SYNC_ENABLED: z.string().optional(),
+    GOOGLE_SHEETS_SPREADSHEET_ID: z.string().optional(),
+    GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+    GOOGLE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+    SHEETS_SNAPSHOT_CRON: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -43,5 +48,12 @@ export const config = {
     },
     sentry: {
         dsn: parsed.data.SENTRY_DSN,
+    },
+    sheets: {
+        enabled: ['true', '1'].includes((parsed.data.SHEETS_SYNC_ENABLED || '').toLowerCase()),
+        spreadsheetId: parsed.data.GOOGLE_SHEETS_SPREADSHEET_ID || '',
+        serviceAccountJson: parsed.data.GOOGLE_SERVICE_ACCOUNT_JSON,
+        serviceAccountPath: parsed.data.GOOGLE_SERVICE_ACCOUNT_PATH,
+        snapshotCron: parsed.data.SHEETS_SNAPSHOT_CRON || '15 2 * * *',
     },
 };

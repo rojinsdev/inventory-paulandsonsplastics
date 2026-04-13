@@ -1,7 +1,10 @@
 import { supabase } from '../../config/supabase';
 import { pushNotificationService } from '../notifications/push-notification.service';
-import { salesOrderService } from '../sales-orders/sales-order.service';
 import { AppError } from '../../utils/AppError';
+import {
+    resolvePrepareDimensionsForProductionRequest,
+    sumQuantityMatchingPrepareDimensions,
+} from './prepare-stock-dimensions';
 
 const MAIN_FACTORY_ID = '7ec2471f-c1c4-4603-9181-0cbde159420b';
 
@@ -50,19 +53,38 @@ export class StockAllocationService {
 
         if (!fromState) throw new Error(`Invalid unit type for fulfillment: ${unitType}`);
 
-        // 2. Validate sufficient stock exists in the required state
+        // 2. Validate sufficient stock in the same dimensional slice prepare_order_items_atomic uses
         let totalAvailable = 0;
         if (request.product_id) {
+            const dims = await resolvePrepareDimensionsForProductionRequest(supabase, {
+                salesOrderId: request.sales_order_id,
+                productId: request.product_id,
+                requestInnerId: request.inner_id,
+                requestCapId: request.cap_id,
+            });
+
             const { data: balances, error: stockError } = await supabase
                 .from('stock_balances')
-                .select('quantity')
+                .select('quantity, cap_id, inner_id')
                 .eq('product_id', request.product_id)
                 .eq('state', fromState)
-                .eq('factory_id', request.factory_id)
-                .in('unit_type', dbUnitTypes);
+                .in('unit_type', dbUnitTypes)
+                .or(
+                    `factory_id.eq.${request.factory_id},factory_id.is.null`
+                );
 
             if (stockError) throw new Error(`Stock fetch error: ${stockError.message}`);
-            totalAvailable = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
+            totalAvailable = sumQuantityMatchingPrepareDimensions(balances, dims);
+
+            if (totalAvailable < request.quantity) {
+                const combo = `cap_id=${dims.capId ?? '<NULL>'}, inner_id=${dims.innerId ?? '<NULL>'}, include_inner=${dims.includeInner}`;
+                throw new AppError(
+                    `Insufficient ${unitType} stock (${fromState}) for this order line (${combo}). ` +
+                        `Have ${totalAvailable}, need ${request.quantity}. ` +
+                        `Produce or bundle stock that matches this cap/inner combination, then mark prepared again.`,
+                    400
+                );
+            }
         } else if (request.cap_id) {
             const { data: balances, error: stockError } = await supabase
                 .from('cap_stock_balances')
@@ -76,7 +98,9 @@ export class StockAllocationService {
             totalAvailable = balances?.reduce((sum, b) => sum + Number(b.quantity), 0) || 0;
         }
 
-        if (totalAvailable < request.quantity) {
+        if (request.product_id) {
+            // Product branch already validated above with dimensional match
+        } else if (totalAvailable < request.quantity) {
             throw new AppError(`Insufficient ${unitType} stock (${fromState}) to mark as prepared. Have ${totalAvailable}, need ${request.quantity}. Please log production first.`, 400);
         }
 
@@ -91,7 +115,9 @@ export class StockAllocationService {
             .select(`
                 *,
                 products (name, size, color, factory_id),
-                sales_order:sales_orders!left(order_number:id)
+                caps (name, color, factory_id),
+                inners (color, inner_templates(name)),
+                sales_order:sales_orders!left(id, status)
             `)
             .single();
 
@@ -108,7 +134,9 @@ export class StockAllocationService {
             await this.notifyfulfillment(order.user_id, request.sales_order_id, request.product_id, request.quantity, unitType, request.cap_id);
         }
 
-        return { success: true, request: updatedRequest };
+        // Return the updated row only — callers (e.g. PATCH /production/requests) expect the same
+        // shape as GET /production/requests, not { success, request }.
+        return updatedRequest;
     }
 
     private async reserveFulfillment(productId: string, fromState: string, quantity: number, factoryId: string, dbUnitType: string, preFetchedBalances: any[] = []) {

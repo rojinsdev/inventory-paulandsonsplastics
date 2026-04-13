@@ -1,6 +1,27 @@
 import { supabase } from '../../config/supabase';
 import { randomUUID } from 'crypto';
 import { getPagination } from '../../utils/supabase';
+import { eventBus } from '../../core/eventBus';
+import { SystemEvents } from '../../core/events';
+
+const cashFlowSelect =
+    'id, date, category_id, factory_id, amount, payment_mode, reference_id, notes, is_automatic, cash_flow_categories(name)';
+
+function emitCashFlowLogged(row: Record<string, unknown>): void {
+    const cat = row.cash_flow_categories as { name?: string } | null | undefined;
+    eventBus.emit(SystemEvents.CASH_FLOW_LOGGED, {
+        log_id: String(row.id),
+        date: String(row.date),
+        category_id: String(row.category_id),
+        category_name: cat?.name ?? '',
+        factory_id: (row.factory_id as string | null) ?? null,
+        amount: Number(row.amount),
+        payment_mode: String(row.payment_mode),
+        reference_id: (row.reference_id as string | null) ?? null,
+        notes: (row.notes as string | null) ?? null,
+        is_automatic: Boolean(row.is_automatic),
+    });
+}
 
 export interface CashFlowLogDTO {
     date?: string;
@@ -82,13 +103,15 @@ export class CashFlowService {
                 is_automatic: data.is_automatic || false
             }));
 
-            const { error } = await supabase
+            const { data: inserted, error } = await supabase
                 .from('cash_flow_logs')
-                .insert(logs);
+                .insert(logs)
+                .select(cashFlowSelect);
 
             if (error) throw new Error(`Failed to log shared cash flow entries: ${error.message}`);
+            for (const row of inserted ?? []) emitCashFlowLogged(row as Record<string, unknown>);
         } else {
-            const { error } = await supabase
+            const { data: inserted, error } = await supabase
                 .from('cash_flow_logs')
                 .insert({
                     date: data.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
@@ -99,9 +122,12 @@ export class CashFlowService {
                     reference_id: data.reference_id,
                     notes: data.notes,
                     is_automatic: data.is_automatic || false
-                });
+                })
+                .select(cashFlowSelect)
+                .single();
 
             if (error) throw new Error(`Failed to log cash flow entry: ${error.message}`);
+            if (inserted) emitCashFlowLogged(inserted as Record<string, unknown>);
         }
     }
 
@@ -138,11 +164,13 @@ export class CashFlowService {
             }
         ];
 
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
             .from('cash_flow_logs')
-            .insert(logs);
+            .insert(logs)
+            .select(cashFlowSelect);
 
         if (error) throw new Error(`Failed to log transfer: ${error.message}`);
+        for (const row of inserted ?? []) emitCashFlowLogged(row as Record<string, unknown>);
     }
 
     /**

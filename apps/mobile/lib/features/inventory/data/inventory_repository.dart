@@ -179,6 +179,8 @@ class InventoryRepository {
     required String productId,
     required int packetsCreated,
     String? capId,
+    String? innerId,
+    bool includeInner = true,
   }) async {
     try {
       await _apiClient.client.post(
@@ -187,6 +189,8 @@ class InventoryRepository {
           'product_id': productId,
           'packets_created': packetsCreated,
           if (capId != null) 'cap_id': capId,
+          if (innerId != null) 'inner_id': innerId,
+          'include_inner': includeInner,
         },
       );
     } catch (e) {
@@ -203,6 +207,8 @@ class InventoryRepository {
     String unitType = 'bundle',
     String source = 'packed',
     String? capId,
+    String? innerId,
+    bool includeInner = true,
   }) async {
     try {
       await _apiClient.client.post(
@@ -213,6 +219,8 @@ class InventoryRepository {
           'unit_type': unitType,
           'source': source,
           if (capId != null) 'cap_id': capId,
+          if (innerId != null) 'inner_id': innerId,
+          'include_inner': includeInner,
         },
       );
     } catch (e) {

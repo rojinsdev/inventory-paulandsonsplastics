@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
     Plus, 
@@ -12,18 +12,28 @@ import {
     ArrowUpRight,
     ArrowDownLeft,
     Calendar,
-    CheckCircle2
+    CheckCircle2,
+    Factory,
 } from 'lucide-react';
 import { suppliersAPI, cashFlowAPI, purchasesAPI } from '@/lib/api';
 import { cn, formatCurrency, formatDate } from '@/lib/utils';
+import { useFactory } from '@/contexts/FactoryContext';
 import styles from '../CompanyDealings.module.css';
 
+function defaultFactoryId(selectedFactory, factoriesList) {
+    if (typeof selectedFactory === 'string' && selectedFactory) return selectedFactory;
+    if (selectedFactory && typeof selectedFactory === 'object' && selectedFactory.id) return selectedFactory.id;
+    return factoriesList?.[0]?.id || '';
+}
+
 export default function PaymentHistoryTab({ suppliers = [] }) {
+    const { selectedFactory, factories } = useFactory();
     const queryClient = useQueryClient();
     const [modalOpen, setModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     
     const [formData, setFormData] = useState({
+        factory_id: '',
         supplier_id: '',
         amount: '',
         payment_method: 'Bank Transfer',
@@ -45,6 +55,7 @@ export default function PaymentHistoryTab({ suppliers = [] }) {
             queryClient.invalidateQueries({ queryKey: ['cash-flow'] });
             setModalOpen(false);
             setFormData({
+                factory_id: defaultFactoryId(selectedFactory, factories),
                 supplier_id: '',
                 amount: '',
                 payment_method: 'Bank Transfer',
@@ -55,6 +66,15 @@ export default function PaymentHistoryTab({ suppliers = [] }) {
         onError: (err) => alert(err.message)
     });
 
+    useEffect(() => {
+        if (!modalOpen) return;
+        const def = defaultFactoryId(selectedFactory, factories);
+        setFormData((prev) => ({
+            ...prev,
+            factory_id: prev.factory_id && factories?.some((f) => f.id === prev.factory_id) ? prev.factory_id : def,
+        }));
+    }, [modalOpen, selectedFactory, factories]);
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setFormData({ ...formData, [name]: value });
@@ -64,7 +84,15 @@ export default function PaymentHistoryTab({ suppliers = [] }) {
         e.preventDefault();
         if (!formData.supplier_id) return alert('Select a supplier');
         if (!formData.amount || formData.amount <= 0) return alert('Enter a valid amount');
-        paymentMutation.mutate(formData);
+        const factory_id = formData.factory_id || defaultFactoryId(selectedFactory, factories);
+        if (!factory_id) {
+            return alert('Select which factory this payment is for (cash flow is tracked per factory).');
+        }
+        paymentMutation.mutate({
+            ...formData,
+            amount: Number(formData.amount),
+            factory_id,
+        });
     };
 
     // Using direct payments data from backend (now includes flattened supplier_name)
@@ -171,6 +199,30 @@ export default function PaymentHistoryTab({ suppliers = [] }) {
                         </div>
                         <form onSubmit={handleSubmit}>
                             <div className={cn("modal-body", styles.spaceY5)}>
+                                <div className="form-group">
+                                    <label className={cn("form-label", styles.textXs, styles.uppercase, styles.trackingWider, styles.fontBold, styles.textMuted)}>
+                                        <span className={cn(styles.flex, styles.itemsCenter, styles.gap2)}>
+                                            <Factory size={14} />
+                                            Factory *
+                                        </span>
+                                    </label>
+                                    <select
+                                        className="select"
+                                        name="factory_id"
+                                        value={formData.factory_id || defaultFactoryId(selectedFactory, factories)}
+                                        onChange={handleInputChange}
+                                        required
+                                    >
+                                        {(factories || []).map((f) => (
+                                            <option key={f.id} value={f.id}>
+                                                {f.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className={cn(styles.textXs, styles.textMuted, styles.mt1)}>
+                                        Same supplier can supply different factories; choose the site this payment applies to.
+                                    </p>
+                                </div>
                                 <div className="form-group">
                                     <label className={cn("form-label", styles.textXs, styles.uppercase, styles.trackingWider, styles.fontBold, styles.textMuted)}>Select Supplier *</label>
                                     <select 

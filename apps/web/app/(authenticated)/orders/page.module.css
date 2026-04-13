@@ -379,20 +379,28 @@
 
 /* Involved Factory Preparation Table */
 .colProduct {
-    width: 30%;
+    width: 24%;
+}
+
+.colCap {
+    width: 18%;
+}
+
+.colColor {
+    width: 16%;
 }
 
 .colFactory {
-    width: 15%;
+    width: 14%;
 }
 
 .colQuantity {
-    width: 15%;
+    width: 10%;
     text-align: right !important;
 }
 
 .colUnit {
-    width: 10%;
+    width: 8%;
     text-align: center !important;
 }
 
@@ -402,7 +410,7 @@
 }
 
 .colStatus {
-    width: 20%;
+    width: 10%;
     text-align: right !important;
 }
 
@@ -1278,8 +1286,8 @@
 .scrollArea {
     flex: 1;
     overflow-y: auto;
-    padding: 1.5rem 2rem;
-    background-color: var(--slate-50);
+    padding: 1.25rem 1.5rem;
+    background-color: var(--surface);
 }
 
 :root[class~="dark"] .scrollArea {
@@ -1289,15 +1297,9 @@
 .itemCard {
     background-color: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 1rem;
-    margin-bottom: 1.5rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
     overflow: visible;
-    position: relative;
-}
-
-.itemCard:hover,
-.itemCard:focus-within {
-    border-color: var(--primary);
 }
 
 :root[class~="dark"] .itemCard {
@@ -1305,13 +1307,18 @@
 }
 
 .itemCardHeader {
-    padding: 1rem 1.5rem;
-    background-color: var(--slate-50);
+    padding: 0.75rem 1.25rem;
+    background-color: var(--surface);
     border-bottom: 1px solid var(--border);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 1rem 1rem 0 0;
+}
+
+.itemHeaderRight {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 :root[class~="dark"] .itemCardHeader {
@@ -1322,13 +1329,13 @@
     font-size: 0.75rem;
     font-weight: 700;
     color: var(--text-muted);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
 }
 
 .removeButton {
-    color: var(--error);
-    background-color: var(--error-bg);
-    border: none;
+    color: var(--text-muted);
+    background-color: transparent;
+    border: 1px solid var(--border);
     width: 32px;
     height: 32px;
     border-radius: 0.5rem;
@@ -1336,11 +1343,6 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-}
-
-.removeButton:hover {
-    background-color: var(--error);
-    color: white;
 }
 
 .productSelectGrid {
@@ -1364,12 +1366,81 @@
     }
 }
 
+/* Two-row layout for cleaner organization */
+.productSelectGridRow1 {
+    padding: 1rem 1.25rem 0.75rem 1.25rem;
+    display: grid;
+    grid-template-columns: 120px 1.1fr 1.6fr;
+    gap: 1rem;
+    align-items: center;
+}
+
+.productSelectGridRow1WithCap {
+    grid-template-columns: 120px 1.1fr 1.6fr 1.2fr;
+}
+
+.productSelectGridRow2 {
+    padding: 0.5rem 1.25rem 1rem 1.25rem;
+    display: grid;
+    grid-template-columns: 120px 1.1fr 1.2fr;
+    gap: 1rem;
+    align-items: center;
+}
+
+.productSelectGridRow2 .formItem {
+    justify-self: start;
+}
+
+.productSelectGridRow2 .formItem:nth-child(1) {
+    max-width: 140px;
+}
+
+.productSelectGridRow2 .formItem:nth-child(2) {
+    max-width: 200px;
+}
+
+.productSelectGridRow2 .formItem:nth-child(3) {
+    max-width: 220px;
+}
+
+@media (max-width: 1400px) {
+    .productSelectGridRow1 {
+        grid-template-columns: 120px 1fr 1.3fr;
+    }
+
+    .productSelectGridRow1WithCap {
+        grid-template-columns: 120px 1fr 1.3fr 1.15fr;
+    }
+    
+    .productSelectGridRow2 {
+        grid-template-columns: 120px 1fr 1.5fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .productSelectGridRow1 {
+        grid-template-columns: 1fr;
+        padding: 1.5rem 1.5rem 0.75rem 1.5rem;
+    }
+
+    .productSelectGridRow1WithCap {
+        grid-template-columns: 1fr;
+    }
+    
+    .productSelectGridRow2 {
+        grid-template-columns: 1fr;
+        padding: 0.75rem 1.5rem 1.5rem 1.5rem;
+    }
+}
+
 .formItem {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
     position: relative;
+    min-width: 0;
 }
+
 
 /* Type Toggle for Items */
 .typeToggle {
@@ -1377,6 +1448,8 @@
     background-color: var(--slate-100);
     border-radius: 0.5rem;
     padding: 0.25rem;
+    min-height: 44px;
+    align-items: center;
 }
 
 :root[class~="dark"] .typeToggle {
@@ -1385,7 +1458,7 @@
 
 .toggleBtn {
     flex: 1;
-    padding: 0.6rem 0.5rem;
+    padding: 0.5rem 0.5rem;
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-muted);
@@ -1468,6 +1541,11 @@
     border-radius: 0.75rem;
     font-size: 0.875rem;
     color: var(--text-main);
+    height: 44px;
+}
+
+.orderSelect > button {
+    height: 44px;
 }
 
 :root[class~="dark"] .inputModern {
@@ -1502,11 +1580,11 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    margin-top: 0.5rem;
+    margin-top: 0;
     font-size: 0.75rem;
     color: var(--text-muted);
-    padding: 0.35rem 0.6rem;
-    background-color: var(--slate-100);
+    padding: 0.25rem 0.5rem;
+    background-color: transparent;
     border-radius: 0.375rem;
     width: fit-content;
     border: 1px solid var(--border);
@@ -1572,18 +1650,17 @@
 
 .innerToggleContainer {
     grid-column: 1 / -1;
-    margin-top: 0.5rem;
-    padding-top: 1rem;
-    border-top: 1px dashed var(--border);
+    padding: 0.75rem 1.25rem 1.25rem 1.25rem;
+    border-top: 1px solid var(--border);
 }
 
 .innerToggle {
     display: flex;
     align-items: flex-start;
     gap: 0.75rem;
-    padding: 1rem;
-    background-color: var(--slate-50);
-    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: transparent;
+    border-radius: 0.5rem;
     border: 1px solid var(--border);
 }
 
@@ -1591,9 +1668,6 @@
     background-color: var(--surface-elevated);
 }
 
-.innerToggle:hover {
-    border-color: var(--primary);
-}
 
 .checkboxModern {
     width: 1.25rem;
@@ -1620,6 +1694,63 @@
     font-size: 0.75rem;
     color: var(--text-muted);
     line-height: 1.4;
+}
+
+.capHint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-style: italic;
+}
+
+.capSelectionContainer {
+    grid-column: 1 / -1;
+    margin-top: 1rem;
+}
+
+.capSelection {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    background-color: var(--blue-50);
+    border-radius: 0.75rem;
+    border: 1px solid var(--blue-200);
+}
+
+:root[class~="dark"] .capSelection {
+    background-color: var(--blue-900/10);
+    border-color: var(--blue-800);
+}
+
+.capSelection:hover {
+    border-color: var(--blue-400);
+}
+
+.capSelectionLabel {
+    display: flex;
+    flex-direction: column;
+}
+
+.capSelectionTitle {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--blue-700);
+    margin-bottom: 0.25rem;
+}
+
+:root[class~="dark"] .capSelectionTitle {
+    color: var(--blue-300);
+}
+
+.capSelectionDescription {
+    font-size: 0.75rem;
+    color: var(--blue-600);
+    line-height: 1.4;
+}
+
+:root[class~="dark"] .capSelectionDescription {
+    color: var(--blue-400);
 }
 
 .primaryButton {

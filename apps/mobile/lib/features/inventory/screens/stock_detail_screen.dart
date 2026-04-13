@@ -336,6 +336,9 @@ class _ProductStockCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final packetRows = InventoryStockComboHelper.packetCombos(stock);
+    final finishedRows = InventoryStockComboHelper.finishedUnitCombos(stock);
+    final hasComboDetail = packetRows.isNotEmpty || finishedRows.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -425,14 +428,101 @@ class _ProductStockCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _CompactIndicator(
-                label: stock.unitType == null || stock.unitType!.isEmpty
-                    ? 'Tubs'
-                    : '${stock.unitType![0].toUpperCase()}${stock.unitType!.substring(1)}s',
+                label: InventoryStockComboHelper.bundledSummaryColumnLabel(
+                  stock,
+                ),
                 value: stock.bundledQty,
                 color: colorScheme.primary,
               ),
             ],
           ),
+          if (hasComboDetail) ...[
+            const SizedBox(height: 4),
+            Theme(
+              data: theme.copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: 8),
+                title: Text(
+                  'By cap (packets & finished)',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  'Same view as bundling — counts per tub × cap',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                children: [
+                  if (packetRows.isNotEmpty) ...[
+                    Text(
+                      'Packed packets',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.secondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ...packetRows.map(
+                      (c) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                InventoryStockComboHelper.comboLabel(c),
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                            Text(
+                              '${c.packedQty} pkt',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (finishedRows.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Finished units',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ...finishedRows.map(
+                      (c) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${InventoryStockComboHelper.comboLabel(c)} · ${InventoryStockComboHelper.unitTypeLabel(c.unitType)}',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                            Text(
+                              '${c.bundledQty}',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

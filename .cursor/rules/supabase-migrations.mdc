@@ -1,0 +1,38 @@
+---
+description: Always save migration files when making Supabase DB changes
+alwaysApply: true
+---
+
+# Supabase Migration Rule
+
+**Every time you use `apply_migration` MCP tool or write any DDL/DML that modifies the Supabase schema, you MUST also save it as a migration file in `server/migrations/`.**
+
+## File naming convention
+
+```
+server/migrations/YYYYMMDDHHNN_descriptive_name.sql
+```
+
+Use the current date/time. Example: `202604091630_fix_stock_balances_unique_constraint.sql`
+
+## Workflow for every DB change
+
+1. Write the SQL
+2. Apply via `apply_migration` MCP tool
+3. **Immediately** save the same SQL to `server/migrations/TIMESTAMP_name.sql`
+4. Both steps are required — never skip the file
+
+## Why
+
+- The MCP may be connected to a dev/staging project, not the production DB
+- Migration files are the source of truth for applying changes to production
+- Without the file, changes are lost if the DB is recreated or when onboarding a new environment
+
+## Two Supabase projects in this workspace
+
+| Project | URL | Purpose |
+|---------|-----|---------|
+| **Dev DB** | `lvgxcganpwxeiyncudnq.supabase.co` | MCP connected here — local dev server, web app, mobile app |
+| **Production DB** | `gncbejlrycumifdhucqr.supabase.co` | EC2 server — never touch directly during dev |
+
+**MCP applies to Dev DB only.** Before any production deployment, apply all pending migration files from `server/migrations/` to the Production DB via Supabase SQL Editor or `supabase db push`.

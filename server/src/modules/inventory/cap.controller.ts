@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { capService } from '../inventory/cap.service';
 import { AuthRequest } from '../../middleware/auth';
+import { resolveAuthorizedFactoryId } from '../../utils/auth';
 
 export class CapController {
     async create(req: AuthRequest, res: Response) {
@@ -49,9 +50,10 @@ export class CapController {
         }
     }
 
-    async getBalances(req: Request, res: Response) {
+    async getBalances(req: AuthRequest, res: Response) {
         try {
-            const factoryId = req.query.factory_id as string;
+            const resolved = resolveAuthorizedFactoryId(req);
+            const factoryId = resolved || (req.query.factory_id as string | undefined);
             const balances = await capService.getCapStockBalances(factoryId);
             res.json(balances);
         } catch (error: any) {
@@ -74,9 +76,10 @@ export class CapController {
         }
     }
 
-    async listTemplates(req: Request, res: Response) {
+    async listTemplates(req: AuthRequest, res: Response) {
         try {
-            const factoryId = req.query.factory_id as string | undefined;
+            const resolved = resolveAuthorizedFactoryId(req);
+            const factoryId = resolved || (req.query.factory_id as string | undefined);
             const templates = await capService.getTemplates(factoryId);
             res.json(templates);
         } catch (error: any) {
@@ -84,10 +87,12 @@ export class CapController {
         }
     }
 
-    async getTemplate(req: Request, res: Response) {
+    async getTemplate(req: AuthRequest, res: Response) {
         try {
             const { id } = req.params;
-            const template = await capService.getTemplateById(id);
+            const resolved = resolveAuthorizedFactoryId(req);
+            const factoryId = resolved || (req.query.factory_id as string | undefined);
+            const template = await capService.getTemplateById(id, factoryId);
             res.json(template);
         } catch (error: any) {
             res.status(404).json({ error: 'Template not found' });

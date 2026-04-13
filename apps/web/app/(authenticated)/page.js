@@ -10,11 +10,8 @@ import {
     AlertTriangle,
     RefreshCw,
     ArrowRight,
-    Clock,
-    CheckCircle2,
-    Factory,
 } from 'lucide-react';
-import { dashboardAPI, ordersAPI, productionAPI } from '@/lib/api';
+import { dashboardAPI } from '@/lib/api';
 import ProductionChart from '@/components/dashboard/ProductionChart';
 import SalesChart from '@/components/dashboard/SalesChart';
 import { formatCurrency, cn } from '@/lib/utils';
@@ -36,24 +33,6 @@ function getGreeting() {
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
 }
-
-function timeAgo(dateStr) {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return 'just now';
-    if (m < 60) return `${m}m ago`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h ago`;
-    return `${Math.floor(h / 24)}d ago`;
-}
-
-const STATUS_STYLES = {
-    pending: { label: 'Pending', cls: styles.statusPending },
-    confirmed: { label: 'Confirmed', cls: styles.statusConfirmed },
-    processing: { label: 'Processing', cls: styles.statusProcessing },
-    delivered: { label: 'Delivered', cls: styles.statusDelivered },
-    cancelled: { label: 'Cancelled', cls: styles.statusCancelled },
-};
 
 export default function Home() {
     const { user } = useAuth();
@@ -99,24 +78,6 @@ export default function Home() {
         },
     });
 
-    const { data: pendingOrdersData } = useQuery({
-        queryKey: ['orders-pending', selectedFactory],
-        queryFn: () => {
-            const params = { status: 'pending', limit: 5 };
-            if (selectedFactory) params.factory_id = selectedFactory;
-            return ordersAPI.getAll(params);
-        },
-    });
-
-    const { data: productionLogsData } = useQuery({
-        queryKey: ['production-recent', selectedFactory],
-        queryFn: () => {
-            const params = { limit: 6 };
-            if (selectedFactory) params.factory_id = selectedFactory;
-            return productionAPI.getLogs(params);
-        },
-    });
-
     const {
         production = { today: 0 },
         inventory = { lowStockAlerts: 0, stockValue: 0 },
@@ -127,14 +88,6 @@ export default function Home() {
 
     const firstName = user?.name?.split(' ')[0] || 'there';
     const periodLabel = TIME_PERIODS.find(p => p.value === timePeriod)?.label ?? 'This Week';
-
-    const pendingOrders = Array.isArray(pendingOrdersData)
-        ? pendingOrdersData
-        : pendingOrdersData?.orders || pendingOrdersData?.data || [];
-
-    const recentLogs = Array.isArray(productionLogsData)
-        ? productionLogsData
-        : productionLogsData?.logs || productionLogsData?.data || [];
 
     const kpis = [
         {
@@ -269,116 +222,6 @@ export default function Home() {
                     </div>
                 </div>
             </div>
-
-            {/* ── BOTTOM PANELS ──────────────────────────────────── */}
-            <div className={styles.bottomGrid}>
-
-                {/* Pending Orders */}
-                <div className={styles.panelCard}>
-                    <div className={styles.panelHeader}>
-                        <div className={styles.panelHeading}>
-                            <div className={cn(styles.panelIcon, styles.panelIconOrange)}>
-                                <Clock size={15} />
-                            </div>
-                            <div>
-                                <p className={styles.panelSublabel}>ORDERS</p>
-                                <h3 className={styles.panelTitle}>Pending</h3>
-                            </div>
-                        </div>
-                        <button className={styles.viewAllBtn} onClick={() => router.push('/orders')}>
-                            View all <ArrowRight size={13} />
-                        </button>
-                    </div>
-
-                    <div className={styles.panelBody}>
-                        {pendingOrders.length === 0 ? (
-                            <div className={styles.emptyPanel}>
-                                <CheckCircle2 size={28} />
-                                <span>All caught up! No pending orders.</span>
-                            </div>
-                        ) : (
-                            <div className={styles.orderList}>
-                                {pendingOrders.slice(0, 5).map((order, i) => {
-                                    const st = STATUS_STYLES[order.status] || STATUS_STYLES.pending;
-                                    return (
-                                        <div
-                                            key={order.id || i}
-                                            className={styles.orderRow}
-                                            onClick={() => router.push(`/orders`)}
-                                        >
-                                            <div className={styles.orderLeft}>
-                                                <span className={styles.orderNumber}>
-                                                    #{order.order_number || order.id?.slice(0, 8)}
-                                                </span>
-                                                <span className={styles.orderCustomer}>
-                                                    {order.customer?.name || order.customer_name || '—'}
-                                                </span>
-                                            </div>
-                                            <div className={styles.orderRight}>
-                                                <span className={styles.orderAmount}>
-                                                    {formatCurrency(order.total_amount || 0)}
-                                                </span>
-                                                <span className={cn(styles.orderStatus, st.cls)}>
-                                                    {st.label}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Recent Production Logs */}
-                <div className={styles.panelCard}>
-                    <div className={styles.panelHeader}>
-                        <div className={styles.panelHeading}>
-                            <div className={cn(styles.panelIcon, styles.panelIconIndigo)}>
-                                <Factory size={15} />
-                            </div>
-                            <div>
-                                <p className={styles.panelSublabel}>PRODUCTION</p>
-                                <h3 className={styles.panelTitle}>Recent Logs</h3>
-                            </div>
-                        </div>
-                        <button className={styles.viewAllBtn} onClick={() => router.push('/reports')}>
-                            View all <ArrowRight size={13} />
-                        </button>
-                    </div>
-
-                    <div className={styles.panelBody}>
-                        {recentLogs.length === 0 ? (
-                            <div className={styles.emptyPanel}>
-                                <Factory size={28} />
-                                <span>No tub production logs yet.</span>
-                            </div>
-                        ) : (
-                            <div className={styles.logList}>
-                                {recentLogs.slice(0, 6).map((log, i) => (
-                                    <div key={log.id || i} className={styles.logRow}>
-                                        <div className={styles.logDot} />
-                                        <div className={styles.logContent}>
-                                            <span className={styles.logProduct}>
-                                                {log.product?.name || log.product_name || 'Tub Production Entry'}
-                                            </span>
-                                            <span className={styles.logMeta}>
-                                                {log.actual_bundles ?? log.units_produced ?? 0} bundles
-                                                {log.machine?.name ? ` · ${log.machine.name}` : ''}
-                                            </span>
-                                        </div>
-                                        <span className={styles.logTime}>
-                                            {timeAgo(log.created_at || log.date)}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-            </div>
-
         </div>
     );
 }

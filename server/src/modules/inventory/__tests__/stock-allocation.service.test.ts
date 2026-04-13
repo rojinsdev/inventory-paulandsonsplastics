@@ -20,6 +20,8 @@ describe('StockAllocationService', () => {
         chain.eq = jest.fn().mockReturnValue(chain);
         chain.gt = jest.fn().mockReturnValue(chain);
         chain.in = jest.fn().mockReturnValue(chain);
+        chain.or = jest.fn().mockReturnValue(chain);
+        chain.limit = jest.fn().mockReturnValue(chain);
         chain.single = jest.fn().mockResolvedValue({ data: Array.isArray(data) ? data[0] : data, error });
         chain.maybeSingle = jest.fn().mockResolvedValue({ data: Array.isArray(data) ? data[0] : data, error });
         chain.order = jest.fn().mockReturnValue(chain);
@@ -50,15 +52,36 @@ describe('StockAllocationService', () => {
             sales_order_id: 'order-789'
         };
 
+        let productionRequestsSingleCall = 0;
         mockFrom.mockImplementation((table: string) => {
             const chain = createChain({});
             if (table === 'production_requests') {
-                chain.single = jest.fn().mockResolvedValue({ data: mockRequest, error: null });
+                chain.single = jest.fn().mockImplementation(() => {
+                    productionRequestsSingleCall += 1;
+                    if (productionRequestsSingleCall === 1) {
+                        return Promise.resolve({ data: mockRequest, error: null });
+                    }
+                    return Promise.resolve({
+                        data: { ...mockRequest, status: 'prepared' },
+                        error: null,
+                    });
+                });
                 return chain;
+            }
+            if (table === 'sales_order_items') {
+                const soiChain: any = {};
+                soiChain.select = jest.fn().mockReturnValue(soiChain);
+                soiChain.eq = jest.fn().mockReturnValue(soiChain);
+                soiChain.limit = jest.fn().mockResolvedValue({ data: [], error: null });
+                return soiChain;
             }
             if (table === 'stock_balances') {
                 chain.single = jest.fn().mockResolvedValue({ data: { quantity: 100 }, error: null });
-                chain.then = (resolve: any) => resolve({ data: [{ quantity: 100 }], error: null });
+                chain.then = (resolve: any) =>
+                    resolve({
+                        data: [{ quantity: 100, cap_id: null, inner_id: null }],
+                        error: null,
+                    });
                 return chain;
             }
             if (table === 'sales_orders') {
@@ -74,7 +97,7 @@ describe('StockAllocationService', () => {
 
         const result = await service.fulfillRequestManually(requestId, userId);
 
-        expect(result.success).toBe(true);
+        expect(result).toMatchObject({ id: requestId, status: 'prepared' });
         // Verify production request was marked completed
         expect(mockFrom).toHaveBeenCalledWith('production_requests');
     });

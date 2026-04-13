@@ -67,7 +67,7 @@ export class ProductService {
             .select(`
                 *,
                 raw_materials(id, name),
-                product_templates(name, inner_template_id)
+                product_templates(name, inner_template_id, cap_template_id, cap_template:cap_templates(id, name))
             `)
             .order('name', { ascending: true });
 

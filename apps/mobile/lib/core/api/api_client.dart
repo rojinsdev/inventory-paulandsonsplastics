@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -149,8 +150,8 @@ class ApiClient {
     if (userJson == null) return null;
 
     try {
-      final match = RegExp(r'"factory_id":"([^"]+)"').firstMatch(userJson);
-      return match?.group(1);
+      final Map<String, dynamic> data = jsonDecode(userJson) as Map<String, dynamic>;
+      return data['factory_id'] as String?;
     } catch (e) {
       debugPrint('Error parsing factory_id: $e');
       return null;

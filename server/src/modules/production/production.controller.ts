@@ -129,6 +129,8 @@ export class ProductionController {
         const log = await productionService.submitCapProduction({
             ...validatedData,
             user_id: req.user!.id,
+            // When mobile omits factory_id, attach stock to the user's site instead of only MAIN_FACTORY_ID
+            factory_id: validatedData.factory_id ?? req.user?.factory_id ?? undefined,
         });
 
         res.status(201).json(log);
@@ -170,6 +172,7 @@ export class ProductionController {
         const log = await productionService.submitInnerProduction({
             ...validatedData,
             user_id: req.user!.id,
+            factory_id: validatedData.factory_id ?? req.user?.factory_id ?? undefined,
         });
 
         res.status(201).json(log);

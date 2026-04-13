@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:collection/collection.dart';
 import '../../production/providers/master_data_provider.dart';
+import '../../production/utils/cap_templates_for_tub.dart';
+import '../../production/utils/inner_variant_for_tub.dart';
 import '../providers/inventory_provider.dart';
+import '../widgets/conversion_hint_cards.dart';
 
 class BundlingScreen extends ConsumerStatefulWidget {
   const BundlingScreen({super.key});
@@ -20,13 +23,83 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
   String? _selectedProductVariantId;
   String? _selectedCapTemplateId;
   String? _selectedCapVariantId;
+  bool _includeInner = true;
+  String? _selectedInnerVariantId;
   String _source = 'packed';
   String _unitType = 'bundle';
 
+  late final VoidCallback _quantityListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _quantityListener = () {
+      if (mounted) setState(() {});
+    };
+    _quantityController.addListener(_quantityListener);
+  }
+
   @override
   void dispose() {
+    _quantityController.removeListener(_quantityListener);
     _quantityController.dispose();
     super.dispose();
+  }
+
+  InventoryStock? _stockRowForSelectedTub(List<InventoryStock> records) {
+    final id = _selectedProductVariantId;
+    if (id == null) return null;
+    return records.firstWhereOrNull((s) => s.productId == id);
+  }
+
+  bool _tubHasMappedInner() {
+    final templates = ref.read(productTemplatesProvider).valueOrNull ?? [];
+    final tub =
+        templates.firstWhereOrNull((t) => t.id == _selectedProductTemplateId);
+    final id = tub?.innerTemplateId;
+    return id != null && id.isNotEmpty;
+  }
+
+  void _applyInnerDefaultForSelection() {
+    final templates = ref.read(productTemplatesProvider).valueOrNull ?? [];
+    final inners = ref.read(innerTemplatesProvider).valueOrNull ?? [];
+    final tub =
+        templates.firstWhereOrNull((t) => t.id == _selectedProductTemplateId);
+    final itid = tub?.innerTemplateId;
+    if (tub == null || itid == null || itid.isEmpty) {
+      _selectedInnerVariantId = null;
+      return;
+    }
+    final p =
+        tub.variants.firstWhereOrNull((v) => v.id == _selectedProductVariantId);
+    _selectedInnerVariantId = resolveInnerVariantIdForTub(
+      innerTemplates: inners,
+      innerTemplateId: itid,
+      tubColor: p?.color ?? '',
+    );
+  }
+
+  String? _innerIdForSubmit() {
+    if (!_tubHasMappedInner() || !_includeInner) return null;
+    final templates = ref.read(productTemplatesProvider).valueOrNull ?? [];
+    final inners = ref.read(innerTemplatesProvider).valueOrNull ?? [];
+    final tub =
+        templates.firstWhereOrNull((t) => t.id == _selectedProductTemplateId);
+    final itid = tub?.innerTemplateId;
+    if (tub == null || itid == null) return null;
+    final innerTpl = inners.firstWhereOrNull((t) => t.id == itid);
+    if (innerTpl == null || innerTpl.variants.isEmpty) return null;
+    final p =
+        tub.variants.firstWhereOrNull((v) => v.id == _selectedProductVariantId);
+    final auto = resolveInnerVariantIdForTub(
+      innerTemplates: inners,
+      innerTemplateId: itid,
+      tubColor: p?.color ?? '',
+    );
+    if (innerTpl.variants.length > 1) {
+      return _selectedInnerVariantId ?? auto;
+    }
+    return auto ?? _selectedInnerVariantId;
   }
 
   void _submit() {
@@ -37,12 +110,23 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
             unitType: _unitType,
             source: _source,
             capId: _selectedCapVariantId,
+            innerId: _innerIdForSubmit(),
+            includeInner: _tubHasMappedInner() ? _includeInner : true,
           );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(innerTemplatesProvider, (previous, next) {
+      next.whenData((_) {
+        if (!mounted) return;
+        if (_selectedProductVariantId != null && _includeInner) {
+          setState(_applyInnerDefaultForSelection);
+        }
+      });
+    });
+
     ref.listen(inventoryOperationProvider, (previous, next) {
       next.when(
         data: (_) {
@@ -125,7 +209,7 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
               // Product Template Selector
               productTemplatesAsync.when(
                 data: (templates) => DropdownButtonFormField<String>(
-                  initialValue: _selectedProductTemplateId,
+                  value: _selectedProductTemplateId,
                   decoration: const InputDecoration(
                     labelText: 'Tub Type',
                     prefixIcon: Icon(Icons.inventory_2_outlined),
@@ -142,6 +226,21 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                     setState(() {
                       _selectedProductTemplateId = value;
                       _selectedProductVariantId = null;
+                      final t = templates.firstWhereOrNull((x) => x.id == value);
+                      final allCaps =
+                          ref.read(capTemplatesProvider).valueOrNull ?? [];
+                      final allowed = capTemplatesForSelectedTub(
+                        tubTemplate: t,
+                        allCapTemplates: allCaps,
+                      );
+                      if (allowed.length == 1) {
+                        _selectedCapTemplateId = allowed.single.id;
+                      } else {
+                        _selectedCapTemplateId = null;
+                      }
+                      _selectedCapVariantId = null;
+                      _selectedInnerVariantId = null;
+                      _includeInner = true;
                     });
                   },
                   validator: (value) =>
@@ -241,7 +340,8 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                     final template = templates
                         .firstWhere((t) => t.id == _selectedProductTemplateId);
                     return DropdownButtonFormField<String>(
-                      initialValue: _selectedProductVariantId,
+                      key: ValueKey('tub_variant_$_selectedProductTemplateId'),
+                      value: _selectedProductVariantId,
                       decoration: const InputDecoration(
                         labelText: 'Color / Variant',
                         prefixIcon: Icon(Icons.palette_outlined),
@@ -255,8 +355,12 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                             ),
                           )
                           .toList(),
-                      onChanged: (value) =>
-                          setState(() => _selectedProductVariantId = value),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedProductVariantId = value;
+                          _applyInnerDefaultForSelection();
+                        });
+                      },
                       validator: (value) =>
                           value == null ? 'Please select a color' : null,
                     );
@@ -267,32 +371,69 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // Cap Selector Section (Explicit variant selection)
+              // Cap Selector Section (scoped to tub’s web cap mapping when set)
               ...[
-                // Cap Template Selector
                 capTemplatesAsync.when(
-                  data: (templates) => DropdownButtonFormField<String>(
-                    initialValue: _selectedCapTemplateId,
-                    decoration: const InputDecoration(
-                      labelText: 'Cap Type',
-                      prefixIcon: Icon(Icons.adjust),
-                    ),
-                    items: templates
-                        .map(
-                          (t) => DropdownMenuItem(
-                            value: t.id,
-                            child: Text(t.name),
+                  data: (allCapTemplates) => productTemplatesAsync.when(
+                    data: (productTemplates) {
+                      final tub = _selectedProductTemplateId != null
+                          ? productTemplates.firstWhereOrNull(
+                              (t) => t.id == _selectedProductTemplateId)
+                          : null;
+                      final capChoices = capTemplatesForSelectedTub(
+                        tubTemplate: tub,
+                        allCapTemplates: allCapTemplates,
+                      );
+                      final mappedMissing = tub != null &&
+                          (tub.capTemplateId?.isNotEmpty ?? false) &&
+                          capChoices.isEmpty;
+
+                      if (mappedMissing) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            'This tub is linked to a cap template that is not in this factory’s cap list. Check the web app.',
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(color: colorScheme.error),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedCapTemplateId = value;
-                        _selectedCapVariantId = null;
-                      });
+                        );
+                      }
+
+                      return DropdownButtonFormField<String>(
+                        value: _selectedCapTemplateId != null &&
+                                capChoices.any(
+                                    (c) => c.id == _selectedCapTemplateId)
+                            ? _selectedCapTemplateId
+                            : null,
+                        decoration: InputDecoration(
+                          labelText: 'Cap Type',
+                          prefixIcon: const Icon(Icons.adjust),
+                          helperText:
+                              (tub?.capTemplateId?.isNotEmpty ?? false)
+                                  ? 'Only the cap mapped to this tub on the web is listed'
+                                  : null,
+                        ),
+                        items: capChoices
+                            .map(
+                              (t) => DropdownMenuItem(
+                                value: t.id,
+                                child: Text(t.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedCapTemplateId = value;
+                            _selectedCapVariantId = null;
+                          });
+                        },
+                        validator: (value) => value == null
+                            ? 'Please select a cap type'
+                            : null,
+                      );
                     },
-                    validator: (value) =>
-                        value == null ? 'Please select a cap type' : null,
+                    loading: () => const LinearProgressIndicator(),
+                    error: (error, _) => Text('Error: $error'),
                   ),
                   loading: () => const LinearProgressIndicator(),
                   error: (error, _) => Text('Error: $error'),
@@ -306,7 +447,8 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                       final template = templates
                           .firstWhere((t) => t.id == _selectedCapTemplateId);
                       return DropdownButtonFormField<String>(
-                        initialValue: _selectedCapVariantId,
+                        key: ValueKey('cap_color_$_selectedCapTemplateId'),
+                        value: _selectedCapVariantId,
                         decoration: const InputDecoration(
                           labelText: 'Cap Color',
                           prefixIcon: Icon(Icons.colorize_outlined),
@@ -315,23 +457,25 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                             .map(
                               (v) => DropdownMenuItem(
                                 value: v.id,
-                                child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(v.color ?? 'Standard'),
-                                    Text(
-                                      '${v.stockQuantity} qty',
-                                      style:
-                                          theme.textTheme.bodySmall?.copyWith(
-                                        color: v.stockQuantity < 100
-                                            ? Colors.red
-                                            : Colors.green,
-                                        fontWeight: FontWeight.bold,
+                                child: _source == 'packed'
+                                    ? Text(v.color ?? 'Standard')
+                                    : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(v.color ?? 'Standard'),
+                                          Text(
+                                            '${v.stockQuantity} loose caps',
+                                            style: theme.textTheme.bodySmall
+                                                ?.copyWith(
+                                              color: v.stockQuantity < 100
+                                                  ? Colors.red
+                                                  : Colors.green,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ),
-                                  ],
-                                ),
                               ),
                             )
                             .toList(),
@@ -347,6 +491,105 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                   const SizedBox(height: 24),
                 ],
               ],
+
+              if (_selectedProductVariantId != null)
+                ref.watch(innerTemplatesProvider).when(
+                      data: (innerTpls) {
+                        return productTemplatesAsync.when(
+                          data: (templates) {
+                            final tub = templates.firstWhereOrNull(
+                                (t) => t.id == _selectedProductTemplateId);
+                            final innerTplId = tub?.innerTemplateId;
+                            if (innerTplId == null || innerTplId.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            final innerTpl = innerTpls
+                                .firstWhereOrNull((t) => t.id == innerTplId);
+                            if (innerTpl == null ||
+                                innerTpl.variants.isEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  'Inner is mapped on this tub but inner data is missing.',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.error,
+                                  ),
+                                ),
+                              );
+                            }
+                            final tubColor = tub!.variants
+                                    .firstWhereOrNull((v) =>
+                                        v.id == _selectedProductVariantId)
+                                    ?.color ??
+                                '';
+                            final resolved = _selectedInnerVariantId ??
+                                resolveInnerVariantIdForTub(
+                                  innerTemplates: innerTpls,
+                                  innerTemplateId: innerTplId,
+                                  tubColor: tubColor,
+                                );
+                            final dropdownValue = innerTpl.variants
+                                    .any((v) => v.id == resolved)
+                                ? resolved!
+                                : innerTpl.variants.first.id;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                SwitchListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  title: const Text('Include inner (liner)'),
+                                  subtitle: const Text(
+                                    'Off = bundle without tying stock to a specific inner.',
+                                  ),
+                                  value: _includeInner,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _includeInner = v;
+                                      if (v) {
+                                        _applyInnerDefaultForSelection();
+                                      } else {
+                                        _selectedInnerVariantId = null;
+                                      }
+                                    });
+                                  },
+                                ),
+                                if (_includeInner &&
+                                    innerTpl.variants.length > 1) ...[
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    value: dropdownValue,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Inner variant',
+                                      prefixIcon:
+                                          Icon(Icons.layers_outlined),
+                                    ),
+                                    items: innerTpl.variants
+                                        .map(
+                                          (v) => DropdownMenuItem(
+                                            value: v.id,
+                                            child: Text(
+                                              (v.color ?? '').isNotEmpty
+                                                  ? v.color!
+                                                  : 'Standard',
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (id) => setState(
+                                        () => _selectedInnerVariantId = id),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                              ],
+                            );
+                          },
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        );
+                      },
+                      loading: () => const SizedBox.shrink(),
+                      error: (_, __) => const SizedBox.shrink(),
+                    ),
 
               // Source Selector
               Text(
@@ -381,92 +624,232 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
                       borderRadius: BorderRadius.circular(32)),
                 ),
               ),
+              const SizedBox(height: 16),
+              if (_selectedProductVariantId != null)
+                productTemplatesAsync.when(
+                  data: (templates) {
+                    final p = resolveSelectedProduct(
+                      templates,
+                      _selectedProductTemplateId,
+                      _selectedProductVariantId,
+                    );
+                    if (p == null) return const SizedBox.shrink();
+                    return BundlingConversionHint(
+                      product: p,
+                      source: _source,
+                      unitType: _unitType,
+                      quantityController: _quantityController,
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
               const SizedBox(height: 24),
 
-              // Stock Preview Card (The "Small Preview")
+              // Packed → bundle: show packet counts per cap (not loose cap inventory)
               if (_selectedProductVariantId != null && _source == 'packed')
                 stockAsync.when(
                   data: (stockRecords) {
-                    final item = stockRecords.firstWhereOrNull(
-                      (s) => s.productId == _selectedProductVariantId,
-                    );
-                    
-                    if (item == null) return const SizedBox.shrink();
+                    final item = _stockRowForSelectedTub(stockRecords);
+                    if (item == null) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Text(
+                          'No stock data for this tub. Try refreshing after inventory sync.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colorScheme.error,
+                          ),
+                        ),
+                      );
+                    }
 
-                    // Find the specific combination for the selected cap
-                    final combination = item.combinations.firstWhereOrNull(
-                      (c) => c.capId == _selectedCapVariantId,
-                    ) ?? item.combinations.firstWhereOrNull((c) => c.capId == null);
+                    final packetRows =
+                        InventoryStockComboHelper.packetCombos(item);
+                    final totalPackets = packetRows.fold<int>(
+                        0, (sum, c) => sum + c.packedQty);
+                    final selectedCombo = _selectedCapVariantId != null
+                        ? InventoryStockComboHelper.packetComboForSelectedCap(
+                            item, _selectedCapVariantId)
+                        : null;
+                    final selectedPackets = selectedCombo?.packedQty ?? 0;
+                    final hasMismatch =
+                        selectedPackets == 0 && totalPackets > 0;
 
-                    final availablePackets = combination?.packedQty ?? 0;
-                    
                     return Container(
                       margin: const EdgeInsets.only(bottom: 24),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: availablePackets > 0 
-                            ? Colors.blue.withOpacity(0.1) 
-                            : Colors.red.withOpacity(0.1),
+                        color: hasMismatch
+                            ? Colors.orange.withOpacity(0.12)
+                            : (selectedPackets > 0
+                                ? Colors.blue.withOpacity(0.1)
+                                : Colors.red.withOpacity(0.1)),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                          color: availablePackets > 0 
-                              ? Colors.blue.withOpacity(0.3) 
-                              : Colors.red.withOpacity(0.3),
+                          color: hasMismatch
+                              ? Colors.orange.withOpacity(0.4)
+                              : (selectedPackets > 0
+                                  ? Colors.blue.withOpacity(0.3)
+                                  : Colors.red.withOpacity(0.3)),
                         ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.inventory_2,
-                                size: 16,
-                                color: availablePackets > 0 ? Colors.blue : Colors.red,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Current Selection Stock',
-                                style: theme.textTheme.labelMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: availablePackets > 0 ? Colors.blue : Colors.red,
-                                ),
-                              ),
-                            ],
+                          Text(
+                            'Packed packets (this tub)',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          const SizedBox(height: 8),
+                          Text(
+                            item.displayName,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          if (_selectedCapVariantId != null) ...[
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text('Selected cap · packets'),
+                                Text(
+                                  '$selectedPackets',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                          ],
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Available Packets:',
+                                'All caps · packets (total)',
                                 style: theme.textTheme.bodySmall,
                               ),
                               Text(
-                                '$availablePackets',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: availablePackets > 0 ? Colors.blue[900] : Colors.red[900],
+                                '$totalPackets',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
-                          if (item.combinations.length > 1) ...[
-                            const Divider(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Total (All Caps):',
-                                  style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                          if (packetRows.isNotEmpty) ...[
+                            const Divider(height: 20),
+                            Text(
+                              'Breakdown',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            ...packetRows.map((c) {
+                              final sel = _selectedCapVariantId != null &&
+                                  c.capId == _selectedCapVariantId;
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      sel
+                                          ? Icons.check_circle_outline
+                                          : Icons.circle_outlined,
+                                      size: 18,
+                                      color: sel
+                                          ? colorScheme.primary
+                                          : colorScheme.outline,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                          InventoryStockComboHelper.comboLabel(
+                                              c)),
+                                    ),
+                                    Text(
+                                      '${c.packedQty} pkt',
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  '${item.packedQty}',
-                                  style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-                                ),
-                              ],
+                              );
+                            }),
+                          ],
+                          if (hasMismatch) ...[
+                            const SizedBox(height: 12),
+                            Text(
+                              'No packets for the cap you selected, but other caps have stock — use the breakdown or change cap color.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: Colors.orange.shade900,
+                              ),
                             ),
                           ],
+                          if (packetRows.isEmpty && totalPackets == 0)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                'No packed packets in stock for this tub.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.error,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  },
+                  loading: () => const Padding(
+                    padding: EdgeInsets.only(bottom: 24),
+                    child: LinearProgressIndicator(),
+                  ),
+                  error: (_, __) => const SizedBox.shrink(),
+                ),
+
+              if (_selectedProductVariantId != null &&
+                  _source == 'semi_finished')
+                stockAsync.when(
+                  data: (stockRecords) {
+                    final item = _stockRowForSelectedTub(stockRecords);
+                    if (item == null) return const SizedBox.shrink();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 24),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: colorScheme.outlineVariant,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Loose items (this tub)',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            item.displayName,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${item.semiFinishedQty} items available',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     );
@@ -503,11 +886,9 @@ class _BundlingScreenState extends ConsumerState<BundlingScreen> {
  
                     if (item != null) {
                       if (_source == 'packed') {
-                        // RESOLVE SPECIFIC COMBINATION STOCK
-                        final combination = item.combinations.firstWhereOrNull(
-                          (c) => c.capId == _selectedCapVariantId,
-                        ) ?? item.combinations.firstWhereOrNull((c) => c.capId == null);
-
+                        final combination =
+                            InventoryStockComboHelper.packetComboForSelectedCap(
+                                item, _selectedCapVariantId);
                         final specificPackedQty = combination?.packedQty ?? 0;
 
                         final packetsPerUnit = _unitType == 'box'

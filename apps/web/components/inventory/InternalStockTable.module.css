@@ -215,3 +215,122 @@
     background: var(--primary-light);
     color: var(--primary);
 }
+
+/* Additional styles for CombinationStockTable */
+.filtersContainer {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.searchContainer {
+    position: relative;
+    flex: 2;
+    min-width: 300px;
+}
+
+.searchIcon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+    z-index: 10;
+}
+
+.searchInput {
+    width: 100%;
+    padding: 0.875rem 1rem 0.875rem 3rem;
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 1rem;
+    color: var(--text-main);
+    font-size: 0.9375rem;
+    font-family: inherit;
+    transition: all var(--transition-base);
+}
+
+.filterGroup {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.componentInfo {
+    display: flex;
+    flex-direction: column;
+}
+
+.componentName {
+    font-weight: 500;
+    color: var(--text-main);
+}
+
+.componentColor {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.noComponent {
+    color: var(--text-muted);
+    font-style: italic;
+    font-size: 0.875rem;
+}
+
+.quantityCell {
+    text-align: center;
+}
+
+.quantity {
+    font-weight: 600;
+}
+
+.totalQuantity {
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.centerHeader {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.sortableHeader {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.headerContent {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sortableHeader:hover {
+    background-color: var(--surface-elevated);
+}
+
+.tableSummary {
+    padding: 1rem 2rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.stickyHeader thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background-color: var(--surface);
+    white-space: nowrap;
+}
